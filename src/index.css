@@ -1,14 +1,18 @@
+@import './shared/styles/tokens.css';
+
 :root {
-  font-family: system-ui, sans-serif;
-  color: #172520;
-  background: #f5f6f4;
+  font-family: var(--font-ui);
+  color: var(--ink-primary);
+  background: var(--surface-canvas);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -17,17 +21,31 @@ body {
   min-width: 320px;
 }
 
-.app {
-  width: min(100%, 960px);
-  margin: 0 auto;
-  padding: 64px 24px;
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
-h1 {
-  margin: 0 0 16px;
+button {
+  color: inherit;
 }
 
-p {
-  margin: 0;
-  line-height: 1.6;
+button:enabled {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink-primary);
+  outline-offset: 3px;
+}
+
+::selection {
+  color: var(--ink-primary);
+  background: var(--accent-soft);
 }
