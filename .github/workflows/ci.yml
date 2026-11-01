@@ -51,3 +51,10 @@ jobs:
           git rev-list --no-merges "$range" | while read -r commit; do
             git show -s --format=%B "$commit" | npm run --silent commitlint
           done
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: frontend-dist-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7

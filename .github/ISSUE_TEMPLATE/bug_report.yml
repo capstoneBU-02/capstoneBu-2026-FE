@@ -1,0 +1,127 @@
+name: 버그 리포트
+description: Earmark 프론트엔드에서 발생한 버그를 제보합니다.
+title: '[BUG] '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        재현 가능성과 영향 범위를 빠르게 파악할 수 있도록, 확인한 사실 위주로 작성해 주세요.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 사전 확인
+      options:
+        - label: 중복 이슈가 없는지 확인했습니다.
+          required: true
+        - label: 최신 코드 또는 배포 환경 기준으로 재현 여부를 확인했습니다.
+          required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 영향 범위
+      description: 문제가 발생한 영역을 선택해 주세요.
+      options:
+        - 화면 / 사용자 흐름
+        - API 연동 / 목업
+        - 음원 / 파형 / 재생
+        - 타브 / 악보
+        - 녹음 / 연주 비교
+        - 접근성 / 반응형
+        - 성능 / 메모리
+        - 빌드 / CI
+        - 기타
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 버그 요약
+      description: 무엇이 문제인지 한두 문장으로 설명해 주세요.
+      placeholder: 작업 목록에서 상태 필터를 바꾸면 이전 필터의 작업이 남습니다.
+    validations:
+      required: true
+
+  - type: input
+    id: feature
+    attributes:
+      label: 관련 화면 또는 기능
+      description: 화면 URL, 기능명, 관련 기능 ID를 적어 주세요.
+      placeholder: '/?demo=empty · 내 작업 목록 · DATA-02'
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 재현 절차
+      description: 리뷰어가 그대로 따라 해볼 수 있게 순서대로 적어 주세요.
+      placeholder: |
+        1. npm run dev 실행
+        2. 내 작업 목록에서 상태 필터 선택
+        3. 표시된 작업과 선택 상태 확인
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 동작
+      placeholder: 선택한 필터에 해당하는 작업만 표시되어야 합니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 동작
+      placeholder: 이전 필터의 작업이 목록에 남습니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: input_sample
+    attributes:
+      label: 입력값 / 데이터 예시
+      description: 목업 시나리오, 입력값, 파일 형식·길이 등 재현에 필요한 조건을 적어 주세요. (선택)
+      placeholder: |
+        - 목업 시나리오: ?demo=empty
+        - 입력값:
+        - 파일 형식 / 길이:
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 로그 / 스크린샷
+      description: 브라우저 콘솔 오류, 네트워크 실패, 스크린샷 등을 남겨 주세요. 테스터 코드 등 민감한 값은 제외해 주세요.
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 실행 환경
+      description: 가능한 범위에서 실제 환경 정보를 적어 주세요.
+      placeholder: |
+        - OS / 기기:
+        - 브라우저 / 버전:
+        - 화면 크기:
+        - Node / npm (로컬 실행 시):
+        - Branch / Commit:
+        - 실행 방식: local / preview / production
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 추가 정보
+      description: 원인 추정, 임시 우회책, 관련 링크가 있으면 적어 주세요. (선택)
+    validations:
+      required: false
