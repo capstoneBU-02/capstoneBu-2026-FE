@@ -1,0 +1,102 @@
+name: 기능 구현
+description: 새로운 화면·기능 개발 또는 기존 기능 개선 작업을 등록합니다.
+title: '[FEAT] '
+labels:
+  - enhancement
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: 작업 영역
+      options:
+        - 화면 / 사용자 흐름
+        - 공통 UI / 디자인 시스템
+        - API 연동 / 목업
+        - 음원 / 파형 / 재생
+        - 타브 / 악보
+        - 녹음 / 연주 비교
+        - 접근성 / 반응형
+        - 성능 / 안정성
+        - 개발 환경 / CI
+        - 기타
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 작업 개요
+      description: 무엇을 왜 만드는지 2~3줄로 요약해 주세요.
+      placeholder: |
+        테스터가 이전 작업을 다시 확인할 수 있는 내 작업 목록을 구현합니다.
+        API 확정 전에는 저장소 adapter를 통해 목업 데이터를 사용합니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: 구현 항목
+      description: 이 이슈에서 완료해야 할 작업을 체크리스트로 적어 주세요.
+      placeholder: |
+        - [ ] 작업 목록과 상태 필터 구현
+        - [ ] 로딩·빈 상태·조회 오류 표시
+        - [ ] 좁은 화면과 키보드 조작 확인
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 완료 조건
+      description: 어떤 상태가 되면 이 이슈를 닫을 수 있는지 기준을 적어 주세요.
+      placeholder: |
+        - 선택한 필터에 해당하는 작업만 표시된다.
+        - 조회 실패 후 다시 시도할 수 있다.
+        - 키보드로 필터를 조작하고 선택 상태를 확인할 수 있다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: approach
+    attributes:
+      label: 기술 접근 방향
+      description: 구현 방법이나 설계 방향에 대해 알고 있는 내용을 적어 주세요. (선택)
+      placeholder: |
+        - 비동기 저장소와 화면 상태를 분리
+        - 기존 공통 UI와 디자인 토큰 재사용
+        - 재생 시간 갱신과 목록 렌더링 분리
+    validations:
+      required: false
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: 영향 범위
+      description: 화면, API 계약, 환경 설정 등 팀이 알아야 할 사항을 적어 주세요. (선택)
+      placeholder: |
+        - 화면: 내 작업 목록과 선택 동의 모달
+        - 데이터: 목업 저장소 사용, 실제 API 연결은 별도 이슈
+        - 설정: 새 환경 변수 없음
+    validations:
+      required: false
+
+  - type: textarea
+    id: blockers
+    attributes:
+      label: 선행 작업 / 의존성
+      description: 먼저 완료되어야 할 작업이나 미확정 정책이 있으면 적어 주세요. (선택)
+      placeholder: |
+        - 관련 이슈: #번호
+        - 기능명세의 담당자와 API 응답 형식 확인 필요
+        - Figma의 임시값은 별도 목업 설정으로 관리
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 참고 자료
+      description: 기획서, Figma 노드, 기능 ID, API 명세, 관련 PR 링크 등을 남겨 주세요. (선택)
+    validations:
+      required: false
