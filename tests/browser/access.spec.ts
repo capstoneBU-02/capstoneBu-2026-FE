@@ -1,12 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
 import { DEMO_ACCESS_CODES } from '../../src/app/demoConfig.ts'
+import { maskTesterCode } from '../../src/features/workspace/navigation.ts'
 import { ACCESS_ERROR_MESSAGES } from '../../src/features/access/model.ts'
 import type {} from './access-harness.tsx'
 
 const input = (page: Page) =>
   page.getByRole('textbox', { name: '테스터 코드', exact: true })
 const settings = (page: Page) =>
-  page.getByRole('button', { name: '설정 — AI 학습 활용 선택', exact: true })
+  page.getByRole('button', { name: '설정', exact: true })
 const notice = (page: Page) =>
   page.getByRole('heading', { name: '시작하기 전에 확인해 주세요' })
 const consent = (page: Page) =>
@@ -15,6 +16,11 @@ const empty = (page: Page) =>
   page.getByRole('heading', { name: '첫 곡을 올려 주세요' })
 const dialog = (page: Page) =>
   page.getByRole('dialog', { name: 'AI 학습 활용' })
+
+async function openConsentSettings(page: Page) {
+  await settings(page).click()
+  await page.getByRole('button', { name: /^(선택|변경)하기$/ }).click()
+}
 
 async function enter(page: Page, code: string) {
   await input(page).fill(code)
@@ -29,7 +35,7 @@ async function acknowledge(page: Page) {
 
 async function expireAndReenter(page: Page) {
   await page.evaluate(() => window.accessTest.expireSession())
-  await settings(page).click()
+  await openConsentSettings(page)
   await dialog(page)
     .getByRole('button', { name: '동의해요', exact: true })
     .click()
@@ -65,7 +71,7 @@ for (const choice of [
     ).toBe(0)
     await page.getByRole('button', { name: choice.button, exact: true }).click()
     await expect(empty(page)).toBeVisible()
-    await settings(page).click()
+    await openConsentSettings(page)
     if (choice.saved)
       await expect(
         dialog(page).getByText(choice.saved, { exact: true }),
@@ -81,7 +87,7 @@ for (const choice of [
     await expect(empty(page)).toBeVisible()
     await expect(notice(page)).toHaveCount(0)
     await expect(consent(page)).toHaveCount(0)
-    await settings(page).click()
+    await openConsentSettings(page)
     if (choice.saved)
       await expect(
         dialog(page).getByText(choice.saved, { exact: true }),
@@ -110,7 +116,7 @@ test('returning workspace skips onboarding, retains changed consent, and is isol
   await expect(page.locator('tbody tr')).toHaveCount(1)
   await expect(processing).toBeFocused()
   await page.getByRole('button', { name: '전체 4', exact: true }).click()
-  await settings(page).click()
+  await openConsentSettings(page)
   await expect(
     dialog(page).getByText('현재 선택: 동의하지 않음', { exact: true }),
   ).toBeVisible()
@@ -121,7 +127,7 @@ test('returning workspace skips onboarding, retains changed consent, and is isol
   await expireAndReenter(page)
   await enter(page, DEMO_ACCESS_CODES.returningWorkspace)
   await expect(page.locator('tbody tr')).toHaveCount(4)
-  await settings(page).click()
+  await openConsentSettings(page)
   await expect(
     dialog(page).getByText('현재 선택: 동의', { exact: true }),
   ).toBeVisible()
@@ -133,9 +139,11 @@ test('returning workspace skips onboarding, retains changed consent, and is isol
   await expect(empty(page)).toBeVisible()
   await expect(page.locator('tbody tr')).toHaveCount(0)
   await expect(
-    page.getByText(DEMO_ACCESS_CODES.returningWorkspace, { exact: true }),
+    page.getByText(maskTesterCode(DEMO_ACCESS_CODES.returningWorkspace), {
+      exact: true,
+    }),
   ).toHaveCount(0)
-  await settings(page).click()
+  await openConsentSettings(page)
   await expect(
     dialog(page).getByText('현재 선택:', { exact: false }),
   ).toHaveCount(0)
@@ -233,7 +241,7 @@ test('a failed onboarding save stays on consent and later is a separate undecide
   await expect(empty(page)).toHaveCount(0)
   await page.getByRole('button', { name: '나중에 정할게요' }).click()
   await expect(empty(page)).toBeVisible()
-  await settings(page).click()
+  await openConsentSettings(page)
   await expect(
     dialog(page).getByText('현재 선택:', { exact: false }),
   ).toHaveCount(0)
@@ -255,7 +263,7 @@ test('acknowledging notice survives session expiry but does not complete or acce
   await expect(empty(page)).toHaveCount(0)
   await page.getByRole('button', { name: '나중에 정할게요' }).click()
   await expect(empty(page)).toBeVisible()
-  await settings(page).click()
+  await openConsentSettings(page)
   await expect(
     dialog(page).getByText('현재 선택:', { exact: false }),
   ).toHaveCount(0)
@@ -290,7 +298,9 @@ test('duplicate entry is rejected and a cancelled late response cannot replace a
   await page.getByRole('button', { name: '나중에 정할게요' }).click()
   await expect(empty(page)).toBeVisible()
   await expect(
-    page.getByText(DEMO_ACCESS_CODES.secondWorkspace, { exact: true }),
+    page.getByText(maskTesterCode(DEMO_ACCESS_CODES.secondWorkspace), {
+      exact: true,
+    }),
   ).toBeVisible()
 })
 
@@ -332,7 +342,7 @@ test('duplicate consent and a stale save cannot complete a replacement workspace
   await acknowledge(page)
   await page.getByRole('button', { name: '나중에 정할게요' }).click()
   await expect(empty(page)).toBeVisible()
-  await settings(page).click()
+  await openConsentSettings(page)
   await expect(
     dialog(page).getByText('현재 선택:', { exact: false }),
   ).toHaveCount(0)

@@ -1,8 +1,4 @@
 import { useEffect, useRef } from 'react'
-import fileIcon from '../../assets/figma/access/file.svg'
-import keyIcon from '../../assets/figma/access/key.svg'
-import lockIcon from '../../assets/figma/access/lock.svg'
-import shieldIcon from '../../assets/figma/access/shield.svg'
 import { BrandLogo } from '../../shared/ui/BrandLogo.tsx'
 import { Button } from '../../shared/ui/Button.tsx'
 import {
@@ -11,6 +7,10 @@ import {
   ConsentDetails,
 } from '../workspace/components/ConsentExplanation.tsx'
 import './onboarding.css'
+import {
+  USAGE_NOTICE_DESCRIPTION,
+  UsageNoticeContent,
+} from './UsageNoticeContent.tsx'
 
 export type OnboardingPageProps = {
   step: 'notice' | 'consent'
@@ -19,29 +19,6 @@ export type OnboardingPageProps = {
   onAcknowledge: () => void
   onChoose: (choice: 'accepted' | 'declined' | 'undecided') => void
 }
-
-const noticeItems = [
-  {
-    icon: fileIcon,
-    title: '남는 자료',
-    body: '올린 음원, 분리한 기타 음원, 타브, 녹음한 연주, 작업 기록이 남아요.',
-  },
-  {
-    icon: lockIcon,
-    title: '볼 수 있는 사람',
-    body: '이 코드로 들어온 사람만 볼 수 있어요. 코드는 다른 사람과 나누지 마세요.',
-  },
-  {
-    icon: shieldIcon,
-    title: '받지 않는 정보',
-    body: '이름, 이메일, 연락처는 받지 않아요.',
-  },
-  {
-    icon: keyIcon,
-    title: '다시 들어올 때',
-    body: '같은 코드를 입력하면 하던 작업이 그대로 열려요.',
-  },
-] as const
 
 export function OnboardingPage({
   step,
@@ -78,32 +55,14 @@ export function OnboardingPage({
             </h1>
             {step === 'notice' ? (
               <p className="onboarding-description">
-                이 워크스페이스에 무엇이 남고 누가 볼 수 있는지 알려 드려요.
+                {USAGE_NOTICE_DESCRIPTION}
               </p>
             ) : (
               <ConsentDescription className="onboarding-description" />
             )}
           </div>
           {step === 'notice' ? (
-            <ul className="onboarding-notice-items">
-              {noticeItems.map(({ icon, title, body }) => (
-                <li className="onboarding-notice-item" key={title}>
-                  <span className="onboarding-icon-box" aria-hidden="true">
-                    <img
-                      src={icon}
-                      alt=""
-                      width={18}
-                      height={18}
-                      draggable="false"
-                    />
-                  </span>
-                  <div className="onboarding-item-copy">
-                    <h2>{title}</h2>
-                    <p>{body}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <UsageNoticeContent />
           ) : (
             <ConsentDetails className="onboarding-consent-details" />
           )}

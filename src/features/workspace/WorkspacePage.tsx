@@ -7,6 +7,13 @@ import { TaskStatus } from './components/TaskStatus.tsx'
 import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx'
 import type { UseWorkspaceResult } from './useWorkspace.ts'
 import styles from './WorkspacePage.module.css'
+import { SettingsPanel } from '../settings/SettingsPanel.tsx'
+import { SupportDialog } from '../support/SupportDialog.tsx'
+import { TaskUnavailablePanel } from '../support/TaskUnavailablePanel.tsx'
+import { maskTesterCode } from './navigation.ts'
+import { useWorkspaceNavigation } from './useWorkspaceNavigation.ts'
+
+type SupportTopic = 'faq' | 'usage' | 'contact' | 'deletion'
 
 type Filter = 'all' | 'processing' | 'failed'
 
@@ -43,25 +50,44 @@ function EmptyWorkspace() {
 export function WorkspacePage({
   workspace,
   onReenter,
+  onLeave,
   focusOnEntry = false,
 }: {
   workspace: UseWorkspaceResult
   onReenter?: () => void
+  onLeave?: () => void
   focusOnEntry?: boolean
 }) {
   const [filter, setFilter] = useState<Filter>('all')
+  const { view, navigate } = useWorkspaceNavigation()
   const [consentWorkspaceId, setConsentWorkspaceId] = useState<string | null>(
     null,
   )
+  const [previousView, setPreviousView] = useState(view)
+  const [support, setSupport] = useState<{
+    topic: SupportTopic
+    workspaceId: string
+  } | null>(null)
+  const supportReturnFocusRef = useRef<HTMLElement | null>(null)
   const mainContentRef = useRef<HTMLElement>(null)
   const { tasks, loadState } = workspace
   const workspaceId = workspace.workspace?.id ?? null
+  const previousFocusView = useRef(view)
 
   // Transfer focus from the removed access/onboarding screen only on entry.
   // Loading, filtering and consent updates must preserve the user's focus.
   useEffect(() => {
-    if (focusOnEntry) mainContentRef.current?.focus({ preventScroll: true })
-  }, [focusOnEntry])
+    if (focusOnEntry || previousFocusView.current !== view)
+      mainContentRef.current?.focus({ preventScroll: true })
+    previousFocusView.current = view
+  }, [focusOnEntry, view])
+
+  if (previousView !== view) {
+    setPreviousView(view)
+    setConsentWorkspaceId(null)
+    setSupport(null)
+  }
+  if (support && support.workspaceId !== workspaceId) setSupport(null)
 
   // Reset the dialog's lifetime when its workspace disappears or changes.
   if (consentWorkspaceId !== null && consentWorkspaceId !== workspaceId) {
@@ -76,6 +102,20 @@ export function WorkspacePage({
   function closeConsent() {
     setConsentWorkspaceId(null)
     workspace.clearConsentError()
+  }
+  function openSupport(topic: SupportTopic, returnFocus?: HTMLElement | null) {
+    if (!workspaceId) return
+    supportReturnFocusRef.current =
+      returnFocus === undefined
+        ? document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null
+        : returnFocus
+    setSupport({ topic, workspaceId })
+  }
+  function goHome() {
+    navigate('home')
+    mainContentRef.current?.focus({ preventScroll: true })
   }
   const visibleTasks = tasks.filter(
     (task) => filter === 'all' || task.processingStatus === filter,
@@ -104,11 +144,13 @@ export function WorkspacePage({
         info={workspace.workspace}
         tasks={tasks}
         loadState={loadState}
-        onHome={() => {
-          setFilter('all')
+        view={view}
+        onHome={goHome}
+        onSettings={() => {
+          navigate('settings')
           mainContentRef.current?.focus({ preventScroll: true })
         }}
-        onSettings={openConsent}
+        onOpenSupport={openSupport}
       />
       <main
         className={styles.main}
@@ -116,7 +158,13 @@ export function WorkspacePage({
         id="workspace-content"
         tabIndex={-1}
       >
-        <header className={styles.topBar}>내 작업</header>
+        <header className={styles.topBar}>
+          {view === 'settings'
+            ? '설정'
+            : view === 'home'
+              ? '내 작업'
+              : '작업 공간'}
+        </header>
         {loadState === 'loading' && (
           <div className={styles.centeredState} role="status">
             <div className={styles.stateMessage}>
@@ -151,8 +199,29 @@ export function WorkspacePage({
             </div>
           </div>
         )}
-        {loadState === 'empty' && <EmptyWorkspace />}
-        {loadState === 'success' && (
+        {(loadState === 'empty' || loadState === 'success') &&
+          view === 'settings' &&
+          workspace.workspace && (
+            <div className={styles.body}>
+              <SettingsPanel
+                maskedTesterCode={maskTesterCode(
+                  workspace.workspace.testerCode,
+                )}
+                consentChoice={workspace.consent.choice}
+                onLeave={() => onLeave?.()}
+                onEditConsent={openConsent}
+                onOpenSupport={openSupport}
+              />
+            </div>
+          )}
+        {(loadState === 'empty' || loadState === 'success') &&
+          (view === 'task-not-found' || view === 'task-inaccessible') && (
+            <div className={styles.centeredState}>
+              <TaskUnavailablePanel onReturnToWorkspace={goHome} />
+            </div>
+          )}
+        {loadState === 'empty' && view === 'home' && <EmptyWorkspace />}
+        {loadState === 'success' && view === 'home' && (
           <div className={styles.body}>
             {workspace.consent.choice === 'undecided' && (
               <div className={styles.consentNotice}>
@@ -276,6 +345,14 @@ export function WorkspacePage({
           consent={workspace.consent}
           onSave={workspace.saveConsent}
           onClose={closeConsent}
+          fallbackFocusRef={mainContentRef}
+        />
+      )}
+      {support && support.workspaceId === workspaceId && (
+        <SupportDialog
+          topic={support.topic}
+          onClose={() => setSupport(null)}
+          returnFocusRef={supportReturnFocusRef}
           fallbackFocusRef={mainContentRef}
         />
       )}
