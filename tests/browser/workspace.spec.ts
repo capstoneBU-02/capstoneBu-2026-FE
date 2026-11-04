@@ -108,7 +108,7 @@ test('native close while saving permits reopening, and a prior save cannot close
 test('dragging dialog text outside does not dismiss it, while a backdrop click does', async ({
   page,
 }) => {
-  await page.goto('/')
+  await page.goto('/?demo=workspace')
   await page.getByRole('button', { name: '선택하기' }).click()
   const description = dialog(page).getByText(
     '올린 음원을 AI 학습에 써도 될까요?',
@@ -180,7 +180,7 @@ test('mobile navigation and a removed consent trigger restore focus to visible m
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/')
+  await page.goto('/?demo=workspace')
   await page.getByRole('button', { name: '선택하기' }).waitFor()
   await expect(
     page.getByRole('img', { name: 'earmark', exact: true }),

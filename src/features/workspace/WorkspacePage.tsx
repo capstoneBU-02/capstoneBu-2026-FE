@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DEMO_DISPLAY_CONFIG } from '../../app/demoConfig.ts'
 import { Button } from '../../shared/ui/Button.tsx'
 import { Icon } from '../../shared/ui/Icon.tsx'
@@ -42,8 +42,12 @@ function EmptyWorkspace() {
 
 export function WorkspacePage({
   workspace,
+  onReenter,
+  focusOnEntry = false,
 }: {
   workspace: UseWorkspaceResult
+  onReenter?: () => void
+  focusOnEntry?: boolean
 }) {
   const [filter, setFilter] = useState<Filter>('all')
   const [consentWorkspaceId, setConsentWorkspaceId] = useState<string | null>(
@@ -52,6 +56,12 @@ export function WorkspacePage({
   const mainContentRef = useRef<HTMLElement>(null)
   const { tasks, loadState } = workspace
   const workspaceId = workspace.workspace?.id ?? null
+
+  // Transfer focus from the removed access/onboarding screen only on entry.
+  // Loading, filtering and consent updates must preserve the user's focus.
+  useEffect(() => {
+    if (focusOnEntry) mainContentRef.current?.focus({ preventScroll: true })
+  }, [focusOnEntry])
 
   // Reset the dialog's lifetime when its workspace disappears or changes.
   if (consentWorkspaceId !== null && consentWorkspaceId !== workspaceId) {
@@ -125,8 +135,18 @@ export function WorkspacePage({
                   : '작업을 불러오지 못했어요'}
               </h1>
               <p role="alert">{workspace.errorMessage}</p>
-              <Button onClick={workspace.retryLoad}>
-                {loadState === 'expired' ? '다시 확인' : '다시 시도'}
+              <Button
+                onClick={
+                  loadState === 'expired' && onReenter
+                    ? onReenter
+                    : workspace.retryLoad
+                }
+              >
+                {loadState === 'expired'
+                  ? onReenter
+                    ? '코드 다시 입력'
+                    : '다시 확인'
+                  : '다시 시도'}
               </Button>
             </div>
           </div>
