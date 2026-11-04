@@ -1,5 +1,11 @@
 import { DEMO_DISPLAY_CONFIG } from '../../app/demoConfig.ts'
-import type { ConsentChoice, DemoScenario, WorkspaceTask } from './model.ts'
+import type {
+  ConsentChoice,
+  DemoScenario,
+  SavedConsentChoice,
+  WorkspaceInfo,
+  WorkspaceTask,
+} from './model.ts'
 import {
   WorkspaceRepositoryError,
   type WorkspaceRepository,
@@ -90,11 +96,29 @@ function waitForMockRequest(milliseconds: number, signal: AbortSignal) {
   })
 }
 
+interface MockWorkspaceOptions {
+  readonly workspace?: WorkspaceInfo
+  readonly tasks?: readonly WorkspaceTask[]
+  readonly consentChoice?: ConsentChoice
+  readonly onConsentSaved?: (choice: SavedConsentChoice) => void
+}
+
 export function createMockWorkspaceRepository(
   scenario: DemoScenario = 'default',
+  options: MockWorkspaceOptions = {},
 ): WorkspaceRepository {
   // Each mounted app gets its own mock session; no browser storage or requests.
-  let consentChoice: ConsentChoice = 'undecided'
+  let consentChoice: ConsentChoice = options.consentChoice ?? 'undecided'
+  const workspace = {
+    ...(options.workspace ?? {
+      id: 'workspace-demo',
+      name: '내 작업',
+      testerCode: DEMO_DISPLAY_CONFIG.testerCode,
+    }),
+  }
+  const tasks = (options.tasks ?? (scenario === 'empty' ? [] : mockTasks)).map(
+    (task) => ({ ...task }),
+  )
   let shouldFailNextLoad = scenario === 'error'
 
   return {
@@ -117,13 +141,8 @@ export function createMockWorkspaceRepository(
       }
 
       return {
-        workspace: {
-          id: 'workspace-demo',
-          name: '내 작업',
-          testerCode: DEMO_DISPLAY_CONFIG.testerCode,
-        },
-        tasks:
-          scenario === 'empty' ? [] : mockTasks.map((task) => ({ ...task })),
+        workspace: { ...workspace },
+        tasks: tasks.map((task) => ({ ...task })),
         consentChoice,
       }
     },
@@ -145,6 +164,7 @@ export function createMockWorkspaceRepository(
       }
 
       consentChoice = choice
+      options.onConsentSaved?.(choice)
       return choice
     },
   }
