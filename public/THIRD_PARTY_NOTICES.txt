@@ -24,6 +24,34 @@ SOFTWARE.
 
 ---
 
+Self-hosted design fonts (official Google Fonts WOFF2 distribution)
+
+Noto Sans KR — normal variable 400–700, Korean/Latin Unicode subsets
+Copyright 2014-2021 Adobe (http://www.adobe.com/),
+with Reserved Font Name 'Source'
+Source: https://github.com/google/fonts/tree/main/ofl/notosanskr
+License: SIL Open Font License 1.1
+Full original license: fonts/NotoSansKR-OFL.txt
+
+JetBrains Mono — normal variable 400–500, Latin subset
+Copyright 2020 The JetBrains Mono Project Authors
+(https://github.com/JetBrains/JetBrainsMono)
+Source: https://www.jetbrains.com/lp/mono/
+License: SIL Open Font License 1.1
+Full original license: fonts/JetBrainsMono-OFL.txt
+
+Geist — normal 600, Latin subset
+Copyright 2024 The Geist Project Authors
+(https://github.com/vercel/geist-font)
+Source: https://vercel.com/font
+License: SIL Open Font License 1.1
+Full original license: fonts/Geist-OFL.txt
+
+Font files are redistributed unchanged. The full license texts listed above
+are included alongside this notice in the fonts/ directory of the build.
+
+---
+
 react-dom 19.2.8
 
 MIT License
