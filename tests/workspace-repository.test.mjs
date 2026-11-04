@@ -5,7 +5,7 @@ import { readDemoScenario } from '../src/app/demoConfig.ts'
 
 const signal = () => new AbortController().signal
 
-test('cancelled load preserves the failure and retry scenario in StrictMode', async () => {
+test('cancelled load preserves the failure for the next request and allows retry', async () => {
   const repository = createMockWorkspaceRepository('error')
   const controller = new AbortController()
   const loading = repository.loadWorkspace(controller.signal)
