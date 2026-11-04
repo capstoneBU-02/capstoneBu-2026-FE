@@ -13,4 +13,6 @@ test-results/
 .idea/
 .vscode/
 .ruff_cache/
-/Docs/
+!/Docs/
+/Docs/*
+!/Docs/figma/

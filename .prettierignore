@@ -2,4 +2,5 @@ node_modules/
 dist/
 coverage/
 package-lock.json
-Docs/
+/Docs/*
+!/Docs/figma/

@@ -126,3 +126,7 @@ Git Flow와 Conventional Commits를 사용한다. 브랜치·커밋·PR 규칙�
 ## 오픈소스 고지
 
 배포물의 라이선스 고지는 [THIRD_PARTY_NOTICES.txt](public/THIRD_PARTY_NOTICES.txt)에 기록한다. 이 파일은 빌드 시 `dist/`에 포함된다.
+
+## 디자인 아카이브
+
+현재 Figma v2 원본 화면과 컴포넌트는 [디자인 아카이브](Docs/figma/README.md)에서 확인할 수 있다.
