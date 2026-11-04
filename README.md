@@ -22,19 +22,31 @@ npm run dev
 
 ## 명령어
 
-| 명령어                 | 기능                            |
-| ---------------------- | ------------------------------- |
-| `npm run dev`          | 개발 서버 실행                  |
-| `npm run typecheck`    | TypeScript 타입 검사            |
-| `npm run lint`         | 코드 검사                       |
-| `npm run format`       | 코드 포맷 적용                  |
-| `npm run format:check` | 코드 포맷 검사                  |
-| `npm test`             | 목업 저장소 회귀 테스트         |
-| `npm run build`        | 타입 검사 및 배포 빌드          |
-| `npm run preview`      | 빌드 결과 확인                  |
-| `npm run check`        | 포맷·린트·테스트·타입·빌드 검사 |
+| 명령어                 | 기능                                   |
+| ---------------------- | -------------------------------------- |
+| `npm run dev`          | 개발 서버 실행                         |
+| `npm run typecheck`    | TypeScript 타입 검사                   |
+| `npm run lint`         | 코드 검사                              |
+| `npm run format`       | 코드 포맷 적용                         |
+| `npm run format:check` | 코드 포맷 검사                         |
+| `npm test`             | 목업 저장소 회귀 테스트                |
+| `npm run test:browser` | 작업 공간·동의 창 브라우저 회귀 테스트 |
+| `npm run build`        | 타입 검사 및 배포 빌드                 |
+| `npm run preview`      | 빌드 결과 확인                         |
+| `npm run check`        | 포맷·린트·테스트·타입·빌드 검사        |
 
 빌드 결과는 `dist/`에 생성된다.
+
+### 브라우저 회귀 테스트
+
+```bash
+npx playwright install chromium
+npm run test:browser
+```
+
+Playwright가 `127.0.0.1:4174`에 테스트용 Vite 서버를 실행하고 Chromium 한 종류로 검증한다. 이미 설치한 Chrome을 쓰려면 `PLAYWRIGHT_CHANNEL=chrome npm run test:browser`로 실행할 수 있다. CI는 `npx playwright install --with-deps chromium` 후 같은 테스트 명령을 사용한다.
+
+`tests/browser/`는 실제 `useWorkspace`·`WorkspacePage`를 StrictMode에서 렌더하고 저장소 응답 시점만 제어한다. 만료 후 재조회, 동의 오류 초기화, 네이티브 창 닫기, 포커스 복귀, 텍스트 드래그, 요청 경합을 검증한다. 테스트 화면은 개발 서버 전용이며 배포 빌드에 포함되지 않는다. 실패 스크린샷·trace는 `test-results/`, HTML 결과는 `playwright-report/`에 생성된다.
 
 ## 첫 번째 구현: 내 작업 화면
 
@@ -56,7 +68,15 @@ Figma의 `Earmark — 기타 카피 보조 서비스 디자인 v2`를 기준으�
 
 조회·저장에는 짧은 고정 지연을 두어 로딩과 저장 중 상태도 확인할 수 있다. 목업은 네트워크 요청이나 브라우저 저장소를 사용하지 않는다. 동의 선택은 현재 앱의 메모리에만 남고 새로고침하면 미선택으로 돌아온다. 동의를 거부해도 목록 사용을 제한하지 않는다. 처리 진행률과 시간 표시는 고정 예시이며 실제 AI 처리를 수행하지 않는다.
 
-`src/app/demoConfig.ts`의 5분 제한·보관 기간·테스터 코드 형식은 디자인 확인을 위한 임시 문구다. 제품 정책이나 API 명세의 확정값이 아니다. 디자인 폰트 파일은 아직 포함하지 않았으며 시스템 글꼴로 대체한다.
+`src/app/demoConfig.ts`의 5분 제한·보관 기간·테스터 코드 형식은 디자인 확인을 위한 임시 문구다. 제품 정책이나 API 명세의 확정값이 아니다.
+
+### 디자인 폰트
+
+Figma에서 확인한 Noto Sans KR 400·500·700(UI), JetBrains Mono 400·500(시간·코드), Geist 600(로고)을 로컬 WOFF2로 제공한다. Figma에서는 글꼴 이름과 굵기를 확인했고, 폰트 파일은 공식 Google Fonts 배포본을 사용한다. 세 글꼴은 SIL OFL 1.1로 배포된다.
+
+Noto Sans KR은 한글 완성형 11,172자와 자모·라틴을 포함하는 공식 유니코드 부분집합을 유지한다. `unicode-range`에 따라 화면에 필요한 파일만 요청하며, 전체 한글 파일을 미리 내려받지 않는다. JetBrains Mono와 Geist는 현재 사용 범위인 라틴 부분집합만 포함한다. `font-display: swap`으로 글자가 보이지 않는 대기를 피하고, 기존 고정 줄 높이를 유지한다. 폰트 요청은 모두 앱과 같은 출처로 향하며 런타임 Google Fonts 요청은 없다.
+
+글꼴 출처·굵기·용량·검증 방법은 [폰트 출처](src/assets/fonts/SOURCES.md), 파일별 원본 URL과 SHA-256은 [폰트 목록](src/assets/fonts/sources.json)에 기록한다. 배포물에는 `public/fonts/`의 라이선스 원문을 함께 포함한다.
 
 ### API 연결 경계
 
