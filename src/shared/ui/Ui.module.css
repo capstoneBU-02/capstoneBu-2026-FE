@@ -1,0 +1,120 @@
+.icon {
+  display: block;
+  flex-shrink: 0;
+  max-width: none;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-m);
+  padding: 8px 13px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.primary {
+  background: var(--ink-primary);
+  color: var(--ink-inverse);
+}
+
+.secondary {
+  border-color: var(--border-strong);
+  background: var(--surface-default);
+  color: var(--ink-primary);
+}
+
+.button:not(:disabled, [aria-disabled='true']):hover {
+  filter: brightness(0.97);
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.button[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+.compact {
+  padding: 4px 9px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.logoMark {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.logoSelection {
+  position: absolute;
+  inset: 0 auto auto 2.6px;
+  width: 16.8px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+}
+
+.logoBar {
+  position: absolute;
+  width: 2.4px;
+  border-radius: 1.2px;
+  background: var(--accent-default);
+}
+
+.logoBar[data-bar='1'] {
+  top: 7.5px;
+  left: 0.6px;
+  height: 7px;
+  background: var(--ink-tertiary);
+}
+
+.logoBar[data-bar='2'] {
+  top: 5px;
+  left: 5.2px;
+  height: 12px;
+}
+
+.logoBar[data-bar='3'] {
+  top: 2px;
+  left: 9.8px;
+  height: 18px;
+}
+
+.logoBar[data-bar='4'] {
+  top: 4.5px;
+  left: 14.4px;
+  height: 13px;
+}
+
+.logoBar[data-bar='5'] {
+  top: 7px;
+  left: 19px;
+  height: 8px;
+  background: var(--ink-tertiary);
+}
+
+.logoWord {
+  color: var(--ink-primary);
+  font-family: var(--font-brand);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 22px;
+  letter-spacing: -0.45px;
+}

@@ -1,0 +1,21 @@
+:root {
+  --surface-default: #fff;
+  --surface-canvas: #f6f5f2;
+  --surface-subtle: #efeeea;
+  --surface-selected: #e7e3db;
+  --ink-primary: #141412;
+  --ink-secondary: #4d4b46;
+  --ink-tertiary: #75726b;
+  --ink-inverse: #fff;
+  --accent-default: #ff5a1f;
+  --accent-soft: #ffe9df;
+  --border-default: #e0ddd6;
+  --border-strong: #c9c5bc;
+  --state-done: #1f8a4c;
+  --state-alert: #d7322a;
+  --radius-m: 8px;
+  --radius-l: 12px;
+  --font-ui: 'Noto Sans KR', 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  --font-brand: 'Geist', var(--font-ui);
+}

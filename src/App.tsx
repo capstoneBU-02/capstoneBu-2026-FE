@@ -1,10 +1,17 @@
+import { useState } from 'react'
+import { readDemoScenario } from './app/demoConfig.ts'
+import { createMockWorkspaceRepository } from './features/workspace/mockRepository.ts'
+import { useWorkspace } from './features/workspace/useWorkspace.ts'
+import { WorkspacePage } from './features/workspace/WorkspacePage.tsx'
+
 function App() {
-  return (
-    <main className="app">
-      <h1>Capstone BU</h1>
-      <p>음원 기반 기타 카피 보조 서비스</p>
-    </main>
-  )
+  const [{ repository, scenario }] = useState(() => {
+    const scenario = readDemoScenario(window.location.search)
+    return { scenario, repository: createMockWorkspaceRepository(scenario) }
+  })
+  const workspace = useWorkspace(repository, scenario)
+
+  return <WorkspacePage workspace={workspace} />
 }
 
 export default App
