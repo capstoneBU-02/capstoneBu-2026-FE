@@ -34,6 +34,7 @@ export function ConsentDialog({
 }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const saveInFlight = useRef(false)
+  const pointerStartedOutside = useRef(false)
   const [localError, setLocalError] = useState<string | null>(null)
   const titleId = useId()
   const descriptionId = useId()
@@ -46,9 +47,15 @@ export function ConsentDialog({
     dialog?.showModal()
     return () => {
       dialog?.close()
-      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+      const canRestoreFocus =
+        previousFocus instanceof HTMLElement &&
+        previousFocus.isConnected &&
+        !previousFocus.matches(':disabled') &&
+        previousFocus.getClientRects().length > 0
+      if (canRestoreFocus) {
         previousFocus.focus({ preventScroll: true })
-      } else {
+      }
+      if (!canRestoreFocus || document.activeElement !== previousFocus) {
         fallbackFocus?.focus({ preventScroll: true })
       }
     }
@@ -59,7 +66,7 @@ export function ConsentDialog({
     saveInFlight.current = true
     setLocalError(null)
     try {
-      if (await onSave(choice)) onClose()
+      if ((await onSave(choice)) && dialogRef.current?.open) onClose()
     } catch {
       setLocalError('선택을 저장하지 못했어요. 다시 시도해 주세요.')
     } finally {
@@ -77,13 +84,30 @@ export function ConsentDialog({
       className={styles.dialog}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      aria-busy={busy}
+      onClose={(event) => {
+        // Ignore a queued close from StrictMode cleanup after showModal reruns.
+        if (!event.currentTarget.open) onClose()
+      }}
       onCancel={(event) => {
         event.preventDefault()
         dismiss()
       }}
+      onPointerDown={(event) => {
+        const bounds = event.currentTarget.getBoundingClientRect()
+        pointerStartedOutside.current =
+          event.target === event.currentTarget &&
+          (event.clientX < bounds.left ||
+            event.clientX > bounds.right ||
+            event.clientY < bounds.top ||
+            event.clientY > bounds.bottom)
+      }}
+      onPointerCancel={() => {
+        pointerStartedOutside.current = false
+      }}
       onClick={(event) => {
-        if (event.target !== event.currentTarget) return
+        const startedOutside = pointerStartedOutside.current
+        pointerStartedOutside.current = false
+        if (!startedOutside || event.target !== event.currentTarget) return
         const bounds = event.currentTarget.getBoundingClientRect()
         if (
           event.clientX < bounds.left ||

@@ -2,12 +2,14 @@ import { useId, useState } from 'react'
 import { BrandLogo } from '../../../shared/ui/BrandLogo.tsx'
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import type { WorkspaceInfo, WorkspaceTask } from '../model.ts'
+import type { UseWorkspaceResult } from '../useWorkspace.ts'
 import { taskStatusIcon } from './taskStatusIcon.ts'
 import styles from '../WorkspacePage.module.css'
 
 type Props = {
   info: WorkspaceInfo | null
   tasks: readonly WorkspaceTask[]
+  loadState: UseWorkspaceResult['loadState']
   onHome: () => void
   onSettings: () => void
 }
@@ -73,7 +75,13 @@ function SongGroup({
   )
 }
 
-export function WorkspaceSidebar({ info, tasks, onHome, onSettings }: Props) {
+export function WorkspaceSidebar({
+  info,
+  tasks,
+  loadState,
+  onHome,
+  onSettings,
+}: Props) {
   const [navigationOpen, setNavigationOpen] = useState(false)
   const navigationId = useId()
   const songs = [...new Set(tasks.map((task) => task.songName))]
@@ -131,7 +139,7 @@ export function WorkspaceSidebar({ info, tasks, onHome, onSettings }: Props) {
               showAdd={index === 0}
             />
           ))}
-          {songs.length === 0 && (
+          {loadState === 'empty' && (
             <p className={styles.emptySongs}>아직 곡이 없어요</p>
           )}
         </div>

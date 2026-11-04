@@ -28,6 +28,7 @@ export interface UseWorkspaceResult {
   readonly consent: ConsentState
   readonly demoScenario: DemoScenario
   retryLoad(): void
+  clearConsentError(): void
   saveConsent(choice: SavedConsentChoice): Promise<boolean>
 }
 
@@ -201,6 +202,21 @@ export function useWorkspace(
     }
   }
 
+  function clearConsentError() {
+    setState((previous) =>
+      previous.consent.status === 'error'
+        ? {
+            ...previous,
+            consent: {
+              ...previous.consent,
+              status: 'idle',
+              errorMessage: null,
+            },
+          }
+        : previous,
+    )
+  }
+
   return {
     loadState,
     workspace: snapshot?.workspace ?? null,
@@ -209,6 +225,7 @@ export function useWorkspace(
     consent,
     demoScenario,
     retryLoad: () => setLoadVersion((previous) => previous + 1),
+    clearConsentError,
     saveConsent,
   }
 }

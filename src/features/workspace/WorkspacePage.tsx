@@ -46,9 +46,27 @@ export function WorkspacePage({
   workspace: UseWorkspaceResult
 }) {
   const [filter, setFilter] = useState<Filter>('all')
-  const [consentOpen, setConsentOpen] = useState(false)
+  const [consentWorkspaceId, setConsentWorkspaceId] = useState<string | null>(
+    null,
+  )
   const mainContentRef = useRef<HTMLElement>(null)
   const { tasks, loadState } = workspace
+  const workspaceId = workspace.workspace?.id ?? null
+
+  // Reset the dialog's lifetime when its workspace disappears or changes.
+  if (consentWorkspaceId !== null && consentWorkspaceId !== workspaceId) {
+    setConsentWorkspaceId(null)
+  }
+
+  function openConsent() {
+    workspace.clearConsentError()
+    setConsentWorkspaceId(workspaceId)
+  }
+
+  function closeConsent() {
+    setConsentWorkspaceId(null)
+    workspace.clearConsentError()
+  }
   const visibleTasks = tasks.filter(
     (task) => filter === 'all' || task.processingStatus === filter,
   )
@@ -75,18 +93,18 @@ export function WorkspacePage({
       <WorkspaceSidebar
         info={workspace.workspace}
         tasks={tasks}
+        loadState={loadState}
         onHome={() => {
           setFilter('all')
           mainContentRef.current?.focus({ preventScroll: true })
         }}
-        onSettings={() => setConsentOpen(true)}
+        onSettings={openConsent}
       />
       <main
         className={styles.main}
         ref={mainContentRef}
         id="workspace-content"
         tabIndex={-1}
-        aria-busy={loadState === 'loading'}
       >
         <header className={styles.topBar}>내 작업</header>
         {loadState === 'loading' && (
@@ -125,7 +143,7 @@ export function WorkspacePage({
                     정하지 않으면 쓰지 않아요.
                   </p>
                 </div>
-                <Button compact onClick={() => setConsentOpen(true)}>
+                <Button compact onClick={openConsent}>
                   선택하기
                 </Button>
               </div>
@@ -203,11 +221,11 @@ export function WorkspacePage({
                       </td>
                       <td className={styles.updated}>{task.updatedAtLabel}</td>
                       <td className={styles.rowArrow}>
-                        <span
-                          aria-label="작업 공간 화면 준비 중"
-                          aria-disabled="true"
-                        >
+                        <span>
                           <Icon name="chevronRight" />
+                          <span className={styles.srOnly}>
+                            작업 공간 화면 준비 중
+                          </span>
                         </span>
                       </td>
                     </tr>
@@ -233,11 +251,11 @@ export function WorkspacePage({
           </div>
         )}
       </main>
-      {consentOpen && workspace.workspace && (
+      {consentWorkspaceId !== null && consentWorkspaceId === workspaceId && (
         <ConsentDialog
           consent={workspace.consent}
           onSave={workspace.saveConsent}
-          onClose={() => setConsentOpen(false)}
+          onClose={closeConsent}
           fallbackFocusRef={mainContentRef}
         />
       )}
