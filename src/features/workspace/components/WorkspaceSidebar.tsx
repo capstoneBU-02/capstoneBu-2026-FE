@@ -5,7 +5,7 @@ import type { WorkspaceInfo, WorkspaceTask } from '../model.ts'
 import type { UseWorkspaceResult } from '../useWorkspace.ts'
 import { taskStatusIcon } from './taskStatusIcon.ts'
 import styles from '../WorkspacePage.module.css'
-import { HelpMenu } from '../../support/HelpMenu.tsx'
+import { HelpMenu, type HelpTopic } from '../../support/HelpMenu.tsx'
 import { maskTesterCode, type WorkspaceView } from '../navigation.ts'
 
 type Props = {
@@ -15,10 +15,7 @@ type Props = {
   onHome: () => void
   onSettings: () => void
   view: WorkspaceView
-  onOpenSupport: (
-    topic: 'faq' | 'usage' | 'contact',
-    returnFocus: HTMLElement | null,
-  ) => void
+  onOpenSupport: (topic: HelpTopic, returnFocus: HTMLElement | null) => void
 }
 
 function SongGroup({

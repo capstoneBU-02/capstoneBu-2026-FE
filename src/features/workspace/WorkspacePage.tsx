@@ -8,12 +8,11 @@ import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx'
 import type { UseWorkspaceResult } from './useWorkspace.ts'
 import styles from './WorkspacePage.module.css'
 import { SettingsPanel } from '../settings/SettingsPanel.tsx'
-import { SupportDialog } from '../support/SupportDialog.tsx'
+import { SupportDialog, type SupportTopic } from '../support/SupportDialog.tsx'
 import { TaskUnavailablePanel } from '../support/TaskUnavailablePanel.tsx'
 import { maskTesterCode } from './navigation.ts'
 import { useWorkspaceNavigation } from './useWorkspaceNavigation.ts'
-
-type SupportTopic = 'faq' | 'usage' | 'contact' | 'deletion'
+import './consent-feedback.css'
 
 type Filter = 'all' | 'processing' | 'failed'
 
@@ -95,7 +94,8 @@ export function WorkspacePage({
   }
 
   function openConsent() {
-    workspace.clearConsentError()
+    // A request can fail after a view change or native dialog close. Keep that
+    // result until the user retries or dismisses the dialog after seeing it.
     setConsentWorkspaceId(workspaceId)
   }
 
@@ -137,8 +137,16 @@ export function WorkspacePage({
 
   return (
     <div className={styles.appShell}>
-      <a className={styles.skipLink} href="#workspace-content">
-        작업 목록으로 건너뛰기
+      <a
+        className={styles.skipLink}
+        href="#workspace-content"
+        onClick={(event) => {
+          event.preventDefault()
+          mainContentRef.current?.focus({ preventScroll: true })
+          mainContentRef.current?.scrollIntoView({ block: 'start' })
+        }}
+      >
+        본문으로 건너뛰기
       </a>
       <WorkspaceSidebar
         info={workspace.workspace}
@@ -165,6 +173,16 @@ export function WorkspacePage({
               ? '내 작업'
               : '작업 공간'}
         </header>
+        {workspaceId &&
+          consentWorkspaceId !== workspaceId &&
+          workspace.consent.errorMessage && (
+            <div className="consent-feedback">
+              <p role="alert">AI 학습 활용: {workspace.consent.errorMessage}</p>
+              <Button compact onClick={openConsent}>
+                AI 학습 활용 다시 선택
+              </Button>
+            </div>
+          )}
         {loadState === 'loading' && (
           <div className={styles.centeredState} role="status">
             <div className={styles.stateMessage}>

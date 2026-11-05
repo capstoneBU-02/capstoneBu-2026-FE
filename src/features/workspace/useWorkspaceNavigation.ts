@@ -8,9 +8,17 @@ import {
   type WorkspaceView,
 } from './navigation.ts'
 
+function createWorkspaceScope(): string {
+  // This opaque history marker is not an auth token. getRandomValues also
+  // works on LAN HTTP, where the secure-context-only randomUUID is absent.
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('')
+}
+
 export function useWorkspaceNavigation() {
   const [entry] = useState(() => ({
-    scope: crypto.randomUUID(),
+    scope: createWorkspaceScope(),
     pathname: window.location.pathname,
     // Freeze this session's selector. A popped URL may belong to an old
     // preview; carrying its selector forward could change the app on reload.

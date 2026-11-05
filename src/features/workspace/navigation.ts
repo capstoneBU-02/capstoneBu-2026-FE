@@ -46,7 +46,8 @@ export function workspaceUrl(
     params.set('access', mode.scenario)
   }
   if (view !== 'home') params.set('view', view)
-  return pathname + (params.size ? `?${params}` : '')
+  const query = params.toString()
+  return pathname + (query ? `?${query}` : '')
 }
 
 export function clearWorkspaceHistory(entrySearch: string) {
@@ -55,10 +56,11 @@ export function clearWorkspaceHistory(entrySearch: string) {
   const params = new URLSearchParams()
   if (mode.kind === 'access' && mode.scenario !== 'default')
     params.set('access', mode.scenario)
+  const query = params.toString()
   window.history.replaceState(
     null,
     '',
-    window.location.pathname + (params.size ? `?${params}` : ''),
+    window.location.pathname + (query ? `?${query}` : ''),
   )
 }
 
