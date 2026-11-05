@@ -53,3 +53,29 @@ test('navigation URLs retain only known demo selectors and view; codes are displ
   assert.equal(maskTesterCode('EM-7K2P-9Q4M'), 'EM-••••-9Q4M')
   assert.equal(maskTesterCode('short'), '••••')
 })
+
+test('URL normalization preserves allowed selectors when URLSearchParams.size is unavailable', () => {
+  const size = Object.getOwnPropertyDescriptor(
+    URLSearchParams.prototype,
+    'size',
+  )
+  delete URLSearchParams.prototype.size
+  try {
+    assert.equal(
+      workspaceUrl('/', '?demo=workspace&code=secret&session=old', 'settings'),
+      '/?demo=workspace&view=settings',
+    )
+    assert.equal(
+      workspaceUrl('/', '?access=network&code=secret&view=unknown', 'home'),
+      '/?access=network',
+    )
+    assert.equal(
+      workspaceUrl('/', '?demo=unknown&access=unknown&code=secret', 'home'),
+      '/',
+    )
+    assert.equal(workspaceUrl('/', '', 'settings'), '/?view=settings')
+    assert.equal(workspaceUrl('/', '', 'home'), '/')
+  } finally {
+    if (size) Object.defineProperty(URLSearchParams.prototype, 'size', size)
+  }
+})
