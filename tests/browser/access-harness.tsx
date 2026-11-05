@@ -16,10 +16,13 @@ interface AccessTestControls {
   expireSession(): void
   releaseEntries(): Promise<void>
   releaseOnboarding(): Promise<void>
+  releaseWorkspaceSaves(): Promise<void>
   calls(): {
     entries: number
     completions: number
     workspaceLoads: number
+    consentSaves: number
+    acknowledgements: number
     aborted: number
   }
 }
@@ -46,6 +49,13 @@ let expired = false
 let entries = 0
 let completions = 0
 let workspaceLoads = 0
+let consentSaves = 0
+let acknowledgements = 0
+const pendingWorkspaceSaves: Array<{
+  workspace: WorkspaceRepository
+  choice: 'accepted' | 'declined'
+  resolve: (choice: 'accepted' | 'declined') => void
+}> = []
 let aborted = 0
 
 function trackCancellation(signal: AbortSignal) {
@@ -61,7 +71,10 @@ function trackCancellation(signal: AbortSignal) {
 // Render the production App. Only this async boundary ignores cancellation so
 // stale resolution and repository replacement can be exercised deterministically.
 const repository: AccessRepository = {
-  acknowledgeNotice: (sessionId) => base.acknowledgeNotice(sessionId),
+  acknowledgeNotice: (sessionId) => {
+    acknowledgements += 1
+    return base.acknowledgeNotice(sessionId)
+  },
   enter(code, signal) {
     entries += 1
     expired = false
@@ -85,6 +98,13 @@ const repository: AccessRepository = {
             : workspace.loadWorkspace(signal)
         },
         saveConsent(choice, signal) {
+          consentSaves += 1
+          if (scenario === 'pending-workspace-save') {
+            trackCancellation(signal)
+            return new Promise((resolve) =>
+              pendingWorkspaceSaves.push({ workspace, choice, resolve }),
+            )
+          }
           return expired
             ? Promise.reject(
                 new WorkspaceRepositoryError('expired', 'Expired test session'),
@@ -136,7 +156,24 @@ window.accessTest = {
       )
     }
   },
-  calls: () => ({ entries, completions, workspaceLoads, aborted }),
+  async releaseWorkspaceSaves() {
+    for (const request of pendingWorkspaceSaves.splice(0)) {
+      request.resolve(
+        await request.workspace.saveConsent(
+          request.choice,
+          new AbortController().signal,
+        ),
+      )
+    }
+  },
+  calls: () => ({
+    entries,
+    completions,
+    workspaceLoads,
+    consentSaves,
+    acknowledgements,
+    aborted,
+  }),
 }
 
 export function Harness() {

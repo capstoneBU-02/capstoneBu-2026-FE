@@ -75,10 +75,18 @@
 }
 
 .homeRow {
+  line-height: 18px;
+}
+
+.homeRow[aria-current='page'],
+.footerRow[aria-current='page'] {
   background: var(--surface-selected);
   color: var(--ink-primary);
   font-weight: 500;
-  line-height: 18px;
+}
+
+.helpAnchor {
+  position: relative;
 }
 
 .songHeader {

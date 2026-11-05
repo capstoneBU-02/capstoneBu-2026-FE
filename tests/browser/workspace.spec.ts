@@ -4,7 +4,12 @@ import type {} from './harness.tsx'
 const dialog = (page: Page) =>
   page.getByRole('dialog', { name: 'AI 학습 활용' })
 const settings = (page: Page) =>
-  page.getByRole('button', { name: '설정 — AI 학습 활용 선택', exact: true })
+  page.getByRole('button', { name: '설정', exact: true })
+
+async function openConsentSettings(page: Page) {
+  await settings(page).click()
+  await page.getByRole('button', { name: /^(선택|변경)하기$/ }).click()
+}
 
 async function openHarness(page: Page, scenario: string) {
   await page.goto(`/tests/browser/harness.html?scenario=${scenario}`)
@@ -15,7 +20,7 @@ test('expiry closes the dialog and retry does not reopen it; disabled trigger fa
   page,
 }) => {
   await openHarness(page, 'save-expired')
-  await settings(page).click()
+  await openConsentSettings(page)
   await page.getByRole('button', { name: '동의해요', exact: true }).click()
 
   await expect(
@@ -25,9 +30,11 @@ test('expiry closes the dialog and retry does not reopen it; disabled trigger fa
   await expect(settings(page)).toBeDisabled()
   await expect(page.locator('#workspace-content')).toBeFocused()
   await page.getByRole('button', { name: '다시 확인' }).click()
-  await expect(page.getByRole('heading', { name: '최근 작업' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: '설정', exact: true }),
+  ).toBeVisible()
   await expect(dialog(page)).toHaveCount(0)
-  await settings(page).click()
+  await openConsentSettings(page)
   await expect(dialog(page)).toBeVisible()
 })
 
@@ -73,7 +80,7 @@ test('native close while saving permits reopening, and a prior save cannot close
   page,
 }) => {
   await openHarness(page, 'pending-save')
-  await settings(page).click()
+  await openConsentSettings(page)
   await page.getByRole('button', { name: '동의해요', exact: true }).click()
   await expect(
     page.getByRole('button', { name: '동의하지 않아요' }),
@@ -93,7 +100,7 @@ test('native close while saving permits reopening, and a prior save cannot close
     )
   }
   await expect(dialog(page)).toHaveCount(0)
-  await settings(page).click()
+  await openConsentSettings(page)
   await expect(dialog(page)).toBeVisible()
   await page.evaluate(() => window.workspaceTest.resolveSave())
   await expect(
@@ -143,7 +150,7 @@ test('late load and save completions cannot overwrite a replacement workspace', 
   await expect(page.locator('tbody tr')).toHaveCount(0)
 
   await openHarness(page, 'pending-save')
-  await settings(page).click()
+  await openConsentSettings(page)
   await page.getByRole('button', { name: '동의해요', exact: true }).click()
   await page.evaluate(() => window.workspaceTest.switchWorkspace())
   await expect(dialog(page)).toHaveCount(0)
@@ -151,7 +158,7 @@ test('late load and save completions cannot overwrite a replacement workspace', 
     page.getByText('두 번째 작업 공간', { exact: true }),
   ).toBeVisible()
   await page.evaluate(() => window.workspaceTest.resolveSave())
-  await settings(page).click()
+  await openConsentSettings(page)
   await expect(
     dialog(page).getByText('현재 선택:', { exact: false }),
   ).toHaveCount(0)
@@ -164,7 +171,7 @@ test('the hook rejects concurrent saves before a render and preserves an existin
   await page.evaluate(() => window.workspaceTest.saveTwice())
   expect(await page.evaluate(() => window.workspaceTest.saveCalls())).toBe(1)
   await page.evaluate(() => window.workspaceTest.resolveSave())
-  await settings(page).click()
+  await openConsentSettings(page)
   await expect(
     dialog(page).getByText('현재 선택: 동의', { exact: true }),
   ).toBeVisible()

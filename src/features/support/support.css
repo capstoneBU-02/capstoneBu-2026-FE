@@ -1,0 +1,221 @@
+.support-help-menu {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 8px);
+  left: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 224px;
+  max-width: calc(100vw - 32px);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 6px;
+  background: var(--surface-default);
+  box-shadow: 0 8px 12px rgb(20 20 18 / 12%);
+}
+
+.support-help-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: transparent;
+  color: var(--ink-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  letter-spacing: -0.013px;
+  text-align: left;
+}
+
+.support-help-menu > button:hover,
+.support-help-menu > button:focus-visible {
+  background: var(--surface-canvas);
+}
+
+.support-help-menu img,
+.support-unavailable-icon img {
+  display: block;
+  flex-shrink: 0;
+  max-width: none;
+}
+
+.support-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  overflow-y: auto;
+  border: 0;
+  border-radius: var(--radius-l);
+  padding: 0;
+  background: var(--surface-default);
+  color: var(--ink-primary);
+  box-shadow: 0 16px 48px -8px rgb(20 20 18 / 18%);
+  font-family: var(--font-ui);
+}
+
+.support-dialog::backdrop {
+  background: rgb(20 20 18 / 32%);
+}
+
+.support-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.support-dialog-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  letter-spacing: -0.08px;
+}
+
+.support-dialog-header h2:focus {
+  outline: none;
+}
+
+.support-dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 4px;
+  margin: -5px;
+  padding: 5px;
+  background: transparent;
+}
+
+.support-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 20px 20px;
+}
+
+.support-description {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 14px;
+  line-height: 22px;
+  letter-spacing: -0.028px;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.support-dialog .onboarding-item-copy h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  letter-spacing: -0.028px;
+}
+
+.support-faq {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+  letter-spacing: -0.028px;
+}
+
+.support-faq > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-default);
+  padding: 18px 0;
+}
+
+.support-faq > div:first-child {
+  padding-top: 0;
+}
+
+.support-faq dt {
+  font-weight: 500;
+}
+
+.support-faq dd {
+  margin: 0;
+  color: var(--ink-secondary);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.support-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border-default);
+  padding: 14px 20px;
+  background: var(--surface-canvas);
+}
+
+.support-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 560px;
+  max-width: 100%;
+  min-width: 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-l);
+  padding: 56px 40px;
+  text-align: center;
+}
+
+.support-unavailable-icon {
+  border-radius: 50%;
+  padding: 12px;
+  background: var(--surface-subtle);
+}
+
+.support-unavailable h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  letter-spacing: -0.08px;
+}
+
+.support-unavailable p {
+  margin: 0;
+  color: var(--ink-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: -0.013px;
+  word-break: keep-all;
+}
+
+.support-unavailable-action {
+  padding-top: 8px;
+}
+
+@media (max-width: 700px) {
+  .support-help-menu {
+    position: static;
+    margin: 8px 4px;
+  }
+
+  .support-help-menu > button,
+  .support-dialog-close,
+  .support-dialog-footer button,
+  .support-unavailable button {
+    min-height: 44px;
+  }
+
+  .support-dialog-close {
+    min-width: 44px;
+  }
+
+  .support-unavailable {
+    padding: 40px 20px;
+  }
+}

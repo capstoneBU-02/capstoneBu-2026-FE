@@ -1,10 +1,12 @@
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { BrandLogo } from '../../../shared/ui/BrandLogo.tsx'
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import type { WorkspaceInfo, WorkspaceTask } from '../model.ts'
 import type { UseWorkspaceResult } from '../useWorkspace.ts'
 import { taskStatusIcon } from './taskStatusIcon.ts'
 import styles from '../WorkspacePage.module.css'
+import { HelpMenu, type HelpTopic } from '../../support/HelpMenu.tsx'
+import { maskTesterCode, type WorkspaceView } from '../navigation.ts'
 
 type Props = {
   info: WorkspaceInfo | null
@@ -12,6 +14,8 @@ type Props = {
   loadState: UseWorkspaceResult['loadState']
   onHome: () => void
   onSettings: () => void
+  view: WorkspaceView
+  onOpenSupport: (topic: HelpTopic, returnFocus: HTMLElement | null) => void
 }
 
 function SongGroup({
@@ -81,22 +85,47 @@ export function WorkspaceSidebar({
   loadState,
   onHome,
   onSettings,
+  view,
+  onOpenSupport,
 }: Props) {
   const [navigationOpen, setNavigationOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [previousView, setPreviousView] = useState(view)
+  const helpTriggerRef = useRef<HTMLButtonElement>(null)
+  const mobileMenuRef = useRef<HTMLButtonElement>(null)
+  if (previousView !== view) {
+    setPreviousView(view)
+    setNavigationOpen(false)
+    setHelpOpen(false)
+  }
+  if (helpOpen && !info) setHelpOpen(false)
   const navigationId = useId()
   const songs = [...new Set(tasks.map((task) => task.songName))]
 
   return (
-    <aside className={styles.sidebar} aria-label="워크스페이스 탐색">
+    <aside
+      className={styles.sidebar}
+      aria-label="워크스페이스 탐색"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && navigationOpen && !helpOpen) {
+          setNavigationOpen(false)
+          mobileMenuRef.current?.focus()
+        }
+      }}
+    >
       <div className={styles.sidebarHeader}>
         <BrandLogo />
         <button
           className={styles.mobileMenu}
+          ref={mobileMenuRef}
           type="button"
           aria-expanded={navigationOpen}
           aria-controls={navigationId}
           aria-label={navigationOpen ? '탐색 메뉴 닫기' : '탐색 메뉴 열기'}
-          onClick={() => setNavigationOpen((open) => !open)}
+          onClick={() => {
+            setNavigationOpen((open) => !open)
+            setHelpOpen(false)
+          }}
         >
           <Icon name={navigationOpen ? 'close' : 'list'} />
         </button>
@@ -109,10 +138,11 @@ export function WorkspaceSidebar({
           <button
             type="button"
             className={styles.homeRow}
-            aria-current="page"
+            aria-current={view === 'home' ? 'page' : undefined}
             onClick={() => {
               onHome()
               setNavigationOpen(false)
+              setHelpOpen(false)
             }}
           >
             <Icon name="list" />내 작업
@@ -144,22 +174,46 @@ export function WorkspaceSidebar({
           )}
         </div>
         <div className={styles.sidebarFooter}>
+          <div className={styles.helpAnchor}>
+            <button
+              type="button"
+              ref={helpTriggerRef}
+              className={styles.footerRow}
+              disabled={!info}
+              aria-haspopup="menu"
+              aria-expanded={helpOpen}
+              onClick={() => setHelpOpen((open) => !open)}
+            >
+              <Icon name="help" />
+              도움말
+            </button>
+            <HelpMenu
+              open={helpOpen}
+              triggerRef={helpTriggerRef}
+              onClose={() => setHelpOpen(false)}
+              onSelect={(topic) => {
+                const mobileTrigger = mobileMenuRef.current
+                const returnFocus =
+                  mobileTrigger && mobileTrigger.getClientRects().length > 0
+                    ? mobileTrigger
+                    : helpTriggerRef.current
+                setHelpOpen(false)
+                setNavigationOpen(false)
+                onOpenSupport(topic, returnFocus)
+              }}
+            />
+          </div>
           <button
             type="button"
             className={styles.footerRow}
-            aria-disabled="true"
-            title="도움말 화면은 아직 연결되지 않았어요."
-            aria-label="도움말 — 준비 중"
-          >
-            <Icon name="help" />
-            도움말
-          </button>
-          <button
-            type="button"
-            className={styles.footerRow}
-            onClick={onSettings}
+            onClick={() => {
+              onSettings()
+              setNavigationOpen(false)
+              setHelpOpen(false)
+            }}
             disabled={!info}
-            aria-label="설정 — AI 학습 활용 선택"
+            aria-label="설정"
+            aria-current={view === 'settings' ? 'page' : undefined}
           >
             <Icon name="settings" />
             설정
@@ -173,7 +227,9 @@ export function WorkspaceSidebar({
                 {info?.name ?? '테스터 워크스페이스'}
               </span>
               {info && (
-                <span className={styles.testerCode}>{info.testerCode}</span>
+                <span className={styles.testerCode}>
+                  {maskTesterCode(info.testerCode)}
+                </span>
               )}
             </div>
             <button

@@ -17,6 +17,7 @@ export type AccessPageProps = {
     | 'error'
   notice?: 'expired' | null
   errorMessage?: string | null
+  focusOnEntry?: boolean
 }
 
 const feedback = {
@@ -34,6 +35,7 @@ export function AccessPage({
   status,
   notice,
   errorMessage,
+  focusOnEntry = false,
 }: AccessPageProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const feedbackRef = useRef<HTMLParagraphElement>(null)
@@ -62,6 +64,10 @@ export function AccessPage({
   useEffect(() => {
     if (notice === 'expired') inputRef.current?.focus({ preventScroll: true })
   }, [notice])
+
+  useEffect(() => {
+    if (focusOnEntry) inputRef.current?.focus({ preventScroll: true })
+  }, [focusOnEntry])
 
   return (
     <div className="access-page">

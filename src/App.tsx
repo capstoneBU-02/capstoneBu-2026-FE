@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { readAppMode } from './app/demoConfig.ts'
 import { AccessPage } from './features/access/AccessPage.tsx'
 import { createMockAccessRepository } from './features/access/mockRepository.ts'
@@ -10,16 +10,19 @@ import { createMockWorkspaceRepository } from './features/workspace/mockReposito
 import type { WorkspaceRepository } from './features/workspace/repository.ts'
 import { useWorkspace } from './features/workspace/useWorkspace.ts'
 import { WorkspacePage } from './features/workspace/WorkspacePage.tsx'
+import { clearWorkspaceHistory } from './features/workspace/navigation.ts'
 
 function WorkspaceSession({
   repository,
   scenario = 'default',
   onReenter,
+  onLeave,
   focusOnEntry = false,
 }: {
   repository: WorkspaceRepository
   scenario?: DemoScenario
   onReenter(): void
+  onLeave(): void
   focusOnEntry?: boolean
 }) {
   const workspace = useWorkspace(repository, scenario)
@@ -27,6 +30,7 @@ function WorkspaceSession({
     <WorkspacePage
       workspace={workspace}
       onReenter={onReenter}
+      onLeave={onLeave}
       focusOnEntry={focusOnEntry}
     />
   )
@@ -39,6 +43,10 @@ function App({
     const mode = readAppMode(window.location.search)
     return {
       mode,
+      entrySearch:
+        mode.kind === 'access' && mode.scenario !== 'default'
+          ? `?access=${mode.scenario}`
+          : '',
       accessRepository: createMockAccessRepository(
         mode.kind === 'access' ? mode.scenario : 'default',
       ),
@@ -51,6 +59,7 @@ function App({
   const [previewActive, setPreviewActive] = useState(
     configuration.mode.kind === 'workspace',
   )
+  const [focusAccessOnEntry, setFocusAccessOnEntry] = useState(false)
   const access = useAccess(
     accessRepository ?? configuration.accessRepository,
     configuration.mode.kind === 'access' &&
@@ -60,9 +69,26 @@ function App({
   )
 
   function reenter() {
+    setFocusAccessOnEntry(true)
+    clearWorkspaceHistory(configuration.entrySearch)
     setPreviewActive(false)
     access.returnToEntry('expired')
   }
+
+  function leave() {
+    setFocusAccessOnEntry(true)
+    clearWorkspaceHistory(configuration.entrySearch)
+    setPreviewActive(false)
+    access.returnToEntry()
+  }
+
+  useEffect(() => {
+    if (previewActive || access.stage === 'workspace') return
+    const clearHistory = () => clearWorkspaceHistory(configuration.entrySearch)
+    clearHistory()
+    window.addEventListener('popstate', clearHistory)
+    return () => window.removeEventListener('popstate', clearHistory)
+  }, [previewActive, access.stage, configuration.entrySearch])
 
   if (
     previewActive &&
@@ -74,6 +100,7 @@ function App({
         repository={configuration.previewRepository}
         scenario={configuration.mode.scenario}
         onReenter={reenter}
+        onLeave={leave}
       />
     )
   }
@@ -89,6 +116,7 @@ function App({
         status={access.status}
         notice={access.notice}
         errorMessage={access.errorMessage}
+        focusOnEntry={focusAccessOnEntry}
       />
     )
   }
@@ -112,6 +140,7 @@ function App({
       key={access.session.sessionId}
       repository={access.session.repository}
       onReenter={reenter}
+      onLeave={leave}
       focusOnEntry
     />
   ) : null
