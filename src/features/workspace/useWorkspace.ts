@@ -3,6 +3,7 @@ import type {
   ConsentChoice,
   DemoScenario,
   NewSongInput,
+  NewTaskInput,
   SavedConsentChoice,
   WorkspaceInfo,
   WorkspaceSnapshot,
@@ -26,6 +27,10 @@ export type AddSongResult =
   | { readonly status: 'added'; readonly song: WorkspaceSong }
   | { readonly status: 'failed' | 'expired' | 'cancelled' }
 
+export type CreateTaskResult =
+  | { readonly status: 'created'; readonly task: WorkspaceTask }
+  | { readonly status: 'failed' | 'expired' | 'cancelled' }
+
 export interface UseWorkspaceResult {
   readonly loadState: WorkspaceLoadState
   readonly workspace: WorkspaceInfo | null
@@ -41,6 +46,10 @@ export interface UseWorkspaceResult {
   saveConsent(choice: SavedConsentChoice): Promise<boolean>
   // The caller's signal cancels the request, e.g. when its dialog unmounts.
   addSong(input: NewSongInput, signal: AbortSignal): Promise<AddSongResult>
+  createTask(
+    input: NewTaskInput,
+    signal: AbortSignal,
+  ): Promise<CreateTaskResult>
 }
 
 interface WorkspaceState {
@@ -88,6 +97,7 @@ export function useWorkspace(
   const generation = useRef(0)
   const consentController = useRef<AbortController | null>(null)
   const addSongController = useRef<AbortController | null>(null)
+  const createTaskController = useRef<AbortController | null>(null)
   // A changed request hides previous workspace data during the render itself.
   const isCurrentRequest =
     state.repository === repository && state.loadVersion === loadVersion
@@ -103,6 +113,8 @@ export function useWorkspace(
     consentController.current = null
     addSongController.current?.abort()
     addSongController.current = null
+    createTaskController.current?.abort()
+    createTaskController.current = null
 
     repository.loadWorkspace(controller.signal).then(
       (nextSnapshot) => {
@@ -153,6 +165,7 @@ export function useWorkspace(
       controller.abort()
       consentController.current?.abort()
       addSongController.current?.abort()
+      createTaskController.current?.abort()
     }
   }, [repository, loadVersion])
 
@@ -278,11 +291,69 @@ export function useWorkspace(
     }
   }
 
+  async function createTask(
+    input: NewTaskInput,
+    signal: AbortSignal,
+  ): Promise<CreateTaskResult> {
+    if (
+      !snapshot ||
+      (loadState !== 'success' && loadState !== 'empty') ||
+      createTaskController.current ||
+      signal.aborted
+    ) {
+      return { status: 'cancelled' }
+    }
+
+    const controller = new AbortController()
+    const currentGeneration = generation.current
+    const cancel = () => controller.abort()
+    createTaskController.current = controller
+    signal.addEventListener('abort', cancel, { once: true })
+    const isStale = () =>
+      controller.signal.aborted || currentGeneration !== generation.current
+
+    try {
+      const task = await repository.createTask(input, controller.signal)
+      if (isStale()) return { status: 'cancelled' }
+      // The first task turns an empty workspace into a listed one.
+      setState((previous) =>
+        previous.snapshot
+          ? {
+              ...previous,
+              loadState: 'success',
+              snapshot: {
+                ...previous.snapshot,
+                tasks: [...previous.snapshot.tasks, task],
+              },
+            }
+          : previous,
+      )
+      return { status: 'created', task }
+    } catch (error) {
+      if (isStale()) return { status: 'cancelled' }
+      if (
+        error instanceof WorkspaceRepositoryError &&
+        error.code === 'expired'
+      ) {
+        markExpired()
+        return { status: 'expired' }
+      }
+      return { status: 'failed' }
+    } finally {
+      signal.removeEventListener('abort', cancel)
+      if (createTaskController.current === controller) {
+        createTaskController.current = null
+      }
+    }
+  }
+
   function markExpired() {
     consentController.current?.abort()
     consentController.current = null
     addSongController.current?.abort()
     addSongController.current = null
+    createTaskController.current?.abort()
+    createTaskController.current = null
     setState(expiredState)
   }
 
@@ -314,5 +385,6 @@ export function useWorkspace(
     clearConsentError,
     saveConsent,
     addSong,
+    createTask,
   }
 }

@@ -21,22 +21,36 @@ type Props = {
   onOpenTask: (taskId: string) => void
   onSettings: () => void
   onAddSong: (returnFocus: HTMLElement | null) => void
+  onOpenNewSection: (songId: string) => void
+  // Songs with a section draft in progress, listed as a 새 구간 row.
+  draftSongIds: ReadonlySet<string>
   view: WorkspaceView
   onOpenSupport: (topic: HelpTopic, returnFocus: HTMLElement | null) => void
+}
+
+function taskProgressLabel(task: WorkspaceTask) {
+  if (task.processingStatus === 'queued') return '대기'
+  if (task.processingStatus === 'processing' && task.progressPercent !== null)
+    return `${task.progressPercent}%`
+  return null
 }
 
 function SongGroup({
   songName,
   tasks,
-  showAdd,
+  showDraft,
+  draftCurrent,
   currentTaskId,
   onOpenTask,
+  onOpenNewSection,
 }: {
   songName: string
   tasks: readonly WorkspaceTask[]
-  showAdd: boolean
+  showDraft: boolean
+  draftCurrent: boolean
   currentTaskId: string | null
   onOpenTask: (taskId: string) => void
+  onOpenNewSection: () => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const childrenId = useId()
@@ -56,34 +70,43 @@ function SongGroup({
         <span className={styles.truncate}>{songName}</span>
       </button>
       <div className={styles.songChildren} id={childrenId} hidden={!expanded}>
-        {tasks.map((task) => (
+        {tasks.map((task) => {
+          const progress = taskProgressLabel(task)
+          return (
+            <button
+              key={task.id}
+              type="button"
+              className={styles.sectionRow}
+              aria-current={task.id === currentTaskId ? 'page' : undefined}
+              onClick={() => onOpenTask(task.id)}
+            >
+              <Icon name={taskStatusIcon(task)} />
+              <span className={styles.truncate}>{task.sectionName}</span>
+              {progress && <span className={styles.progress}>{progress}</span>}
+            </button>
+          )
+        })}
+        {showDraft && (
           <button
-            key={task.id}
             type="button"
             className={styles.sectionRow}
-            aria-current={task.id === currentTaskId ? 'page' : undefined}
-            onClick={() => onOpenTask(task.id)}
+            aria-current={draftCurrent ? 'page' : undefined}
+            onClick={onOpenNewSection}
           >
-            <Icon name={taskStatusIcon(task)} />
-            <span className={styles.truncate}>{task.sectionName}</span>
-            {task.processingStatus === 'processing' &&
-              task.progressPercent !== null && (
-                <span className={styles.progress}>{task.progressPercent}%</span>
-              )}
-          </button>
-        ))}
-        {showAdd && (
-          <button
-            type="button"
-            className={`${styles.sectionRow} ${styles.unavailableAction}`}
-            aria-disabled="true"
-            title="구간 추가 화면은 아직 연결되지 않았어요."
-            aria-label={`${songName} 구간 추가 — 준비 중`}
-          >
-            <Icon name="plusSmall" />
-            구간 추가
+            <Icon name="statusDraft" />
+            <span className={styles.truncate}>새 구간</span>
+            <span className={styles.srOnly}>작성 중</span>
           </button>
         )}
+        <button
+          type="button"
+          className={`${styles.sectionRow} ${styles.addSection}`}
+          aria-label={`${songName}에 구간 추가`}
+          onClick={onOpenNewSection}
+        >
+          <Icon name="plusSmall" />
+          구간 추가
+        </button>
       </div>
     </div>
   )
@@ -97,6 +120,8 @@ export function WorkspaceSidebar({
   onOpenTask,
   onSettings,
   onAddSong,
+  onOpenNewSection,
+  draftSongIds,
   view,
   onOpenSupport,
   songs,
@@ -115,6 +140,7 @@ export function WorkspaceSidebar({
   if (helpOpen && !info) setHelpOpen(false)
   const navigationId = useId()
   const currentTaskId = view.name === 'task' ? view.taskId : null
+  const newSectionSongId = view.name === 'new-section' ? view.songId : null
 
   return (
     <aside
@@ -186,15 +212,23 @@ export function WorkspaceSidebar({
           </button>
         </div>
         <div className={styles.songTree}>
-          {songs.map((song, index) => (
+          {songs.map((song) => (
             <SongGroup
               key={song.id}
               songName={song.name}
               tasks={tasks.filter((task) => task.songId === song.id)}
-              showAdd={index === 0}
+              showDraft={
+                draftSongIds.has(song.id) || newSectionSongId === song.id
+              }
+              draftCurrent={newSectionSongId === song.id}
               currentTaskId={currentTaskId}
               onOpenTask={(taskId) => {
                 onOpenTask(taskId)
+                setNavigationOpen(false)
+                setHelpOpen(false)
+              }}
+              onOpenNewSection={() => {
+                onOpenNewSection(song.id)
                 setNavigationOpen(false)
                 setHelpOpen(false)
               }}

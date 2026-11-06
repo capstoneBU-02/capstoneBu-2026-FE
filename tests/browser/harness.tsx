@@ -5,15 +5,19 @@ import {
   type MediaDurationProbe,
 } from '../../src/features/add-song/mediaDuration.ts'
 import { songNameFromFileName } from '../../src/features/add-song/songFile.ts'
+import { isPolicySectionName } from '../../src/features/new-section/sectionForm.ts'
+import { SECTION_POLICY } from '../../src/features/new-section/sectionPolicy.ts'
 import { WorkspacePage } from '../../src/features/workspace/WorkspacePage.tsx'
 import { createMockWorkspaceRepository } from '../../src/features/workspace/mockRepository.ts'
 import type {
   NewSongInput,
+  NewTaskInput,
   SavedConsentChoice,
   SongInputKind,
   TaskDetail,
   WorkspaceSnapshot,
   WorkspaceSong,
+  WorkspaceTask,
 } from '../../src/features/workspace/model.ts'
 import {
   WorkspaceRepositoryError,
@@ -42,6 +46,10 @@ interface TestControls {
     inputKind: SongInputKind
     durationSeconds: number
   }>
+  // pending-create keeps createTask requests open until settled here.
+  resolveCreate(): void
+  failCreate(code: 'create-task-failed' | 'expired'): void
+  createCalls(): NewTaskInput[]
   // slow.mp3 duration reads stay pending until resolved here.
   resolveProbe(seconds: number): void
   probeCalls(): string[]
@@ -81,9 +89,17 @@ const pendingTasks: Array<{
   reject: (error: Error) => void
 }> = []
 
+// Songs and tasks added during the test, so created tasks can be opened.
+const sessionSongs: WorkspaceSong[] = []
+const sessionTasks: WorkspaceTask[] = []
+
 function taskDetail(taskId: string): TaskDetail | null {
-  const task = snapshot.tasks.find((candidate) => candidate.id === taskId)
-  const song = snapshot.songs.find((candidate) => candidate.id === task?.songId)
+  const task = [...snapshot.tasks, ...sessionTasks].find(
+    (candidate) => candidate.id === taskId,
+  )
+  const song = [...snapshot.songs, ...sessionSongs].find(
+    (candidate) => candidate.id === task?.songId,
+  )
   return task && song ? { task, song } : null
 }
 
@@ -135,13 +151,46 @@ let addedSongs = 0
 
 function addedSong(input: NewSongInput): WorkspaceSong {
   addedSongs += 1
-  return {
+  const song: WorkspaceSong = {
     id: `song-added-${addedSongs}`,
     name: songNameFromFileName(input.file.name),
     fileName: input.file.name,
     inputKind: input.inputKind,
     durationSeconds: input.durationSeconds,
   }
+  sessionSongs.push(song)
+  return song
+}
+
+const createCalls: NewTaskInput[] = []
+const pendingCreates: Array<{
+  input: NewTaskInput
+  resolve: (task: WorkspaceTask) => void
+  reject: (error: Error) => void
+}> = []
+
+function createdTask(input: NewTaskInput): WorkspaceTask {
+  const task: WorkspaceTask = {
+    id: `task-created-${sessionTasks.length + 1}`,
+    songId: input.songId,
+    sectionName: input.sectionName,
+    partLabel:
+      SECTION_POLICY.parts.find((part) => part.id === input.part)?.label ?? '',
+    tuningLabel:
+      SECTION_POLICY.tunings.find((tuning) => tuning.id === input.tuningId)
+        ?.label ?? '',
+    rangeStartSeconds: input.rangeStartSeconds,
+    rangeEndSeconds: input.rangeEndSeconds,
+    processingStatus: 'queued',
+    failureKind: null,
+    progressPercent: null,
+    hasSeparatedAudio: false,
+    comparisonCount: 0,
+    copyStatus: 'unreviewed',
+    updatedAtLabel: '방금',
+  }
+  sessionTasks.push(task)
+  return task
 }
 
 let pendingSave:
@@ -197,6 +246,20 @@ const repository: WorkspaceRepository = {
     }
     return Promise.resolve(addedSong(input))
   },
+  createTask(input) {
+    createCalls.push({ ...input })
+    // Like the mock repository, refuse names the screen cannot compose.
+    if (!isPolicySectionName(input.sectionName))
+      return Promise.reject(
+        new WorkspaceRepositoryError('create-task-failed', 'Bad name'),
+      )
+    if (scenario === 'pending-create') {
+      return new Promise((resolve, reject) =>
+        pendingCreates.push({ input, resolve, reject }),
+      )
+    }
+    return Promise.resolve(createdTask(input))
+  },
 }
 
 const secondRepository: WorkspaceRepository = {
@@ -221,6 +284,10 @@ const secondRepository: WorkspaceRepository = {
   addSong: () =>
     Promise.reject(
       new WorkspaceRepositoryError('add-song-failed', 'Unavailable'),
+    ),
+  createTask: () =>
+    Promise.reject(
+      new WorkspaceRepositoryError('create-task-failed', 'Unavailable'),
     ),
 }
 
@@ -268,6 +335,20 @@ window.workspaceTest = {
       )
   },
   addCalls: () => addCalls.map((call) => ({ ...call })),
+  // StrictMode may leave an aborted duplicate; settle every pending request.
+  resolveCreate() {
+    pendingCreates
+      .splice(0)
+      .forEach(({ input, resolve }) => resolve(createdTask(input)))
+  },
+  failCreate(code) {
+    pendingCreates
+      .splice(0)
+      .forEach(({ reject }) =>
+        reject(new WorkspaceRepositoryError(code, 'Create failed')),
+      )
+  },
+  createCalls: () => createCalls.map((call) => ({ ...call })),
   resolveProbe(seconds) {
     pendingProbes.splice(0).forEach((resolve) => resolve(seconds))
   },

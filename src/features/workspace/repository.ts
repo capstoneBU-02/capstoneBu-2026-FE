@@ -1,9 +1,11 @@
 import type {
   NewSongInput,
+  NewTaskInput,
   SavedConsentChoice,
   TaskDetail,
   WorkspaceSnapshot,
   WorkspaceSong,
+  WorkspaceTask,
 } from './model.ts'
 
 export interface WorkspaceRepository {
@@ -16,6 +18,8 @@ export interface WorkspaceRepository {
   // screen cannot reveal whether an id exists elsewhere.
   loadTask(taskId: string, signal: AbortSignal): Promise<TaskDetail>
   addSong(input: NewSongInput, signal: AbortSignal): Promise<WorkspaceSong>
+  // A new task starts queued; separation and transcription come later.
+  createTask(input: NewTaskInput, signal: AbortSignal): Promise<WorkspaceTask>
 }
 
 type RepositoryErrorCode =
@@ -24,6 +28,7 @@ type RepositoryErrorCode =
   | 'expired'
   | 'task-unavailable'
   | 'add-song-failed'
+  | 'create-task-failed'
 
 export class WorkspaceRepositoryError extends Error {
   readonly code: RepositoryErrorCode

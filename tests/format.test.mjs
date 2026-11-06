@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   formatTaskRange,
   formatTime,
+  isTaskInProgress,
   songInputLabel,
   taskHeadlineStatus,
 } from '../src/features/workspace/format.ts'
@@ -34,6 +35,10 @@ test('input kinds and headline statuses have distinct labels', () => {
     '진행 중',
   )
   assert.equal(
+    taskHeadlineStatus({ ...base, processingStatus: 'queued' }),
+    '대기',
+  )
+  assert.equal(
     taskHeadlineStatus({
       processingStatus: 'failed',
       failureKind: 'transcription',
@@ -46,5 +51,13 @@ test('input kinds and headline statuses have distinct labels', () => {
       failureKind: 'no-guitar',
     }),
     '기타를 찾지 못함',
+  )
+})
+
+test('queued and processing tasks both count as in progress', () => {
+  const statuses = ['queued', 'processing', 'completed', 'failed']
+  assert.deepEqual(
+    statuses.map((processingStatus) => isTaskInProgress({ processingStatus })),
+    [true, true, false, false],
   )
 })

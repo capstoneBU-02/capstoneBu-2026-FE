@@ -4,9 +4,15 @@ import {
   isAllowedSongFile,
   songNameFromFileName,
 } from '../add-song/songFile.ts'
+import {
+  checkSectionRange,
+  isPolicySectionName,
+} from '../new-section/sectionForm.ts'
+import { SECTION_POLICY } from '../new-section/sectionPolicy.ts'
 import type {
   ConsentChoice,
   DemoScenario,
+  NewTaskInput,
   SavedConsentChoice,
   WorkspaceInfo,
   WorkspaceSong,
@@ -130,6 +136,28 @@ function waitForMockRequest(milliseconds: number, signal: AbortSignal) {
   })
 }
 
+// A server would refuse what the screen should never have sent.
+function newTaskLabels(
+  input: NewTaskInput,
+  song: WorkspaceSong | undefined,
+): { partLabel: string; tuningLabel: string } | null {
+  const part = SECTION_POLICY.parts.find((option) => option.id === input.part)
+  const tuning = SECTION_POLICY.tunings.find(
+    (option) => option.id === input.tuningId,
+  )
+  const valid =
+    song !== undefined &&
+    part !== undefined &&
+    tuning !== undefined &&
+    isPolicySectionName(input.sectionName) &&
+    checkSectionRange(
+      input.rangeStartSeconds,
+      input.rangeEndSeconds,
+      song.durationSeconds,
+    )
+  return valid ? { partLabel: part.label, tuningLabel: tuning.label } : null
+}
+
 interface MockWorkspaceOptions {
   readonly workspace?: WorkspaceInfo
   // Without explicit songs, only the fixture songs referenced by tasks remain.
@@ -164,6 +192,7 @@ export function createMockWorkspaceRepository(
   // Added files live only in this session's memory for later playback (#16).
   const songFiles = new Map<string, File>()
   let addedSongCount = 0
+  let createdTaskCount = 0
 
   function throwIfExpired() {
     if (scenario === 'expired') {
@@ -256,6 +285,37 @@ export function createMockWorkspaceRepository(
       songs.push(song)
       songFiles.set(song.id, input.file)
       return { ...song }
+    },
+    async createTask(input, signal) {
+      await waitForMockRequest(300, signal)
+      throwIfExpired()
+      const song = songs.find((candidate) => candidate.id === input.songId)
+      const labels = newTaskLabels(input, song)
+      if (!labels) {
+        throw new WorkspaceRepositoryError(
+          'create-task-failed',
+          '작업을 만들지 못했어요.',
+        )
+      }
+
+      createdTaskCount += 1
+      const task: WorkspaceTask = {
+        id: `task-new-${createdTaskCount}`,
+        songId: input.songId,
+        sectionName: input.sectionName,
+        ...labels,
+        rangeStartSeconds: input.rangeStartSeconds,
+        rangeEndSeconds: input.rangeEndSeconds,
+        processingStatus: 'queued',
+        failureKind: null,
+        progressPercent: null,
+        hasSeparatedAudio: false,
+        comparisonCount: 0,
+        copyStatus: 'unreviewed',
+        updatedAtLabel: '방금',
+      }
+      tasks.push(task)
+      return { ...task }
     },
   }
 }

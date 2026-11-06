@@ -125,6 +125,13 @@ const repository: AccessRepository = {
               )
             : workspace.addSong(input, signal)
         },
+        createTask(input, signal) {
+          return expired
+            ? Promise.reject(
+                new WorkspaceRepositoryError('expired', 'Expired test session'),
+              )
+            : workspace.createTask(input, signal)
+        },
       }
       wrappers.set(workspace, wrapper)
     }

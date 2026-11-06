@@ -280,9 +280,10 @@ test('adding a song opens its new-section screen and lists it in the sidebar', a
   await expect(main(page).getByText('fresh_riff.mp3')).toBeVisible()
   await expect(main(page).getByText('02:20')).toBeVisible()
   await expect(main(page).getByText('분리된 기타 음원')).toBeVisible()
+  await expect(main(page).getByRole('form', { name: '새 구간' })).toBeVisible()
   await expect(
-    main(page).getByRole('heading', { name: '구간 입력 준비 중' }),
-  ).toBeVisible()
+    sidebar(page).getByRole('button', { name: '새 구간 작성 중' }),
+  ).toHaveAttribute('aria-current', 'page')
   await expect(
     main(page).getByRole('navigation', { name: '작업 위치' }),
   ).toHaveText('fresh_riff새 구간')

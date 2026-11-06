@@ -14,6 +14,7 @@ function statusLabel(task: WorkspaceTask) {
       ? '타브 만드는 중'
       : `타브 만드는 중 ${task.progressPercent}%`
   }
+  if (task.processingStatus === 'queued') return '대기'
   return task.failureKind === 'no-guitar' ? '기타를 찾지 못함' : '타브 실패'
 }
 

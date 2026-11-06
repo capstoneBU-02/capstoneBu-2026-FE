@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react'
 import { Button } from '../../shared/ui/Button.tsx'
+import { isOutside, restoreFocus } from '../../shared/ui/dialogFocus.ts'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import { songInputShortLabel } from '../workspace/format.ts'
 import type {
@@ -16,9 +17,13 @@ import { useSongFileCheck } from './useSongFileCheck.ts'
 import styles from './AddSongDialog.module.css'
 
 type Props = {
+  // 파일 바꾸기 reuses this dialog to add the replacement as a new song.
+  title?: string
   probeDuration: MediaDurationProbe
   // Files dropped on an entry point before the dialog opened.
   initialFiles?: readonly File[]
+  // 파일 바꾸기 starts from the replaced song's input kind.
+  initialInputKind?: SongInputKind
   onSubmit: (input: NewSongInput, signal: AbortSignal) => Promise<AddSongResult>
   onAdded: (song: WorkspaceSong) => void
   onClose: () => void
@@ -40,26 +45,11 @@ const INPUT_KINDS: ReadonlyArray<{
 const MULTIPLE_FILES_MESSAGE = '파일은 한 번에 하나만 올릴 수 있어요.'
 const SUBMIT_FAILED_MESSAGE = '곡을 추가하지 못했어요. 다시 시도해 주세요.'
 
-function canFocus(element: HTMLElement | null): element is HTMLElement {
-  return Boolean(
-    element?.isConnected &&
-    !element.matches(':disabled, [hidden]') &&
-    element.getClientRects().length,
-  )
-}
-
-function isOutside(event: { clientX: number; clientY: number }, box: DOMRect) {
-  return (
-    event.clientX < box.left ||
-    event.clientX > box.right ||
-    event.clientY < box.top ||
-    event.clientY > box.bottom
-  )
-}
-
 export function AddSongDialog({
+  title = '곡 추가',
   probeDuration,
   initialFiles = [],
+  initialInputKind = 'original',
   onSubmit,
   onAdded,
   onClose,
@@ -70,7 +60,7 @@ export function AddSongDialog({
   const kindGroupRef = useRef<HTMLFieldSetElement>(null)
   const lifetimeRef = useRef<AbortController | null>(null)
   const pointerStartedOutside = useRef(false)
-  const [inputKind, setInputKind] = useState<SongInputKind>('original')
+  const [inputKind, setInputKind] = useState<SongInputKind>(initialInputKind)
   const [file, setFile] = useState<File | null>(
     initialFiles.length === 1 ? initialFiles[0] : null,
   )
@@ -104,10 +94,7 @@ export function AddSongDialog({
     return () => {
       lifetime.abort()
       dialog?.close()
-      if (canFocus(target)) target.focus({ preventScroll: true })
-      if (!canFocus(target) || document.activeElement !== target) {
-        if (canFocus(fallback)) fallback.focus({ preventScroll: true })
-      }
+      restoreFocus(target, fallback)
     }
   }, [returnFocusRef, fallbackFocusRef])
 
@@ -192,11 +179,11 @@ export function AddSongDialog({
       }}
     >
       <div className={pageStyles.dialogHeader}>
-        <h2 id={titleId}>곡 추가</h2>
+        <h2 id={titleId}>{title}</h2>
         <button
           type="button"
           className={pageStyles.dialogClose}
-          aria-label="곡 추가 창 닫기"
+          aria-label={`${title} 창 닫기`}
           onClick={dismiss}
           disabled={submitting}
         >

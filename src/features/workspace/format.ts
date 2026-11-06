@@ -37,5 +37,15 @@ export function songInputShortLabel(kind: SongInputKind): string {
 export function taskHeadlineStatus(task: WorkspaceTask): string {
   if (task.processingStatus === 'completed') return '완료'
   if (task.processingStatus === 'processing') return '진행 중'
+  if (task.processingStatus === 'queued') return '대기'
   return task.failureKind === 'no-guitar' ? '기타를 찾지 못함' : '타브 실패'
+}
+
+// The 진행 중 filter covers tasks still waiting for their turn.
+export function isTaskInProgress(
+  task: Pick<WorkspaceTask, 'processingStatus'>,
+): boolean {
+  return (
+    task.processingStatus === 'queued' || task.processingStatus === 'processing'
+  )
 }

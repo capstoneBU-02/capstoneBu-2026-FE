@@ -1,0 +1,322 @@
+.topBar {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.topActions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.submit[aria-disabled='true'] {
+  opacity: 0.4;
+}
+
+.submit[data-busy='true'] {
+  cursor: wait;
+}
+
+.fileRow {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 6px;
+}
+
+.fileRow > p {
+  margin: 0;
+}
+
+.replace {
+  margin: -4px 0;
+}
+
+.form {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 28px 32px;
+  /* Korean wraps between words, as in the other screens. */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.pendingNote,
+.hint {
+  max-width: 640px;
+  margin: 0;
+  color: var(--ink-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.pendingNote {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-m);
+  padding: 10px 12px;
+}
+
+.fields {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px 24px;
+  margin: 4px 0 0;
+  border: 0;
+  padding: 0;
+}
+
+.field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  padding: 0;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.nameControls {
+  display: flex;
+  gap: 6px;
+}
+
+.select,
+.timeInput,
+.numberInput {
+  height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  background-color: var(--surface-default);
+  color: var(--ink-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.select {
+  min-width: 120px;
+  appearance: none;
+  padding: 0 32px 0 12px;
+  background-image: url('../../assets/earmark/chevron-down.svg');
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  background-size: 12px;
+  cursor: pointer;
+}
+
+.timeInput {
+  width: 104px;
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.numberInput {
+  width: 44px;
+  padding: 0 8px;
+  text-align: center;
+}
+
+.timeInput::placeholder {
+  color: var(--ink-tertiary);
+}
+
+.select:focus-visible,
+.timeInput:focus-visible,
+.numberInput:focus-visible {
+  outline: 2px solid var(--accent-default);
+  outline-offset: 1px;
+}
+
+.timeInput[data-field-error='true'],
+.numberInput[data-field-error='true'] {
+  border-color: var(--state-alert);
+}
+
+.fields:disabled .select,
+.fields:disabled .timeInput,
+.fields:disabled .numberInput {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.length {
+  display: flex;
+  min-width: 52px;
+  height: 36px;
+  align-items: center;
+  color: var(--ink-primary);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.length[data-over='true'] {
+  color: var(--state-alert);
+  font-weight: 500;
+}
+
+.partGroup {
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+/* A legend sits outside the fieldset's flex box, so the gap skips it. */
+.partGroup > legend {
+  margin-bottom: 6px;
+}
+
+.segments {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  border-radius: var(--radius-m);
+  padding: 3px;
+  background: var(--surface-subtle);
+}
+
+.segment {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+.segment input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segment span {
+  flex: 1;
+  border-radius: 6px;
+  padding: 5px 12px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.segment input:checked + span {
+  background: var(--surface-default);
+  color: var(--ink-primary);
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgb(20 20 18 / 10%);
+}
+
+.segment input:focus-visible + span {
+  outline: 2px solid var(--accent-default);
+  outline-offset: 1px;
+}
+
+.segment input:disabled {
+  cursor: wait;
+}
+
+.errors {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.error,
+.submitError {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--state-alert);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.error > img,
+.submitError > img {
+  margin-top: 2px;
+}
+
+.submitError {
+  border-radius: var(--radius-m);
+  padding: 10px 12px;
+  background: var(--surface-canvas);
+}
+
+.confirmDialog {
+  width: min(400px, calc(100vw - 32px));
+  padding: 24px;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.confirmDialog h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.confirmDialog p {
+  margin: 8px 0 0;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+@media (max-width: 1100px) {
+  .form {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+}
+
+@media (max-width: 700px) {
+  .form {
+    padding: 20px 16px 28px;
+  }
+
+  .fields {
+    gap: 16px;
+  }
+
+  .fields > * {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .nameControls .select,
+  .fields > .field > .select,
+  .timeInput {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .nameControls .select {
+    flex: 1;
+  }
+
+  .confirmDialog {
+    padding: 20px 16px;
+  }
+}

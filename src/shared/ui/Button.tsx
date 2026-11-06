@@ -1,7 +1,7 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ComponentPropsWithRef } from 'react'
 import styles from './Ui.module.css'
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type ButtonProps = ComponentPropsWithRef<'button'> & {
   variant?: 'primary' | 'secondary' | 'ghost'
   compact?: boolean
 }
