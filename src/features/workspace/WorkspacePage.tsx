@@ -3,24 +3,33 @@ import { DEMO_DISPLAY_CONFIG } from '../../app/demoConfig.ts'
 import { Button } from '../../shared/ui/Button.tsx'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import { ConsentDialog } from './components/ConsentDialog.tsx'
-import { TaskStatus } from './components/TaskStatus.tsx'
+import { LoadingState, ProblemState } from './components/StateMessage.tsx'
+import { TaskTable } from './components/TaskTable.tsx'
+import { TaskBreadcrumb, TaskPanel } from './components/TaskWorkspace.tsx'
 import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx'
+import type { WorkspaceRepository } from './repository.ts'
+import { useTaskDetail } from './useTaskDetail.ts'
 import type { UseWorkspaceResult } from './useWorkspace.ts'
 import styles from './WorkspacePage.module.css'
 import { SettingsPanel } from '../settings/SettingsPanel.tsx'
 import { SupportDialog, type SupportTopic } from '../support/SupportDialog.tsx'
 import { TaskUnavailablePanel } from '../support/TaskUnavailablePanel.tsx'
-import { maskTesterCode } from './navigation.ts'
+import {
+  maskTesterCode,
+  workspaceViewKey,
+  type WorkspaceView,
+} from './navigation.ts'
 import { useWorkspaceNavigation } from './useWorkspaceNavigation.ts'
 import './consent-feedback.css'
 
 type Filter = 'all' | 'processing' | 'failed'
 
-function formatTime(seconds: number) {
-  const tenths = Math.round(seconds * 10)
-  const minutes = Math.floor(tenths / 600)
-  const wholeSeconds = Math.floor((tenths % 600) / 10)
-  return `${String(minutes).padStart(2, '0')}:${String(wholeSeconds).padStart(2, '0')}.${tenths % 10}`
+const TOP_BAR_LABELS: Record<WorkspaceView['name'], string> = {
+  home: '내 작업',
+  settings: '설정',
+  task: '작업 공간',
+  'task-not-found': '작업 공간',
+  'task-inaccessible': '작업 공간',
 }
 
 function EmptyWorkspace() {
@@ -48,11 +57,13 @@ function EmptyWorkspace() {
 
 export function WorkspacePage({
   workspace,
+  repository,
   onReenter,
   onLeave,
   focusOnEntry = false,
 }: {
   workspace: UseWorkspaceResult
+  repository: WorkspaceRepository
   onReenter?: () => void
   onLeave?: () => void
   focusOnEntry?: boolean
@@ -62,27 +73,34 @@ export function WorkspacePage({
   const [consentWorkspaceId, setConsentWorkspaceId] = useState<string | null>(
     null,
   )
-  const [previousView, setPreviousView] = useState(view)
+  const viewKey = workspaceViewKey(view)
+  const taskDetail = useTaskDetail(
+    repository,
+    view.name === 'task' ? view.taskId : null,
+    workspace.markExpired,
+  )
+  const [previousViewKey, setPreviousViewKey] = useState(viewKey)
   const [support, setSupport] = useState<{
     topic: SupportTopic
     workspaceId: string
   } | null>(null)
   const supportReturnFocusRef = useRef<HTMLElement | null>(null)
   const mainContentRef = useRef<HTMLElement>(null)
-  const { tasks, loadState } = workspace
+  const { songs, tasks, loadState } = workspace
   const workspaceId = workspace.workspace?.id ?? null
-  const previousFocusView = useRef(view)
+  const previousFocusViewKey = useRef(viewKey)
+  const workspaceReady = loadState === 'empty' || loadState === 'success'
 
   // Transfer focus from the removed access/onboarding screen only on entry.
   // Loading, filtering and consent updates must preserve the user's focus.
   useEffect(() => {
-    if (focusOnEntry || previousFocusView.current !== view)
+    if (focusOnEntry || previousFocusViewKey.current !== viewKey)
       mainContentRef.current?.focus({ preventScroll: true })
-    previousFocusView.current = view
-  }, [focusOnEntry, view])
+    previousFocusViewKey.current = viewKey
+  }, [focusOnEntry, viewKey])
 
-  if (previousView !== view) {
-    setPreviousView(view)
+  if (previousViewKey !== viewKey) {
+    setPreviousViewKey(viewKey)
     setConsentWorkspaceId(null)
     setSupport(null)
   }
@@ -113,10 +131,22 @@ export function WorkspacePage({
         : returnFocus
     setSupport({ topic, workspaceId })
   }
-  function goHome() {
-    navigate('home')
+  function focusContent() {
     mainContentRef.current?.focus({ preventScroll: true })
   }
+  function go(next: WorkspaceView) {
+    navigate(next)
+    focusContent()
+  }
+  // A retry button disappears with its error, so keep focus in the content.
+  function retryWith(retry: () => void) {
+    return () => {
+      retry()
+      focusContent()
+    }
+  }
+  const goHome = () => go({ name: 'home' })
+  const openTask = (taskId: string) => go({ name: 'task', taskId })
   const visibleTasks = tasks.filter(
     (task) => filter === 'all' || task.processingStatus === filter,
   )
@@ -150,14 +180,13 @@ export function WorkspacePage({
       </a>
       <WorkspaceSidebar
         info={workspace.workspace}
+        songs={songs}
         tasks={tasks}
         loadState={loadState}
         view={view}
         onHome={goHome}
-        onSettings={() => {
-          navigate('settings')
-          mainContentRef.current?.focus({ preventScroll: true })
-        }}
+        onOpenTask={openTask}
+        onSettings={() => go({ name: 'settings' })}
         onOpenSupport={openSupport}
       />
       <main
@@ -167,11 +196,11 @@ export function WorkspacePage({
         tabIndex={-1}
       >
         <header className={styles.topBar}>
-          {view === 'settings'
-            ? '설정'
-            : view === 'home'
-              ? '내 작업'
-              : '작업 공간'}
+          {view.name === 'task' && workspaceReady && taskDetail.detail ? (
+            <TaskBreadcrumb detail={taskDetail.detail} />
+          ) : (
+            TOP_BAR_LABELS[view.name]
+          )}
         </header>
         {workspaceId &&
           consentWorkspaceId !== workspaceId &&
@@ -184,62 +213,57 @@ export function WorkspacePage({
             </div>
           )}
         {loadState === 'loading' && (
-          <div className={styles.centeredState} role="status">
-            <div className={styles.stateMessage}>
-              <span className={styles.loadingDot} aria-hidden="true" />
-              <h1>작업을 불러오고 있어요</h1>
-            </div>
-          </div>
+          <LoadingState title="작업을 불러오고 있어요" />
         )}
         {(loadState === 'error' || loadState === 'expired') && (
-          <div className={styles.centeredState}>
-            <div className={styles.stateMessage}>
-              <Icon name="info" />
-              <h1>
-                {loadState === 'expired'
-                  ? '작업 공간을 열 수 없어요'
-                  : '작업을 불러오지 못했어요'}
-              </h1>
-              <p role="alert">{workspace.errorMessage}</p>
-              <Button
-                onClick={
-                  loadState === 'expired' && onReenter
-                    ? onReenter
-                    : workspace.retryLoad
-                }
-              >
-                {loadState === 'expired'
-                  ? onReenter
-                    ? '코드 다시 입력'
-                    : '다시 확인'
-                  : '다시 시도'}
-              </Button>
-            </div>
+          <ProblemState
+            title={
+              loadState === 'expired'
+                ? '작업 공간을 열 수 없어요'
+                : '작업을 불러오지 못했어요'
+            }
+            message={workspace.errorMessage}
+            actionLabel={
+              loadState === 'expired'
+                ? onReenter
+                  ? '코드 다시 입력'
+                  : '다시 확인'
+                : '다시 시도'
+            }
+            onAction={
+              loadState === 'expired' && onReenter
+                ? onReenter
+                : retryWith(workspace.retryLoad)
+            }
+          />
+        )}
+        {workspaceReady && view.name === 'settings' && workspace.workspace && (
+          <div className={styles.body}>
+            <SettingsPanel
+              maskedTesterCode={maskTesterCode(workspace.workspace.testerCode)}
+              consentChoice={workspace.consent.choice}
+              onLeave={() => onLeave?.()}
+              onEditConsent={openConsent}
+              onOpenSupport={openSupport}
+            />
           </div>
         )}
-        {(loadState === 'empty' || loadState === 'success') &&
-          view === 'settings' &&
-          workspace.workspace && (
-            <div className={styles.body}>
-              <SettingsPanel
-                maskedTesterCode={maskTesterCode(
-                  workspace.workspace.testerCode,
-                )}
-                consentChoice={workspace.consent.choice}
-                onLeave={() => onLeave?.()}
-                onEditConsent={openConsent}
-                onOpenSupport={openSupport}
-              />
-            </div>
-          )}
-        {(loadState === 'empty' || loadState === 'success') &&
-          (view === 'task-not-found' || view === 'task-inaccessible') && (
+        {workspaceReady &&
+          (view.name === 'task-not-found' ||
+            view.name === 'task-inaccessible') && (
             <div className={styles.centeredState}>
               <TaskUnavailablePanel onReturnToWorkspace={goHome} />
             </div>
           )}
-        {loadState === 'empty' && view === 'home' && <EmptyWorkspace />}
-        {loadState === 'success' && view === 'home' && (
+        {workspaceReady && view.name === 'task' && (
+          <TaskPanel
+            result={taskDetail}
+            onRetry={retryWith(taskDetail.retry)}
+            onReturnHome={goHome}
+          />
+        )}
+        {loadState === 'empty' && view.name === 'home' && <EmptyWorkspace />}
+        {loadState === 'success' && view.name === 'home' && (
           <div className={styles.body}>
             {workspace.consent.choice === 'undecided' && (
               <div className={styles.consentNotice}>
@@ -281,64 +305,12 @@ export function WorkspacePage({
               aria-label="최근 작업 목록. 좁은 화면에서는 가로로 스크롤할 수 있어요."
               tabIndex={0}
             >
-              <table className={styles.taskTable}>
-                <caption className={styles.srOnly}>
-                  {filters.find((item) => item.value === filter)?.label} 작업{' '}
-                  {visibleTasks.length}개
-                </caption>
-                <colgroup>
-                  <col className={styles.sectionColumn} />
-                  <col className={styles.partColumn} />
-                  <col className={styles.rangeColumn} />
-                  <col className={styles.statusColumn} />
-                  <col className={styles.updatedColumn} />
-                  <col />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th scope="col">구간</th>
-                    <th scope="col">파트</th>
-                    <th scope="col">범위</th>
-                    <th scope="col">상태</th>
-                    <th scope="col">수정</th>
-                    <th scope="col">
-                      <span className={styles.srOnly}>작업 공간</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleTasks.map((task) => (
-                    <tr
-                      key={task.id}
-                      title="작업 공간 화면은 아직 연결되지 않았어요."
-                    >
-                      <th scope="row">
-                        <span className={styles.sectionName}>
-                          {task.sectionName}
-                        </span>
-                        <span className={styles.songName}>{task.songName}</span>
-                      </th>
-                      <td>{task.partLabel}</td>
-                      <td className={styles.range}>
-                        {formatTime(task.rangeStartSeconds)}–
-                        {formatTime(task.rangeEndSeconds)}
-                      </td>
-                      <td>
-                        <TaskStatus task={task} />
-                      </td>
-                      <td className={styles.updated}>{task.updatedAtLabel}</td>
-                      <td className={styles.rowArrow}>
-                        <span>
-                          <Icon name="chevronRight" />
-                          <span className={styles.srOnly}>
-                            작업 공간 화면 준비 중
-                          </span>
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <TaskTable
+                caption={`${filters.find((item) => item.value === filter)?.label} 작업 ${visibleTasks.length}개`}
+                songs={songs}
+                tasks={visibleTasks}
+                onOpenTask={openTask}
+              />
             </div>
             {visibleTasks.length === 0 && (
               <div className={styles.emptyFilter} role="status">

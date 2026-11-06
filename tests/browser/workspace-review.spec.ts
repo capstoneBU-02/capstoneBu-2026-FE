@@ -6,17 +6,23 @@ const consentDialog = (page: Page) =>
 const settings = (page: Page) =>
   page.getByRole('button', { name: '설정', exact: true })
 
-for (const view of [
-  'home',
-  'settings',
-  'task-not-found',
-  'task-inaccessible',
-]) {
+const VIEW_QUERIES = {
+  home: 'view=home',
+  settings: 'view=settings',
+  task: 'view=task&task=task-verse',
+  'task-not-found': 'view=task-not-found',
+  'task-inaccessible': 'view=task-inaccessible',
+}
+
+for (const [view, query] of Object.entries(VIEW_QUERIES)) {
   test(`skip link preserves ${view}, URL and history while focusing content`, async ({
     page,
   }) => {
-    await page.goto(`/?demo=workspace&view=${view}`)
+    await page.goto(`/?demo=workspace&${query}`)
     await expect(settings(page)).toBeEnabled()
+    await expect(page.getByRole('heading', { level: 1 })).not.toHaveText(
+      /불러오고|여는 중/,
+    )
     const previousUrl = page.url()
     const previousHistory = await page.evaluate(() => ({
       state: window.history.state as unknown,
@@ -78,9 +84,17 @@ for (const viewport of [
       settings(page),
     ]
     const layouts = []
-    for (const view of ['home', 'settings', 'task-not-found']) {
-      await page.goto(`/?demo=workspace&view=${view}`)
+    for (const view of [
+      'home',
+      'settings',
+      'task-not-found',
+      'task',
+    ] as const) {
+      await page.goto(`/?demo=workspace&${VIEW_QUERIES[view]}`)
       await expect(page.locator('#workspace-content h1')).toBeVisible()
+      await expect(page.locator('#workspace-content h1')).not.toHaveText(
+        /불러오고|여는 중/,
+      )
       if (viewport.width <= 700)
         await page.getByRole('button', { name: '탐색 메뉴 열기' }).click()
       await expect(settings(page)).toBeEnabled()
@@ -97,6 +111,7 @@ for (const viewport of [
     // Selecting a row may restyle it, but it must not shift the sidebar.
     expect(layouts[1]).toEqual(layouts[0])
     expect(layouts[2]).toEqual(layouts[0])
+    expect(layouts[3]).toEqual(layouts[0])
   })
 }
 

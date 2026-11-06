@@ -4,6 +4,7 @@ import type {
   DemoScenario,
   SavedConsentChoice,
   WorkspaceInfo,
+  WorkspaceSong,
   WorkspaceTask,
 } from './model.ts'
 import {
@@ -11,12 +12,37 @@ import {
   type WorkspaceRepository,
 } from './repository.ts'
 
+const mockSongs: readonly WorkspaceSong[] = [
+  {
+    id: 'song-neon-harbor',
+    name: 'neon_harbor_live',
+    fileName: 'neon_harbor_live.mp3',
+    inputKind: 'original',
+    durationSeconds: 252,
+  },
+  {
+    id: 'song-paper-moon',
+    name: 'paper_moon_gtr_stem',
+    fileName: 'paper_moon_gtr_stem.mp3',
+    inputKind: 'separated-guitar',
+    durationSeconds: 96,
+  },
+  {
+    id: 'song-late-train',
+    name: 'late_train_cover',
+    fileName: 'late_train_cover.mp4',
+    inputKind: 'original',
+    durationSeconds: 238,
+  },
+]
+
 const mockTasks: readonly WorkspaceTask[] = [
   {
     id: 'task-verse',
     sectionName: '벌스 1',
-    songName: 'neon_harbor_live',
+    songId: 'song-neon-harbor',
     partLabel: '리듬 기타',
+    tuningLabel: 'E 표준 6현',
     rangeStartSeconds: 42.1,
     rangeEndSeconds: 65.8,
     processingStatus: 'completed',
@@ -30,8 +56,9 @@ const mockTasks: readonly WorkspaceTask[] = [
   {
     id: 'task-solo',
     sectionName: '솔로',
-    songName: 'neon_harbor_live',
+    songId: 'song-neon-harbor',
     partLabel: '리드 기타',
+    tuningLabel: 'E 표준 6현',
     rangeStartSeconds: 151,
     rangeEndSeconds: 172.4,
     processingStatus: 'processing',
@@ -45,8 +72,9 @@ const mockTasks: readonly WorkspaceTask[] = [
   {
     id: 'task-intro',
     sectionName: '인트로',
-    songName: 'paper_moon_gtr_stem',
+    songId: 'song-paper-moon',
     partLabel: '리드 기타',
+    tuningLabel: 'E 표준 6현',
     rangeStartSeconds: 0,
     rangeEndSeconds: 18.2,
     processingStatus: 'failed',
@@ -60,8 +88,9 @@ const mockTasks: readonly WorkspaceTask[] = [
   {
     id: 'task-chorus',
     sectionName: '코러스 2',
-    songName: 'late_train_cover',
+    songId: 'song-late-train',
     partLabel: '리듬 기타',
+    tuningLabel: 'E 표준 6현',
     rangeStartSeconds: 190,
     rangeEndSeconds: 211,
     processingStatus: 'failed',
@@ -98,6 +127,8 @@ function waitForMockRequest(milliseconds: number, signal: AbortSignal) {
 
 interface MockWorkspaceOptions {
   readonly workspace?: WorkspaceInfo
+  // Without explicit songs, only the fixture songs referenced by tasks remain.
+  readonly songs?: readonly WorkspaceSong[]
   readonly tasks?: readonly WorkspaceTask[]
   readonly consentChoice?: ConsentChoice
   readonly onConsentSaved?: (choice: SavedConsentChoice) => void
@@ -119,18 +150,26 @@ export function createMockWorkspaceRepository(
   const tasks = (options.tasks ?? (scenario === 'empty' ? [] : mockTasks)).map(
     (task) => ({ ...task }),
   )
+  const songs = (
+    options.songs ??
+    mockSongs.filter((song) => tasks.some((task) => task.songId === song.id))
+  ).map((song) => ({ ...song }))
   let shouldFailNextLoad = scenario === 'error'
+  let shouldFailNextTaskLoad = scenario === 'error'
+
+  function throwIfExpired() {
+    if (scenario === 'expired') {
+      throw new WorkspaceRepositoryError(
+        'expired',
+        '작업 공간 이용 기간이 끝났어요.',
+      )
+    }
+  }
 
   return {
     async loadWorkspace(signal) {
       await waitForMockRequest(350, signal)
-
-      if (scenario === 'expired') {
-        throw new WorkspaceRepositoryError(
-          'expired',
-          '작업 공간 이용 기간이 끝났어요.',
-        )
-      }
+      throwIfExpired()
 
       if (shouldFailNextLoad) {
         shouldFailNextLoad = false
@@ -142,19 +181,14 @@ export function createMockWorkspaceRepository(
 
       return {
         workspace: { ...workspace },
+        songs: songs.map((song) => ({ ...song })),
         tasks: tasks.map((task) => ({ ...task })),
         consentChoice,
       }
     },
     async saveConsent(choice, signal) {
       await waitForMockRequest(300, signal)
-
-      if (scenario === 'expired') {
-        throw new WorkspaceRepositoryError(
-          'expired',
-          '작업 공간 이용 기간이 끝났어요.',
-        )
-      }
+      throwIfExpired()
 
       if (scenario === 'consent-error') {
         throw new WorkspaceRepositoryError(
@@ -166,6 +200,28 @@ export function createMockWorkspaceRepository(
       consentChoice = choice
       options.onConsentSaved?.(choice)
       return choice
+    },
+    async loadTask(taskId, signal) {
+      await waitForMockRequest(250, signal)
+      throwIfExpired()
+
+      if (shouldFailNextTaskLoad) {
+        shouldFailNextTaskLoad = false
+        throw new WorkspaceRepositoryError(
+          'load-failed',
+          '작업을 불러오지 못했어요. 다시 시도해 주세요.',
+        )
+      }
+
+      const task = tasks.find((candidate) => candidate.id === taskId)
+      const song = songs.find((candidate) => candidate.id === task?.songId)
+      if (!task || !song) {
+        throw new WorkspaceRepositoryError(
+          'task-unavailable',
+          '작업을 찾을 수 없어요.',
+        )
+      }
+      return { task: { ...task }, song: { ...song } }
     },
   }
 }

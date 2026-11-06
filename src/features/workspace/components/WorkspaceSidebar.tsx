@@ -1,18 +1,24 @@
 import { useId, useRef, useState } from 'react'
 import { BrandLogo } from '../../../shared/ui/BrandLogo.tsx'
 import { Icon } from '../../../shared/ui/Icon.tsx'
-import type { WorkspaceInfo, WorkspaceTask } from '../model.ts'
+import type { WorkspaceInfo, WorkspaceSong, WorkspaceTask } from '../model.ts'
 import type { UseWorkspaceResult } from '../useWorkspace.ts'
 import { taskStatusIcon } from './taskStatusIcon.ts'
 import styles from '../WorkspacePage.module.css'
 import { HelpMenu, type HelpTopic } from '../../support/HelpMenu.tsx'
-import { maskTesterCode, type WorkspaceView } from '../navigation.ts'
+import {
+  maskTesterCode,
+  workspaceViewKey,
+  type WorkspaceView,
+} from '../navigation.ts'
 
 type Props = {
   info: WorkspaceInfo | null
+  songs: readonly WorkspaceSong[]
   tasks: readonly WorkspaceTask[]
   loadState: UseWorkspaceResult['loadState']
   onHome: () => void
+  onOpenTask: (taskId: string) => void
   onSettings: () => void
   view: WorkspaceView
   onOpenSupport: (topic: HelpTopic, returnFocus: HTMLElement | null) => void
@@ -22,10 +28,14 @@ function SongGroup({
   songName,
   tasks,
   showAdd,
+  currentTaskId,
+  onOpenTask,
 }: {
   songName: string
   tasks: readonly WorkspaceTask[]
   showAdd: boolean
+  currentTaskId: string | null
+  onOpenTask: (taskId: string) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const childrenId = useId()
@@ -50,9 +60,8 @@ function SongGroup({
             key={task.id}
             type="button"
             className={styles.sectionRow}
-            aria-disabled="true"
-            title="작업 공간 화면은 아직 연결되지 않았어요."
-            aria-label={`${task.sectionName} — 작업 공간 화면 준비 중`}
+            aria-current={task.id === currentTaskId ? 'page' : undefined}
+            onClick={() => onOpenTask(task.id)}
           >
             <Icon name={taskStatusIcon(task)} />
             <span className={styles.truncate}>{task.sectionName}</span>
@@ -84,23 +93,26 @@ export function WorkspaceSidebar({
   tasks,
   loadState,
   onHome,
+  onOpenTask,
   onSettings,
   view,
   onOpenSupport,
+  songs,
 }: Props) {
   const [navigationOpen, setNavigationOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [previousView, setPreviousView] = useState(view)
+  const viewKey = workspaceViewKey(view)
+  const [previousViewKey, setPreviousViewKey] = useState(viewKey)
   const helpTriggerRef = useRef<HTMLButtonElement>(null)
   const mobileMenuRef = useRef<HTMLButtonElement>(null)
-  if (previousView !== view) {
-    setPreviousView(view)
+  if (previousViewKey !== viewKey) {
+    setPreviousViewKey(viewKey)
     setNavigationOpen(false)
     setHelpOpen(false)
   }
   if (helpOpen && !info) setHelpOpen(false)
   const navigationId = useId()
-  const songs = [...new Set(tasks.map((task) => task.songName))]
+  const currentTaskId = view.name === 'task' ? view.taskId : null
 
   return (
     <aside
@@ -138,7 +150,7 @@ export function WorkspaceSidebar({
           <button
             type="button"
             className={styles.homeRow}
-            aria-current={view === 'home' ? 'page' : undefined}
+            aria-current={view.name === 'home' ? 'page' : undefined}
             onClick={() => {
               onHome()
               setNavigationOpen(false)
@@ -161,12 +173,18 @@ export function WorkspaceSidebar({
           </button>
         </div>
         <div className={styles.songTree}>
-          {songs.map((songName, index) => (
+          {songs.map((song, index) => (
             <SongGroup
-              key={songName}
-              songName={songName}
-              tasks={tasks.filter((task) => task.songName === songName)}
+              key={song.id}
+              songName={song.name}
+              tasks={tasks.filter((task) => task.songId === song.id)}
               showAdd={index === 0}
+              currentTaskId={currentTaskId}
+              onOpenTask={(taskId) => {
+                onOpenTask(taskId)
+                setNavigationOpen(false)
+                setHelpOpen(false)
+              }}
             />
           ))}
           {loadState === 'empty' && (
@@ -213,7 +231,7 @@ export function WorkspaceSidebar({
             }}
             disabled={!info}
             aria-label="설정"
-            aria-current={view === 'settings' ? 'page' : undefined}
+            aria-current={view.name === 'settings' ? 'page' : undefined}
           >
             <Icon name="settings" />
             설정

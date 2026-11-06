@@ -1,4 +1,8 @@
-import type { SavedConsentChoice, WorkspaceSnapshot } from './model.ts'
+import type {
+  SavedConsentChoice,
+  TaskDetail,
+  WorkspaceSnapshot,
+} from './model.ts'
 
 export interface WorkspaceRepository {
   loadWorkspace(signal: AbortSignal): Promise<WorkspaceSnapshot>
@@ -6,9 +10,13 @@ export interface WorkspaceRepository {
     choice: SavedConsentChoice,
     signal: AbortSignal,
   ): Promise<SavedConsentChoice>
+  // A missing task and another workspace's task fail identically so the
+  // screen cannot reveal whether an id exists elsewhere.
+  loadTask(taskId: string, signal: AbortSignal): Promise<TaskDetail>
 }
 
-type RepositoryErrorCode = 'load-failed' | 'consent-failed' | 'expired'
+type RepositoryErrorCode =
+  'load-failed' | 'consent-failed' | 'expired' | 'task-unavailable'
 
 export class WorkspaceRepositoryError extends Error {
   readonly code: RepositoryErrorCode

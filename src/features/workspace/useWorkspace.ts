@@ -5,6 +5,7 @@ import type {
   SavedConsentChoice,
   WorkspaceInfo,
   WorkspaceSnapshot,
+  WorkspaceSong,
   WorkspaceTask,
 } from './model.ts'
 import {
@@ -23,11 +24,14 @@ interface ConsentState {
 export interface UseWorkspaceResult {
   readonly loadState: WorkspaceLoadState
   readonly workspace: WorkspaceInfo | null
+  readonly songs: readonly WorkspaceSong[]
   readonly tasks: readonly WorkspaceTask[]
   readonly errorMessage: string | null
   readonly consent: ConsentState
   readonly demoScenario: DemoScenario
   retryLoad(): void
+  // Another request (e.g. a task) found the session expired.
+  markExpired(): void
   clearConsentError(): void
   saveConsent(choice: SavedConsentChoice): Promise<boolean>
 }
@@ -41,11 +45,24 @@ interface WorkspaceState {
   readonly consent: ConsentState
 }
 
+const EXPIRED_MESSAGE = '작업 공간 이용 기간이 끝났어요.'
+const emptySongs: readonly WorkspaceSong[] = []
 const emptyTasks: readonly WorkspaceTask[] = []
 const initialConsent: ConsentState = {
   choice: 'undecided',
   status: 'idle',
   errorMessage: null,
+}
+
+// Expiry hides every piece of workspace data, whichever request found it.
+function expiredState(previous: WorkspaceState): WorkspaceState {
+  return {
+    ...previous,
+    snapshot: null,
+    loadState: 'expired',
+    consent: initialConsent,
+    errorMessage: EXPIRED_MESSAGE,
+  }
 }
 
 export function useWorkspace(
@@ -115,7 +132,7 @@ export function useWorkspace(
           snapshot: null,
           loadState: expired ? 'expired' : 'error',
           errorMessage: expired
-            ? '작업 공간 이용 기간이 끝났어요.'
+            ? EXPIRED_MESSAGE
             : '작업 목록을 불러오지 못했어요. 다시 시도해 주세요.',
           consent: initialConsent,
         })
@@ -175,13 +192,7 @@ export function useWorkspace(
         error instanceof WorkspaceRepositoryError &&
         error.code === 'expired'
       ) {
-        setState((previous) => ({
-          ...previous,
-          snapshot: null,
-          loadState: 'expired',
-          consent: initialConsent,
-          errorMessage: '작업 공간 이용 기간이 끝났어요.',
-        }))
+        setState(expiredState)
       } else {
         setState((previous) => ({
           ...previous,
@@ -202,6 +213,12 @@ export function useWorkspace(
     }
   }
 
+  function markExpired() {
+    consentController.current?.abort()
+    consentController.current = null
+    setState(expiredState)
+  }
+
   function clearConsentError() {
     setState((previous) =>
       previous.consent.status === 'error'
@@ -220,11 +237,13 @@ export function useWorkspace(
   return {
     loadState,
     workspace: snapshot?.workspace ?? null,
+    songs: snapshot?.songs ?? emptySongs,
     tasks: snapshot?.tasks ?? emptyTasks,
     errorMessage: isCurrentRequest ? state.errorMessage : null,
     consent,
     demoScenario,
     retryLoad: () => setLoadVersion((previous) => previous + 1),
+    markExpired,
     clearConsentError,
     saveConsent,
   }
