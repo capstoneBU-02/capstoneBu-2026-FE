@@ -20,6 +20,7 @@ type Props = {
   onHome: () => void
   onOpenTask: (taskId: string) => void
   onSettings: () => void
+  onAddSong: (returnFocus: HTMLElement | null) => void
   view: WorkspaceView
   onOpenSupport: (topic: HelpTopic, returnFocus: HTMLElement | null) => void
 }
@@ -95,6 +96,7 @@ export function WorkspaceSidebar({
   onHome,
   onOpenTask,
   onSettings,
+  onAddSong,
   view,
   onOpenSupport,
   songs,
@@ -165,9 +167,20 @@ export function WorkspaceSidebar({
           <button
             type="button"
             className={styles.addSong}
-            aria-disabled="true"
-            title="곡 추가 화면은 아직 연결되지 않았어요."
-            aria-label="곡 추가 — 준비 중"
+            aria-label="곡 추가"
+            disabled={!info}
+            onClick={(event) => {
+              // In the mobile drawer the button disappears with the drawer,
+              // so focus returns to the menu trigger instead.
+              const mobileTrigger = mobileMenuRef.current
+              const returnFocus =
+                mobileTrigger && mobileTrigger.getClientRects().length > 0
+                  ? mobileTrigger
+                  : event.currentTarget
+              setNavigationOpen(false)
+              setHelpOpen(false)
+              onAddSong(returnFocus)
+            }}
           >
             <Icon name="plus" />
           </button>
@@ -187,7 +200,7 @@ export function WorkspaceSidebar({
               }}
             />
           ))}
-          {loadState === 'empty' && (
+          {loadState === 'empty' && songs.length === 0 && (
             <p className={styles.emptySongs}>아직 곡이 없어요</p>
           )}
         </div>

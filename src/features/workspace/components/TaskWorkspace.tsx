@@ -13,13 +13,19 @@ import { LoadingState, ProblemState } from './StateMessage.tsx'
 import { taskStatusIcon } from './taskStatusIcon.ts'
 import styles from './TaskWorkspace.module.css'
 
-export function TaskBreadcrumb({ detail }: { detail: TaskDetail }) {
+export function TaskBreadcrumb({
+  songName,
+  current,
+}: {
+  songName: string
+  current: string
+}) {
   return (
     <nav className={styles.breadcrumb} aria-label="작업 위치">
       <ol>
-        <li className={styles.truncate}>{detail.song.name}</li>
+        <li className={styles.truncate}>{songName}</li>
         <li className={styles.truncate} aria-current="page">
-          {detail.task.sectionName}
+          {current}
         </li>
       </ol>
     </nav>

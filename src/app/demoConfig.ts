@@ -3,7 +3,6 @@ import type { AccessScenario } from '../features/access/model.ts'
 
 // Provisional Figma copy for the mock preview, not finalized product policies.
 export const DEMO_DISPLAY_CONFIG = {
-  uploadHintLabel: 'MP3, MP4 · 최대 5분',
   trainingRetentionLabel: '베타가 끝나고 90일까지',
   testerCode: 'EM-7K2P-9Q4M',
 } as const

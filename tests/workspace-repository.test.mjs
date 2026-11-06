@@ -163,6 +163,80 @@ test('task detail honours cancellation, expiry and a one-off failure', async () 
   )
 })
 
+const upload = (overrides = {}) => ({
+  file: new File(['audio'], 'new_take.mp3', { type: 'audio/mpeg' }),
+  inputKind: 'separated-guitar',
+  durationSeconds: 96.4,
+  ...overrides,
+})
+
+test('an added song keeps its input kind and stays in the session list', async () => {
+  const repository = createMockWorkspaceRepository('empty')
+  const song = await repository.addSong(upload(), signal())
+
+  assert.match(song.id, /^[a-z0-9][a-z0-9-]{0,63}$/)
+  assert.deepEqual(
+    { ...song, id: 'id' },
+    {
+      id: 'id',
+      name: 'new_take',
+      fileName: 'new_take.mp3',
+      inputKind: 'separated-guitar',
+      durationSeconds: 96.4,
+    },
+  )
+  const second = await repository.addSong(
+    upload({ inputKind: 'original' }),
+    signal(),
+  )
+  assert.notEqual(second.id, song.id)
+  assert.equal(second.inputKind, 'original')
+
+  // A song without tasks still belongs to the session, unlike fixture songs.
+  const snapshot = await repository.loadWorkspace(signal())
+  assert.deepEqual(
+    snapshot.songs.map((item) => item.id),
+    [song.id, second.id],
+  )
+  assert.deepEqual(snapshot.tasks, [])
+  song.name = 'changed'
+  const again = await repository.loadWorkspace(signal())
+  assert.equal(again.songs[0].name, 'new_take')
+  assert.equal(
+    (await createMockWorkspaceRepository('empty').loadWorkspace(signal())).songs
+      .length,
+    0,
+  )
+})
+
+test('adding a song honours cancellation and expiry without changing the list', async () => {
+  const repository = createMockWorkspaceRepository()
+  const controller = new AbortController()
+  const adding = repository.addSong(upload(), controller.signal)
+  controller.abort()
+  await assert.rejects(adding, { name: 'AbortError' })
+  assert.equal((await repository.loadWorkspace(signal())).songs.length, 3)
+
+  await assert.rejects(
+    createMockWorkspaceRepository('expired').addSong(upload(), signal()),
+    { code: 'expired' },
+  )
+})
+
+test('the mock refuses a song the upload policy rejects, like a server would', async () => {
+  const repository = createMockWorkspaceRepository('empty')
+  for (const input of [
+    upload({ file: new File(['audio'], 'take.wav', { type: 'audio/wav' }) }),
+    upload({ durationSeconds: 301 }),
+    upload({ durationSeconds: Number.NaN }),
+  ]) {
+    await assert.rejects(repository.addSong(input, signal()), {
+      code: 'add-song-failed',
+    })
+  }
+  assert.equal((await repository.loadWorkspace(signal())).songs.length, 0)
+})
+
 test('only supported demo query scenarios are enabled', () => {
   assert.equal(readDemoScenario('?demo=empty'), 'empty')
   assert.equal(readDemoScenario('?demo=unknown'), 'default')

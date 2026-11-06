@@ -1,4 +1,9 @@
 import { DEMO_DISPLAY_CONFIG } from '../../app/demoConfig.ts'
+import {
+  checkSongDuration,
+  isAllowedSongFile,
+  songNameFromFileName,
+} from '../add-song/songFile.ts'
 import type {
   ConsentChoice,
   DemoScenario,
@@ -156,6 +161,9 @@ export function createMockWorkspaceRepository(
   ).map((song) => ({ ...song }))
   let shouldFailNextLoad = scenario === 'error'
   let shouldFailNextTaskLoad = scenario === 'error'
+  // Added files live only in this session's memory for later playback (#16).
+  const songFiles = new Map<string, File>()
+  let addedSongCount = 0
 
   function throwIfExpired() {
     if (scenario === 'expired') {
@@ -222,6 +230,32 @@ export function createMockWorkspaceRepository(
         )
       }
       return { task: { ...task }, song: { ...song } }
+    },
+    async addSong(input, signal) {
+      await waitForMockRequest(300, signal)
+      throwIfExpired()
+      // A server checks the file again instead of trusting the client.
+      if (
+        !isAllowedSongFile(input.file) ||
+        checkSongDuration(input.durationSeconds).status !== 'valid'
+      ) {
+        throw new WorkspaceRepositoryError(
+          'add-song-failed',
+          '올릴 수 없는 파일이에요.',
+        )
+      }
+
+      addedSongCount += 1
+      const song: WorkspaceSong = {
+        id: `song-upload-${addedSongCount}`,
+        name: songNameFromFileName(input.file.name),
+        fileName: input.file.name,
+        inputKind: input.inputKind,
+        durationSeconds: input.durationSeconds,
+      }
+      songs.push(song)
+      songFiles.set(song.id, input.file)
+      return { ...song }
     },
   }
 }

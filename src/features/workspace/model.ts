@@ -22,6 +22,14 @@ export interface WorkspaceSong {
   readonly durationSeconds: number
 }
 
+// What the add-song dialog hands to the repository. The file stays in memory;
+// the mock never transmits it.
+export interface NewSongInput {
+  readonly file: File
+  readonly inputKind: SongInputKind
+  readonly durationSeconds: number
+}
+
 export interface WorkspaceTask {
   readonly id: string
   readonly songId: string

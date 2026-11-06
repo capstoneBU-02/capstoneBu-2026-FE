@@ -23,6 +23,16 @@ export function songInputLabel(kind: SongInputKind): string {
   return INPUT_KIND_LABELS[kind]
 }
 
+// The add-song choice and the new-section header use the short form.
+const INPUT_KIND_SHORT_LABELS: Record<SongInputKind, string> = {
+  original: '원곡',
+  'separated-guitar': '분리된 기타 음원',
+}
+
+export function songInputShortLabel(kind: SongInputKind): string {
+  return INPUT_KIND_SHORT_LABELS[kind]
+}
+
 // Short status for a task headline; the list keeps its detailed wording.
 export function taskHeadlineStatus(task: WorkspaceTask): string {
   if (task.processingStatus === 'completed') return '완료'

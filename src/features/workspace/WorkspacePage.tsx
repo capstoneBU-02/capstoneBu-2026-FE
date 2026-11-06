@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { DEMO_DISPLAY_CONFIG } from '../../app/demoConfig.ts'
 import { Button } from '../../shared/ui/Button.tsx'
 import { Icon } from '../../shared/ui/Icon.tsx'
+import { AddSongDialog } from '../add-song/AddSongDialog.tsx'
+import {
+  createMediaDurationProbe,
+  type MediaDurationProbe,
+} from '../add-song/mediaDuration.ts'
+import { UPLOAD_POLICY } from '../add-song/uploadPolicy.ts'
 import { ConsentDialog } from './components/ConsentDialog.tsx'
+import { EmptyWorkspace } from './components/EmptyWorkspace.tsx'
+import { NewSectionPlaceholder } from './components/NewSectionPlaceholder.tsx'
 import { LoadingState, ProblemState } from './components/StateMessage.tsx'
 import { TaskTable } from './components/TaskTable.tsx'
 import { TaskBreadcrumb, TaskPanel } from './components/TaskWorkspace.tsx'
@@ -30,29 +37,21 @@ const TOP_BAR_LABELS: Record<WorkspaceView['name'], string> = {
   task: '작업 공간',
   'task-not-found': '작업 공간',
   'task-inaccessible': '작업 공간',
+  'new-section': '새 구간',
+  'song-not-found': '새 구간',
 }
 
-function EmptyWorkspace() {
-  return (
-    <div className={styles.centeredState}>
-      <div className={styles.emptyCard}>
-        <span className={styles.uploadCircle}>
-          <Icon name="upload" />
-        </span>
-        <h1>첫 곡을 올려 주세요</h1>
-        <p>{DEMO_DISPLAY_CONFIG.uploadHintLabel}</p>
-        <Button
-          variant="primary"
-          className={styles.emptyAction}
-          aria-disabled="true"
-          title="곡 추가 화면은 아직 연결되지 않았어요."
-          aria-label="파일 선택 — 곡 추가 화면 준비 중"
-        >
-          파일 선택
-        </Button>
-      </div>
-    </div>
-  )
+const defaultDurationProbe = createMediaDurationProbe(
+  UPLOAD_POLICY.metadataTimeoutMs,
+)
+
+interface AddSongRequest {
+  readonly workspaceId: string
+  readonly files: readonly File[]
+}
+
+function hasDraggedFiles(event: DragEvent) {
+  return event.dataTransfer?.types.includes('Files') ?? false
 }
 
 export function WorkspacePage({
@@ -61,12 +60,14 @@ export function WorkspacePage({
   onReenter,
   onLeave,
   focusOnEntry = false,
+  probeDuration = defaultDurationProbe,
 }: {
   workspace: UseWorkspaceResult
   repository: WorkspaceRepository
   onReenter?: () => void
   onLeave?: () => void
   focusOnEntry?: boolean
+  probeDuration?: MediaDurationProbe
 }) {
   const [filter, setFilter] = useState<Filter>('all')
   const { view, navigate } = useWorkspaceNavigation()
@@ -85,6 +86,8 @@ export function WorkspacePage({
     workspaceId: string
   } | null>(null)
   const supportReturnFocusRef = useRef<HTMLElement | null>(null)
+  const [addSong, setAddSong] = useState<AddSongRequest | null>(null)
+  const addSongReturnFocusRef = useRef<HTMLElement | null>(null)
   const mainContentRef = useRef<HTMLElement>(null)
   const { songs, tasks, loadState } = workspace
   const workspaceId = workspace.workspace?.id ?? null
@@ -99,12 +102,29 @@ export function WorkspacePage({
     previousFocusViewKey.current = viewKey
   }, [focusOnEntry, viewKey])
 
+  // Sessions live in memory, so a file dropped outside a drop area must not
+  // make the browser open it and leave the app.
+  useEffect(() => {
+    const keepPage = (event: DragEvent) => {
+      if (hasDraggedFiles(event)) event.preventDefault()
+    }
+    window.addEventListener('dragover', keepPage)
+    window.addEventListener('drop', keepPage)
+    return () => {
+      window.removeEventListener('dragover', keepPage)
+      window.removeEventListener('drop', keepPage)
+    }
+  }, [])
+
   if (previousViewKey !== viewKey) {
     setPreviousViewKey(viewKey)
     setConsentWorkspaceId(null)
     setSupport(null)
+    setAddSong(null)
   }
   if (support && support.workspaceId !== workspaceId) setSupport(null)
+  if (addSong && (addSong.workspaceId !== workspaceId || !workspaceReady))
+    setAddSong(null)
 
   // Reset the dialog's lifetime when its workspace disappears or changes.
   if (consentWorkspaceId !== null && consentWorkspaceId !== workspaceId) {
@@ -131,6 +151,14 @@ export function WorkspacePage({
         : returnFocus
     setSupport({ topic, workspaceId })
   }
+  function openAddSong(
+    returnFocus: HTMLElement | null,
+    files: readonly File[] = [],
+  ) {
+    if (!workspaceId || !workspaceReady) return
+    addSongReturnFocusRef.current = returnFocus
+    setAddSong({ workspaceId, files })
+  }
   function focusContent() {
     mainContentRef.current?.focus({ preventScroll: true })
   }
@@ -147,6 +175,10 @@ export function WorkspacePage({
   }
   const goHome = () => go({ name: 'home' })
   const openTask = (taskId: string) => go({ name: 'task', taskId })
+  const newSectionSong =
+    view.name === 'new-section'
+      ? (songs.find((song) => song.id === view.songId) ?? null)
+      : null
   const visibleTasks = tasks.filter(
     (task) => filter === 'all' || task.processingStatus === filter,
   )
@@ -187,6 +219,7 @@ export function WorkspacePage({
         onHome={goHome}
         onOpenTask={openTask}
         onSettings={() => go({ name: 'settings' })}
+        onAddSong={openAddSong}
         onOpenSupport={openSupport}
       />
       <main
@@ -197,7 +230,12 @@ export function WorkspacePage({
       >
         <header className={styles.topBar}>
           {view.name === 'task' && workspaceReady && taskDetail.detail ? (
-            <TaskBreadcrumb detail={taskDetail.detail} />
+            <TaskBreadcrumb
+              songName={taskDetail.detail.song.name}
+              current={taskDetail.detail.task.sectionName}
+            />
+          ) : workspaceReady && newSectionSong ? (
+            <TaskBreadcrumb songName={newSectionSong.name} current="새 구간" />
           ) : (
             TOP_BAR_LABELS[view.name]
           )}
@@ -255,6 +293,20 @@ export function WorkspacePage({
               <TaskUnavailablePanel onReturnToWorkspace={goHome} />
             </div>
           )}
+        {workspaceReady &&
+          (view.name === 'song-not-found' ||
+            (view.name === 'new-section' && !newSectionSong)) && (
+            <div className={styles.centeredState}>
+              <TaskUnavailablePanel
+                title="곡을 찾을 수 없어요"
+                description="삭제됐거나 이 워크스페이스의 곡이 아니에요."
+                onReturnToWorkspace={goHome}
+              />
+            </div>
+          )}
+        {workspaceReady && newSectionSong && (
+          <NewSectionPlaceholder song={newSectionSong} />
+        )}
         {workspaceReady && view.name === 'task' && (
           <TaskPanel
             result={taskDetail}
@@ -262,7 +314,9 @@ export function WorkspacePage({
             onReturnHome={goHome}
           />
         )}
-        {loadState === 'empty' && view.name === 'home' && <EmptyWorkspace />}
+        {loadState === 'empty' && view.name === 'home' && (
+          <EmptyWorkspace hasSongs={songs.length > 0} onAddSong={openAddSong} />
+        )}
         {loadState === 'success' && view.name === 'home' && (
           <div className={styles.body}>
             {workspace.consent.choice === 'undecided' && (
@@ -335,6 +389,20 @@ export function WorkspacePage({
           consent={workspace.consent}
           onSave={workspace.saveConsent}
           onClose={closeConsent}
+          fallbackFocusRef={mainContentRef}
+        />
+      )}
+      {addSong && addSong.workspaceId === workspaceId && workspaceReady && (
+        <AddSongDialog
+          probeDuration={probeDuration}
+          initialFiles={addSong.files}
+          onSubmit={workspace.addSong}
+          onAdded={(song) => {
+            setAddSong(null)
+            go({ name: 'new-section', songId: song.id })
+          }}
+          onClose={() => setAddSong(null)}
+          returnFocusRef={addSongReturnFocusRef}
           fallbackFocusRef={mainContentRef}
         />
       )}
