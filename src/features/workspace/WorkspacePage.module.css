@@ -79,6 +79,7 @@
 }
 
 .homeRow[aria-current='page'],
+.sectionRow[aria-current='page'],
 .footerRow[aria-current='page'] {
   background: var(--surface-selected);
   color: var(--ink-primary);
@@ -131,6 +132,7 @@
 }
 
 .songHeading:hover,
+.sectionRow:not([aria-disabled='true'], [aria-current='page']):hover,
 .footerRow:not(:disabled, [aria-disabled='true']):hover {
   background: var(--surface-subtle);
 }
@@ -399,6 +401,28 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 16px;
+}
+
+.taskRow {
+  cursor: pointer;
+}
+
+.taskRow:hover > * {
+  background: var(--surface-canvas);
+}
+
+.taskOpen {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .sectionName,

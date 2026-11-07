@@ -10,12 +10,24 @@ export interface WorkspaceInfo {
   readonly testerCode: string
 }
 
-// Screen domain data. This shape does not prescribe the future API response.
+// Screen domain data. These shapes do not prescribe the future API response;
+// an adapter will map the confirmed API into them.
+export type SongInputKind = 'original' | 'separated-guitar'
+
+export interface WorkspaceSong {
+  readonly id: string
+  readonly name: string
+  readonly fileName: string
+  readonly inputKind: SongInputKind
+  readonly durationSeconds: number
+}
+
 export interface WorkspaceTask {
   readonly id: string
+  readonly songId: string
   readonly sectionName: string
-  readonly songName: string
   readonly partLabel: string
+  readonly tuningLabel: string
   readonly rangeStartSeconds: number
   readonly rangeEndSeconds: number
   readonly processingStatus: 'completed' | 'processing' | 'failed'
@@ -27,8 +39,14 @@ export interface WorkspaceTask {
   readonly updatedAtLabel: string
 }
 
+export interface TaskDetail {
+  readonly task: WorkspaceTask
+  readonly song: WorkspaceSong
+}
+
 export interface WorkspaceSnapshot {
   readonly workspace: WorkspaceInfo
+  readonly songs: readonly WorkspaceSong[]
   readonly tasks: readonly WorkspaceTask[]
   readonly consentChoice: ConsentChoice
 }

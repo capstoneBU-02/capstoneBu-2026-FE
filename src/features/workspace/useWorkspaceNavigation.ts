@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  canonicalWorkspaceView,
   hasWorkspaceScope,
   readWorkspaceView,
   scopedWorkspaceView,
   workspaceUrl,
+  workspaceViewKey,
   WORKSPACE_SCOPE_KEY,
   type WorkspaceView,
 } from './navigation.ts'
@@ -17,16 +19,21 @@ function createWorkspaceScope(): string {
 }
 
 export function useWorkspaceNavigation() {
-  const [entry] = useState(() => ({
-    scope: createWorkspaceScope(),
-    pathname: window.location.pathname,
-    // Freeze this session's selector. A popped URL may belong to an old
-    // preview; carrying its selector forward could change the app on reload.
-    selectorSearch: workspaceUrl('', window.location.search, 'home'),
-    view: hasWorkspaceScope(window.history.state)
-      ? ('home' as const)
-      : readWorkspaceView(window.location.search),
-  }))
+  const [entry] = useState(() => {
+    const view: WorkspaceView = hasWorkspaceScope(window.history.state)
+      ? { name: 'home' }
+      : readWorkspaceView(window.location.search)
+    return {
+      scope: createWorkspaceScope(),
+      pathname: window.location.pathname,
+      // Freeze this session's selector. A popped URL may belong to an old
+      // preview; carrying its selector forward could change the app on reload.
+      selectorSearch: workspaceUrl('', window.location.search, {
+        name: 'home',
+      }),
+      view,
+    }
+  })
   const [view, setView] = useState<WorkspaceView>(entry.view)
   const currentView = useRef<WorkspaceView>(entry.view)
 
@@ -53,8 +60,9 @@ export function useWorkspaceNavigation() {
     return () => window.removeEventListener('popstate', popstate)
   }, [entry])
 
-  function navigate(next: WorkspaceView) {
-    if (currentView.current === next) return
+  function navigate(requested: WorkspaceView) {
+    const next = canonicalWorkspaceView(requested)
+    if (workspaceViewKey(currentView.current) === workspaceViewKey(next)) return
     window.history.pushState(
       { [WORKSPACE_SCOPE_KEY]: entry.scope },
       '',

@@ -29,6 +29,7 @@ function WorkspaceSession({
   return (
     <WorkspacePage
       workspace={workspace}
+      repository={repository}
       onReenter={onReenter}
       onLeave={onLeave}
       focusOnEntry={focusOnEntry}

@@ -111,6 +111,13 @@ const repository: AccessRepository = {
               )
             : workspace.saveConsent(choice, signal)
         },
+        loadTask(taskId, signal) {
+          return expired
+            ? Promise.reject(
+                new WorkspaceRepositoryError('expired', 'Expired test session'),
+              )
+            : workspace.loadTask(taskId, signal)
+        },
       }
       wrappers.set(workspace, wrapper)
     }
