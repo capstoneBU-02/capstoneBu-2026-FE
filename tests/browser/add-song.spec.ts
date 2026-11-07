@@ -181,11 +181,52 @@ test('a replaced file never shows a late length result', async ({ page }) => {
   await expect(status(page)).toHaveText('파일을 확인하고 있어요.')
   await expect(next(page)).toHaveAttribute('aria-disabled', 'true')
 
-  await choose(page, audio('clip.wav', 'audio/wav'))
-  await expect(alertText(page)).toHaveText(FORMAT_MESSAGE)
+  // The replacement is playable and checked before the first file answers, so
+  // only the stale-result guard keeps that late answer off the new card.
+  await choose(page, audio('neon_harbor_live.mp3', 'audio/mpeg'))
+  await expect(dialog(page).getByText('04:12 · 1.5KB')).toBeVisible()
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
   await page.evaluate(() => window.workspaceTest.resolveProbe(100))
-  await expect(alertText(page)).toHaveText(FORMAT_MESSAGE)
+  // Let React render whatever the late answer scheduled before checking.
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => setTimeout(resolve)),
+      ),
+  )
+  await expect(status(page)).toHaveText('올릴 수 있는 파일이에요.')
+  await expect(dialog(page).getByText('04:12 · 1.5KB')).toBeVisible()
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
   await expect(dialog(page).getByText('01:40', { exact: false })).toHaveCount(0)
+})
+
+test('pressing Escape again while adding keeps the dialog and the add', async ({
+  page,
+}) => {
+  await openFromSidebar(page, 'pending-add')
+  await choose(page, audio('fresh_riff.mp3', 'audio/mpeg'))
+  await next(page).click()
+  await expect(status(page)).toHaveText('곡을 추가하고 있어요.')
+  // Chrome lets a page refuse only the first of repeated Escapes with no click
+  // or key press in between; the second one closes the modal regardless.
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await expect(dialog(page)).toBeVisible()
+  await expect(status(page)).toHaveText('곡을 추가하고 있어요.')
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .querySelector('dialog[open]')
+            ?.contains(document.activeElement) ?? false,
+      ),
+    )
+    .toBe(true)
+
+  await page.evaluate(() => window.workspaceTest.resolveAdd())
+  await expect(dialog(page)).toHaveCount(0)
+  await expect(main(page).getByText('fresh_riff.mp3')).toBeVisible()
 })
 
 test('dropping several files is refused and dropping one file selects it', async ({
