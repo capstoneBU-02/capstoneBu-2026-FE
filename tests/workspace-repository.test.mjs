@@ -337,6 +337,63 @@ test('creating a task honours cancellation and expiry', async () => {
   )
 })
 
+test('fixture songs play a synthesized demo as long as the song', async () => {
+  const repository = createMockWorkspaceRepository()
+  const audio = await repository.loadSongAudio('song-paper-moon', signal())
+  const view = new DataView(await audio.arrayBuffer())
+
+  assert.equal(audio.type, 'audio/wav')
+  const sampleRate = view.getUint32(24, true)
+  const seconds = view.getUint32(40, true) / 2 / sampleRate
+  assert.ok(Math.abs(seconds - 96) < 0.001, `got ${seconds}s`)
+  // A second request reuses the session's audio instead of synthesizing again.
+  assert.equal(
+    await repository.loadSongAudio('song-paper-moon', signal()),
+    audio,
+  )
+})
+
+test('an added song plays the file the user chose', async () => {
+  const repository = createMockWorkspaceRepository('empty')
+  const input = upload()
+  const song = await repository.addSong(input, signal())
+  assert.equal(await repository.loadSongAudio(song.id, signal()), input.file)
+})
+
+test('song audio honours cancellation, expiry and unknown songs', async () => {
+  const repository = createMockWorkspaceRepository()
+  const controller = new AbortController()
+  const loading = repository.loadSongAudio(
+    'song-neon-harbor',
+    controller.signal,
+  )
+  controller.abort()
+  await assert.rejects(loading, { name: 'AbortError' })
+
+  await assert.rejects(repository.loadSongAudio('song-missing', signal()), {
+    code: 'audio-unavailable',
+  })
+  await assert.rejects(
+    createMockWorkspaceRepository('expired').loadSongAudio(
+      'song-neon-harbor',
+      signal(),
+    ),
+    { code: 'expired' },
+  )
+})
+
+test('cancelling one audio request leaves the shared demo to the others', async () => {
+  const repository = createMockWorkspaceRepository()
+  const first = new AbortController()
+  const cancelled = repository.loadSongAudio('song-neon-harbor', first.signal)
+  const kept = repository.loadSongAudio('song-neon-harbor', signal())
+  // Past the mock's 200ms wait, while the demo is still being synthesized.
+  await new Promise((resolve) => setTimeout(resolve, 205))
+  first.abort()
+  await assert.rejects(cancelled, { name: 'AbortError' })
+  assert.equal((await kept).type, 'audio/wav')
+})
+
 test('only supported demo query scenarios are enabled', () => {
   assert.equal(readDemoScenario('?demo=empty'), 'empty')
   assert.equal(readDemoScenario('?demo=unknown'), 'default')

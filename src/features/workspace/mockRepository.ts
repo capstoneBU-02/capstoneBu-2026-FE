@@ -18,6 +18,7 @@ import type {
   WorkspaceSong,
   WorkspaceTask,
 } from './model.ts'
+import { createDemoSongAudio } from './demoSongAudio.ts'
 import {
   WorkspaceRepositoryError,
   type WorkspaceRepository,
@@ -114,6 +115,22 @@ const mockTasks: readonly WorkspaceTask[] = [
   },
 ]
 
+// Lets one caller stop waiting on shared work without cancelling it.
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const abort = () =>
+      reject(new DOMException('요청이 취소되었습니다.', 'AbortError'))
+    if (signal.aborted) {
+      abort()
+      return
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    work
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener('abort', abort))
+  })
+}
+
 function waitForMockRequest(milliseconds: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     if (signal.aborted) {
@@ -191,6 +208,8 @@ export function createMockWorkspaceRepository(
   let shouldFailNextTaskLoad = scenario === 'error'
   // Added files live only in this session's memory for later playback (#16).
   const songFiles = new Map<string, File>()
+  // Synthesized once per session, like a file the server keeps.
+  const demoAudio = new Map<string, Promise<Blob>>()
   let addedSongCount = 0
   let createdTaskCount = 0
 
@@ -316,6 +335,31 @@ export function createMockWorkspaceRepository(
       }
       tasks.push(task)
       return { ...task }
+    },
+    async loadSongAudio(songId, signal) {
+      await waitForMockRequest(200, signal)
+      throwIfExpired()
+      const file = songFiles.get(songId)
+      if (file) return file
+      const song = songs.find((candidate) => candidate.id === songId)
+      if (!song) {
+        throw new WorkspaceRepositoryError(
+          'audio-unavailable',
+          '음원을 불러오지 못했어요.',
+        )
+      }
+      let audio = demoAudio.get(songId)
+      if (!audio) {
+        // Shared by every request for the song, so no caller cancels it.
+        audio = createDemoSongAudio(
+          song.id,
+          song.durationSeconds,
+          new AbortController().signal,
+        )
+        demoAudio.set(songId, audio)
+        audio.catch(() => demoAudio.delete(songId))
+      }
+      return untilAborted(audio, signal)
     },
   }
 }

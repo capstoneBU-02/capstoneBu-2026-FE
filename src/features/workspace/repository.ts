@@ -20,6 +20,9 @@ export interface WorkspaceRepository {
   addSong(input: NewSongInput, signal: AbortSignal): Promise<WorkspaceSong>
   // A new task starts queued; separation and transcription come later.
   createTask(input: NewTaskInput, signal: AbortSignal): Promise<WorkspaceTask>
+  // The song's audio file, decoded in the browser for the waveform and
+  // playback. The shape of the real delivery (bytes or a URL) is still open.
+  loadSongAudio(songId: string, signal: AbortSignal): Promise<Blob>
 }
 
 type RepositoryErrorCode =
@@ -29,6 +32,7 @@ type RepositoryErrorCode =
   | 'task-unavailable'
   | 'add-song-failed'
   | 'create-task-failed'
+  | 'audio-unavailable'
 
 export class WorkspaceRepositoryError extends Error {
   readonly code: RepositoryErrorCode

@@ -10,6 +10,8 @@ import { Button } from '../../shared/ui/Button.tsx'
 import { canFocus, restoreFocus } from '../../shared/ui/dialogFocus.ts'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import { formatClockDuration } from '../add-song/songFile.ts'
+import { SectionWaveform } from '../waveform/SectionWaveform.tsx'
+import { useSongAudio } from '../waveform/useSongAudio.ts'
 import { TaskBreadcrumb } from '../workspace/components/TaskWorkspace.tsx'
 import taskStyles from '../workspace/components/TaskWorkspace.module.css'
 import { songInputShortLabel } from '../workspace/format.ts'
@@ -22,6 +24,7 @@ import type { CreateTaskResult } from '../workspace/useWorkspace.ts'
 import pageStyles from '../workspace/WorkspacePage.module.css'
 import {
   checkSectionForm,
+  sectionName,
   sectionNumberText,
   type SectionForm,
   type SectionFormAction,
@@ -32,8 +35,8 @@ import styles from './NewSection.module.css'
 
 type Props = {
   song: WorkspaceSong
-  // Section names already used in this song, for the next free number.
-  existingNames: readonly string[]
+  // The song's tasks: drawn on the waveform and used for the next number.
+  songTasks: readonly WorkspaceTask[]
   form: SectionForm
   onChange: (action: SectionFormAction) => void
   onCancel: () => void
@@ -43,6 +46,8 @@ type Props = {
     signal: AbortSignal,
   ) => Promise<CreateTaskResult>
   onCreated: (task: WorkspaceTask) => void
+  loadAudio: (songId: string, signal: AbortSignal) => Promise<Blob>
+  onExpired: () => void
   // Page-level notices, such as a failed consent save, below the top bar.
   notice?: ReactNode
 }
@@ -52,15 +57,20 @@ const SUBMIT_FAILED_MESSAGE =
 
 export function NewSectionScreen({
   song,
-  existingNames,
+  songTasks,
   form,
   onChange,
   onCancel,
   onReplaceFile,
   onSubmit,
   onCreated,
+  loadAudio,
+  onExpired,
   notice,
 }: Props) {
+  const existingNames = songTasks.map((task) => task.sectionName)
+  const numberText = sectionNumberText(form, existingNames)
+  const audio = useSongAudio(song.id, loadAudio, onExpired)
   const formId = useId()
   const titleId = useId()
   const lifetimeRef = useRef<AbortController | null>(null)
@@ -191,13 +201,32 @@ export function NewSectionScreen({
           noValidate
           onSubmit={(event) => void submit(event)}
         >
-          <p className={styles.pendingNote}>
-            파형에서 구간을 고르는 기능은 다음 단계에서 연결돼요. 지금은 시간을
-            직접 입력해 주세요.
-          </p>
+          <SectionWaveform
+            songDurationSeconds={song.durationSeconds}
+            audio={audio}
+            start={form.start}
+            end={form.end}
+            label={sectionName(form.baseName, numberText)}
+            sections={songTasks.map((task) => ({
+              id: task.id,
+              name: task.sectionName,
+              startSeconds: task.rangeStartSeconds,
+              endSeconds: task.rangeEndSeconds,
+            }))}
+            over={Boolean(check.errors.range)}
+            disabled={submitting}
+            onRange={(startSeconds, endSeconds) =>
+              onChange({
+                type: 'range',
+                startSeconds,
+                endSeconds,
+                songDurationSeconds: song.durationSeconds,
+              })
+            }
+          />
           <SectionFields
             form={form}
-            numberText={sectionNumberText(form, existingNames)}
+            numberText={numberText}
             check={check}
             policy={SECTION_POLICY}
             disabled={submitting}
