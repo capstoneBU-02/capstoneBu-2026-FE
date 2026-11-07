@@ -46,7 +46,8 @@ function formatLabels(policy: UploadPolicy): string {
   return policy.formats.map((format) => format.label).join(', ')
 }
 
-function durationLimitLabel(seconds: number): string {
+// 300 → 5분, 210 → 3분 30초, 45 → 45초
+export function durationLimitLabel(seconds: number): string {
   const minutes = Math.floor(seconds / 60)
   const rest = seconds % 60
   if (minutes === 0) return `${rest}초`

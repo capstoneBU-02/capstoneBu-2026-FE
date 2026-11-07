@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type RefObject } from 'react'
 import { Button } from '../../shared/ui/Button.tsx'
+import { isOutside, restoreFocus } from '../../shared/ui/dialogFocus.ts'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import {
   USAGE_NOTICE_DESCRIPTION,
@@ -42,14 +43,6 @@ const questions = [
   ],
 ] as const
 
-function canFocus(element: HTMLElement | null): element is HTMLElement {
-  return Boolean(
-    element?.isConnected &&
-    !element.matches(':disabled, [hidden]') &&
-    element.getClientRects().length,
-  )
-}
-
 export function SupportDialog({
   topic,
   onClose,
@@ -69,11 +62,7 @@ export function SupportDialog({
     titleRef.current?.focus({ preventScroll: true })
     return () => {
       dialog?.close()
-      if (canFocus(target)) target.focus({ preventScroll: true })
-      if (!canFocus(target) || document.activeElement !== target) {
-        if (fallback && canFocus(fallback))
-          fallback.focus({ preventScroll: true })
-      }
+      restoreFocus(target, fallback)
     }
   }, [returnFocusRef, fallbackFocusRef])
 
@@ -94,13 +83,9 @@ export function SupportDialog({
         if (!event.currentTarget.open) onClose()
       }}
       onPointerDown={(event) => {
-        const rect = event.currentTarget.getBoundingClientRect()
         pointerStartedOutside.current =
           event.target === event.currentTarget &&
-          (event.clientX < rect.left ||
-            event.clientX > rect.right ||
-            event.clientY < rect.top ||
-            event.clientY > rect.bottom)
+          isOutside(event, event.currentTarget.getBoundingClientRect())
       }}
       onPointerCancel={() => {
         pointerStartedOutside.current = false
@@ -108,13 +93,10 @@ export function SupportDialog({
       onClick={(event) => {
         const outside = pointerStartedOutside.current
         pointerStartedOutside.current = false
-        if (!outside || event.target !== event.currentTarget) return
-        const rect = event.currentTarget.getBoundingClientRect()
         if (
-          event.clientX < rect.left ||
-          event.clientX > rect.right ||
-          event.clientY < rect.top ||
-          event.clientY > rect.bottom
+          outside &&
+          event.target === event.currentTarget &&
+          isOutside(event, event.currentTarget.getBoundingClientRect())
         )
           onClose()
       }}

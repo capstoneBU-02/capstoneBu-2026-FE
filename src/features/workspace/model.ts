@@ -30,6 +30,19 @@ export interface NewSongInput {
   readonly durationSeconds: number
 }
 
+export type SectionPart = 'rhythm' | 'lead'
+
+// What the new-section screen hands to the repository. Labels for the part
+// and tuning come from the repository, not from the screen.
+export interface NewTaskInput {
+  readonly songId: string
+  readonly sectionName: string
+  readonly part: SectionPart
+  readonly tuningId: string
+  readonly rangeStartSeconds: number
+  readonly rangeEndSeconds: number
+}
+
 export interface WorkspaceTask {
   readonly id: string
   readonly songId: string
@@ -38,7 +51,8 @@ export interface WorkspaceTask {
   readonly tuningLabel: string
   readonly rangeStartSeconds: number
   readonly rangeEndSeconds: number
-  readonly processingStatus: 'completed' | 'processing' | 'failed'
+  // queued: created and waiting for its turn before separation starts.
+  readonly processingStatus: 'queued' | 'processing' | 'completed' | 'failed'
   readonly failureKind: 'transcription' | 'no-guitar' | null
   readonly progressPercent: number | null
   readonly hasSeparatedAudio: boolean

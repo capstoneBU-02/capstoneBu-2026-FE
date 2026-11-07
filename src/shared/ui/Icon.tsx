@@ -13,8 +13,10 @@ import plus from '../../assets/earmark/plus.svg'
 import plusSmall from '../../assets/earmark/plus-small.svg'
 import settings from '../../assets/earmark/settings.svg'
 import statusDone from '../../assets/earmark/status-done.svg'
+import statusDraft from '../../assets/earmark/status-draft.svg'
 import statusFailed from '../../assets/earmark/status-failed.svg'
 import statusProcessing from '../../assets/earmark/status-processing.svg'
+import statusQueued from '../../assets/earmark/status-queued.svg'
 import upload from '../../assets/earmark/upload.svg'
 import styles from './Ui.module.css'
 
@@ -36,8 +38,10 @@ const icons = {
   plusSmall: [plusSmall, 10],
   settings: [settings, 15],
   statusDone: [statusDone, 6],
+  statusDraft: [statusDraft, 6],
   statusFailed: [statusFailed, 6],
   statusProcessing: [statusProcessing, 6],
+  statusQueued: [statusQueued, 6],
   upload: [upload, 20],
 } as const
 

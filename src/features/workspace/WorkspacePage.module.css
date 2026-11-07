@@ -193,7 +193,7 @@
   line-height: 16px;
 }
 
-.unavailableAction,
+.addSection,
 .emptySongs {
   color: var(--ink-tertiary);
 }

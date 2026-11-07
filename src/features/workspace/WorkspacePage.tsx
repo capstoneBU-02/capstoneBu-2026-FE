@@ -7,13 +7,17 @@ import {
   type MediaDurationProbe,
 } from '../add-song/mediaDuration.ts'
 import { UPLOAD_POLICY } from '../add-song/uploadPolicy.ts'
+import { NewSectionScreen } from '../new-section/NewSectionScreen.tsx'
+import { ReplaceFileDialog } from '../new-section/ReplaceFileDialog.tsx'
+import { useSectionDrafts } from '../new-section/useSectionDrafts.ts'
 import { ConsentDialog } from './components/ConsentDialog.tsx'
 import { EmptyWorkspace } from './components/EmptyWorkspace.tsx'
-import { NewSectionPlaceholder } from './components/NewSectionPlaceholder.tsx'
 import { LoadingState, ProblemState } from './components/StateMessage.tsx'
 import { TaskTable } from './components/TaskTable.tsx'
 import { TaskBreadcrumb, TaskPanel } from './components/TaskWorkspace.tsx'
 import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx'
+import { isTaskInProgress } from './format.ts'
+import type { SongInputKind } from './model.ts'
 import type { WorkspaceRepository } from './repository.ts'
 import { useTaskDetail } from './useTaskDetail.ts'
 import type { UseWorkspaceResult } from './useWorkspace.ts'
@@ -48,6 +52,14 @@ const defaultDurationProbe = createMediaDurationProbe(
 interface AddSongRequest {
   readonly workspaceId: string
   readonly files: readonly File[]
+  // Set when 파일 바꾸기 adds a replacement for this song's draft.
+  readonly replacesSongId?: string
+  readonly inputKind?: SongInputKind
+}
+
+interface ReplaceFileRequest {
+  readonly workspaceId: string
+  readonly songId: string
 }
 
 function hasDraggedFiles(event: DragEvent) {
@@ -81,6 +93,11 @@ export function WorkspacePage({
     workspace.markExpired,
   )
   const [previousViewKey, setPreviousViewKey] = useState(viewKey)
+  // Set when a created task opens: a dialog the user opened while it was
+  // being created stays open over the task instead of closing.
+  const [keepDialogsViewKey, setKeepDialogsViewKey] = useState<string | null>(
+    null,
+  )
   const [support, setSupport] = useState<{
     topic: SupportTopic
     workspaceId: string
@@ -88,11 +105,18 @@ export function WorkspacePage({
   const supportReturnFocusRef = useRef<HTMLElement | null>(null)
   const [addSong, setAddSong] = useState<AddSongRequest | null>(null)
   const addSongReturnFocusRef = useRef<HTMLElement | null>(null)
+  const [replaceFile, setReplaceFile] = useState<ReplaceFileRequest | null>(
+    null,
+  )
   const mainContentRef = useRef<HTMLElement>(null)
   const { songs, tasks, loadState } = workspace
   const workspaceId = workspace.workspace?.id ?? null
   const previousFocusViewKey = useRef(viewKey)
   const workspaceReady = loadState === 'empty' || loadState === 'success'
+  const drafts = useSectionDrafts(
+    workspaceId,
+    view.name === 'new-section' ? view.songId : null,
+  )
 
   // Transfer focus from the removed access/onboarding screen only on entry.
   // Loading, filtering and consent updates must preserve the user's focus.
@@ -118,13 +142,22 @@ export function WorkspacePage({
 
   if (previousViewKey !== viewKey) {
     setPreviousViewKey(viewKey)
-    setConsentWorkspaceId(null)
-    setSupport(null)
-    setAddSong(null)
+    setKeepDialogsViewKey(null)
+    if (keepDialogsViewKey !== viewKey) {
+      setConsentWorkspaceId(null)
+      setSupport(null)
+      setAddSong(null)
+    }
+    setReplaceFile(null)
   }
   if (support && support.workspaceId !== workspaceId) setSupport(null)
   if (addSong && (addSong.workspaceId !== workspaceId || !workspaceReady))
     setAddSong(null)
+  if (
+    replaceFile &&
+    (replaceFile.workspaceId !== workspaceId || !workspaceReady)
+  )
+    setReplaceFile(null)
 
   // Reset the dialog's lifetime when its workspace disappears or changes.
   if (consentWorkspaceId !== null && consentWorkspaceId !== workspaceId) {
@@ -159,6 +192,18 @@ export function WorkspacePage({
     addSongReturnFocusRef.current = returnFocus
     setAddSong({ workspaceId, files })
   }
+  function confirmReplaceFile() {
+    if (!replaceFile) return
+    // Focus returns to 파일 바꾸기 if the user cancels the file choice.
+    setAddSong({
+      workspaceId: replaceFile.workspaceId,
+      files: [],
+      replacesSongId: replaceFile.songId,
+      inputKind: songs.find((song) => song.id === replaceFile.songId)
+        ?.inputKind,
+    })
+    setReplaceFile(null)
+  }
   function focusContent() {
     mainContentRef.current?.focus({ preventScroll: true })
   }
@@ -179,16 +224,30 @@ export function WorkspacePage({
     view.name === 'new-section'
       ? (songs.find((song) => song.id === view.songId) ?? null)
       : null
-  const visibleTasks = tasks.filter(
-    (task) => filter === 'all' || task.processingStatus === filter,
+  const visibleTasks = tasks.filter((task) =>
+    filter === 'all'
+      ? true
+      : filter === 'processing'
+        ? isTaskInProgress(task)
+        : task.processingStatus === filter,
   )
+  const newSection = workspaceReady ? newSectionSong : null
+  const consentFeedback = workspaceId &&
+    consentWorkspaceId !== workspaceId &&
+    workspace.consent.errorMessage && (
+      <div className="consent-feedback">
+        <p role="alert">AI 학습 활용: {workspace.consent.errorMessage}</p>
+        <Button compact onClick={openConsent}>
+          AI 학습 활용 다시 선택
+        </Button>
+      </div>
+    )
   const filters = [
     { value: 'all', label: '전체', count: tasks.length },
     {
       value: 'processing',
       label: '진행 중',
-      count: tasks.filter((task) => task.processingStatus === 'processing')
-        .length,
+      count: tasks.filter(isTaskInProgress).length,
     },
     {
       value: 'failed',
@@ -220,6 +279,8 @@ export function WorkspacePage({
         onOpenTask={openTask}
         onSettings={() => go({ name: 'settings' })}
         onAddSong={openAddSong}
+        onOpenNewSection={(songId) => go({ name: 'new-section', songId })}
+        draftSongIds={drafts.editedSongIds}
         onOpenSupport={openSupport}
       />
       <main
@@ -228,28 +289,20 @@ export function WorkspacePage({
         id="workspace-content"
         tabIndex={-1}
       >
-        <header className={styles.topBar}>
-          {view.name === 'task' && workspaceReady && taskDetail.detail ? (
-            <TaskBreadcrumb
-              songName={taskDetail.detail.song.name}
-              current={taskDetail.detail.task.sectionName}
-            />
-          ) : workspaceReady && newSectionSong ? (
-            <TaskBreadcrumb songName={newSectionSong.name} current="새 구간" />
-          ) : (
-            TOP_BAR_LABELS[view.name]
-          )}
-        </header>
-        {workspaceId &&
-          consentWorkspaceId !== workspaceId &&
-          workspace.consent.errorMessage && (
-            <div className="consent-feedback">
-              <p role="alert">AI 학습 활용: {workspace.consent.errorMessage}</p>
-              <Button compact onClick={openConsent}>
-                AI 학습 활용 다시 선택
-              </Button>
-            </div>
-          )}
+        {/* The new-section screen renders its own bar with its actions. */}
+        {!newSection && (
+          <header className={styles.topBar}>
+            {view.name === 'task' && workspaceReady && taskDetail.detail ? (
+              <TaskBreadcrumb
+                songName={taskDetail.detail.song.name}
+                current={taskDetail.detail.task.sectionName}
+              />
+            ) : (
+              TOP_BAR_LABELS[view.name]
+            )}
+          </header>
+        )}
+        {!newSection && consentFeedback}
         {loadState === 'loading' && (
           <LoadingState title="작업을 불러오고 있어요" />
         )}
@@ -304,8 +357,33 @@ export function WorkspacePage({
               />
             </div>
           )}
-        {workspaceReady && newSectionSong && (
-          <NewSectionPlaceholder song={newSectionSong} />
+        {newSection && (
+          <NewSectionScreen
+            key={newSection.id}
+            song={newSection}
+            existingNames={tasks
+              .filter((task) => task.songId === newSection.id)
+              .map((task) => task.sectionName)}
+            form={drafts.form(newSection.id)}
+            onChange={(action) => drafts.dispatch(newSection.id, action)}
+            onCancel={() => {
+              drafts.discard(newSection.id)
+              goHome()
+            }}
+            onReplaceFile={(returnFocus) => {
+              if (!workspaceId) return
+              addSongReturnFocusRef.current = returnFocus
+              setReplaceFile({ workspaceId, songId: newSection.id })
+            }}
+            onSubmit={workspace.createTask}
+            onCreated={(task) => {
+              const taskView = { name: 'task', taskId: task.id } as const
+              drafts.discard(newSection.id)
+              setKeepDialogsViewKey(workspaceViewKey(taskView))
+              go(taskView)
+            }}
+            notice={consentFeedback}
+          />
         )}
         {workspaceReady && view.name === 'task' && (
           <TaskPanel
@@ -392,12 +470,25 @@ export function WorkspacePage({
           fallbackFocusRef={mainContentRef}
         />
       )}
+      {replaceFile && replaceFile.workspaceId === workspaceId && (
+        <ReplaceFileDialog
+          onConfirm={confirmReplaceFile}
+          onClose={() => setReplaceFile(null)}
+          returnFocusRef={addSongReturnFocusRef}
+          fallbackFocusRef={mainContentRef}
+        />
+      )}
       {addSong && addSong.workspaceId === workspaceId && workspaceReady && (
         <AddSongDialog
+          title={addSong.replacesSongId ? '파일 바꾸기' : undefined}
           probeDuration={probeDuration}
           initialFiles={addSong.files}
+          initialInputKind={addSong.inputKind}
           onSubmit={workspace.addSong}
           onAdded={(song) => {
+            // The draft follows the new file; its range and part start over.
+            if (addSong.replacesSongId)
+              drafts.replaceFile(addSong.replacesSongId, song.id)
             setAddSong(null)
             go({ name: 'new-section', songId: song.id })
           }}
