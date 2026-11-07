@@ -1,11 +1,19 @@
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import {
+  MediaDurationError,
+  type MediaDurationProbe,
+} from '../../src/features/add-song/mediaDuration.ts'
+import { songNameFromFileName } from '../../src/features/add-song/songFile.ts'
 import { WorkspacePage } from '../../src/features/workspace/WorkspacePage.tsx'
 import { createMockWorkspaceRepository } from '../../src/features/workspace/mockRepository.ts'
 import type {
+  NewSongInput,
   SavedConsentChoice,
+  SongInputKind,
   TaskDetail,
   WorkspaceSnapshot,
+  WorkspaceSong,
 } from '../../src/features/workspace/model.ts'
 import {
   WorkspaceRepositoryError,
@@ -26,6 +34,17 @@ interface TestControls {
   resolveTask(taskId: string): void
   failTask(taskId: string, code: 'load-failed' | 'task-unavailable'): void
   taskCalls(): string[]
+  // pending-add keeps addSong requests open until settled here.
+  resolveAdd(): void
+  failAdd(code: 'add-song-failed' | 'expired'): void
+  addCalls(): Array<{
+    fileName: string
+    inputKind: SongInputKind
+    durationSeconds: number
+  }>
+  // slow.mp3 duration reads stay pending until resolved here.
+  resolveProbe(seconds: number): void
+  probeCalls(): string[]
 }
 
 declare global {
@@ -41,6 +60,7 @@ const fixture = await createMockWorkspaceRepository().loadWorkspace(
   new AbortController().signal,
 )
 // odd-task-id: a repository id outside the URL allowlist.
+// empty: a workspace without songs or tasks.
 const snapshot: WorkspaceSnapshot =
   scenario === 'odd-task-id'
     ? {
@@ -49,7 +69,9 @@ const snapshot: WorkspaceSnapshot =
           task.id === 'task-verse' ? { ...task, id: 'Task_Verse' } : task,
         ),
       }
-    : fixture
+    : scenario === 'empty'
+      ? { ...fixture, songs: [], tasks: [] }
+      : fixture
 const pendingLoads: Array<(snapshot: WorkspaceSnapshot) => void> = []
 let saveCalls = 0
 const taskCalls: string[] = []
@@ -76,6 +98,52 @@ function settleTask(
       settle(pendingTasks.splice(index, 1)[0])
   }
 }
+// Durations by file name; unknown names are unreadable. Decoding is faked
+// because Playwright's Chromium may lack MP4 codecs (see real-probe tests).
+const PROBE_OUTCOMES: Record<string, number | 'error' | 'pending'> = {
+  'neon_harbor_live.mp3': 252.4,
+  'fresh_riff.mp3': 140.2,
+  'late_train_cover.mp4': 238,
+  'long_jam_take3.mp4': 391,
+  'broken.mp3': 'error',
+  'slow.mp3': 'pending',
+}
+const probeCalls: string[] = []
+const pendingProbes: Array<(seconds: number) => void> = []
+// Ignores AbortSignal so late results exercise stale-result protection.
+const fakeProbe: MediaDurationProbe = (file) => {
+  const name = file instanceof File ? file.name : ''
+  probeCalls.push(name)
+  const outcome = PROBE_OUTCOMES[name]
+  if (outcome === 'pending')
+    return new Promise((resolve) => pendingProbes.push(resolve))
+  if (typeof outcome === 'number') return Promise.resolve(outcome)
+  return Promise.reject(new MediaDurationError('unreadable'))
+}
+
+const addCalls: Array<{
+  fileName: string
+  inputKind: SongInputKind
+  durationSeconds: number
+}> = []
+const pendingAdds: Array<{
+  input: NewSongInput
+  resolve: (song: WorkspaceSong) => void
+  reject: (error: Error) => void
+}> = []
+let addedSongs = 0
+
+function addedSong(input: NewSongInput): WorkspaceSong {
+  addedSongs += 1
+  return {
+    id: `song-added-${addedSongs}`,
+    name: songNameFromFileName(input.file.name),
+    fileName: input.file.name,
+    inputKind: input.inputKind,
+    durationSeconds: input.durationSeconds,
+  }
+}
+
 let pendingSave:
   | {
       choice: SavedConsentChoice
@@ -116,6 +184,19 @@ const repository: WorkspaceRepository = {
           new WorkspaceRepositoryError('task-unavailable', 'Unavailable'),
         )
   },
+  addSong(input) {
+    addCalls.push({
+      fileName: input.file.name,
+      inputKind: input.inputKind,
+      durationSeconds: input.durationSeconds,
+    })
+    if (scenario === 'pending-add') {
+      return new Promise((resolve, reject) =>
+        pendingAdds.push({ input, resolve, reject }),
+      )
+    }
+    return Promise.resolve(addedSong(input))
+  },
 }
 
 const secondRepository: WorkspaceRepository = {
@@ -136,6 +217,10 @@ const secondRepository: WorkspaceRepository = {
   loadTask: () =>
     Promise.reject(
       new WorkspaceRepositoryError('task-unavailable', 'Unavailable'),
+    ),
+  addSong: () =>
+    Promise.reject(
+      new WorkspaceRepositoryError('add-song-failed', 'Unavailable'),
     ),
 }
 
@@ -170,6 +255,23 @@ window.workspaceTest = {
     )
   },
   taskCalls: () => [...taskCalls],
+  resolveAdd() {
+    pendingAdds
+      .splice(0)
+      .forEach(({ input, resolve }) => resolve(addedSong(input)))
+  },
+  failAdd(code) {
+    pendingAdds
+      .splice(0)
+      .forEach(({ reject }) =>
+        reject(new WorkspaceRepositoryError(code, 'Add failed')),
+      )
+  },
+  addCalls: () => addCalls.map((call) => ({ ...call })),
+  resolveProbe(seconds) {
+    pendingProbes.splice(0).forEach((resolve) => resolve(seconds))
+  },
+  probeCalls: () => [...probeCalls],
 }
 
 export function Harness() {
@@ -185,7 +287,13 @@ export function Harness() {
     }
   }, [workspace])
 
-  return <WorkspacePage workspace={workspace} repository={activeRepository} />
+  return (
+    <WorkspacePage
+      workspace={workspace}
+      repository={activeRepository}
+      probeDuration={scenario === 'real-probe' ? undefined : fakeProbe}
+    />
+  )
 }
 
 createRoot(document.getElementById('root')!).render(

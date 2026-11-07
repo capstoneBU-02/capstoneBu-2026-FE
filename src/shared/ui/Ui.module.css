@@ -30,6 +30,11 @@
   color: var(--ink-primary);
 }
 
+.ghost {
+  background: transparent;
+  color: var(--ink-primary);
+}
+
 .button:not(:disabled, [aria-disabled='true']):hover {
   filter: brightness(0.97);
 }

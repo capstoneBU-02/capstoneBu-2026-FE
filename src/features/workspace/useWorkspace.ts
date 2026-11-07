@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type {
   ConsentChoice,
   DemoScenario,
+  NewSongInput,
   SavedConsentChoice,
   WorkspaceInfo,
   WorkspaceSnapshot,
@@ -21,6 +22,10 @@ interface ConsentState {
   readonly errorMessage: string | null
 }
 
+export type AddSongResult =
+  | { readonly status: 'added'; readonly song: WorkspaceSong }
+  | { readonly status: 'failed' | 'expired' | 'cancelled' }
+
 export interface UseWorkspaceResult {
   readonly loadState: WorkspaceLoadState
   readonly workspace: WorkspaceInfo | null
@@ -34,6 +39,8 @@ export interface UseWorkspaceResult {
   markExpired(): void
   clearConsentError(): void
   saveConsent(choice: SavedConsentChoice): Promise<boolean>
+  // The caller's signal cancels the request, e.g. when its dialog unmounts.
+  addSong(input: NewSongInput, signal: AbortSignal): Promise<AddSongResult>
 }
 
 interface WorkspaceState {
@@ -80,6 +87,7 @@ export function useWorkspace(
   })
   const generation = useRef(0)
   const consentController = useRef<AbortController | null>(null)
+  const addSongController = useRef<AbortController | null>(null)
   // A changed request hides previous workspace data during the render itself.
   const isCurrentRequest =
     state.repository === repository && state.loadVersion === loadVersion
@@ -93,6 +101,8 @@ export function useWorkspace(
 
     consentController.current?.abort()
     consentController.current = null
+    addSongController.current?.abort()
+    addSongController.current = null
 
     repository.loadWorkspace(controller.signal).then(
       (nextSnapshot) => {
@@ -142,6 +152,7 @@ export function useWorkspace(
     return () => {
       controller.abort()
       consentController.current?.abort()
+      addSongController.current?.abort()
     }
   }, [repository, loadVersion])
 
@@ -213,9 +224,65 @@ export function useWorkspace(
     }
   }
 
+  async function addSong(
+    input: NewSongInput,
+    signal: AbortSignal,
+  ): Promise<AddSongResult> {
+    if (
+      !snapshot ||
+      (loadState !== 'success' && loadState !== 'empty') ||
+      addSongController.current ||
+      signal.aborted
+    ) {
+      return { status: 'cancelled' }
+    }
+
+    const controller = new AbortController()
+    const currentGeneration = generation.current
+    const cancel = () => controller.abort()
+    addSongController.current = controller
+    signal.addEventListener('abort', cancel, { once: true })
+    const isStale = () =>
+      controller.signal.aborted || currentGeneration !== generation.current
+
+    try {
+      const song = await repository.addSong(input, controller.signal)
+      if (isStale()) return { status: 'cancelled' }
+      setState((previous) =>
+        previous.snapshot
+          ? {
+              ...previous,
+              snapshot: {
+                ...previous.snapshot,
+                songs: [...previous.snapshot.songs, song],
+              },
+            }
+          : previous,
+      )
+      return { status: 'added', song }
+    } catch (error) {
+      if (isStale()) return { status: 'cancelled' }
+      if (
+        error instanceof WorkspaceRepositoryError &&
+        error.code === 'expired'
+      ) {
+        markExpired()
+        return { status: 'expired' }
+      }
+      return { status: 'failed' }
+    } finally {
+      signal.removeEventListener('abort', cancel)
+      if (addSongController.current === controller) {
+        addSongController.current = null
+      }
+    }
+  }
+
   function markExpired() {
     consentController.current?.abort()
     consentController.current = null
+    addSongController.current?.abort()
+    addSongController.current = null
     setState(expiredState)
   }
 
@@ -246,5 +313,6 @@ export function useWorkspace(
     markExpired,
     clearConsentError,
     saveConsent,
+    addSong,
   }
 }

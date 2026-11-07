@@ -6,25 +6,33 @@ export type WorkspaceView =
   | { readonly name: 'task'; readonly taskId: string }
   | { readonly name: 'task-not-found' }
   | { readonly name: 'task-inaccessible' }
+  | { readonly name: 'new-section'; readonly songId: string }
+  | { readonly name: 'song-not-found' }
 
 export const WORKSPACE_SCOPE_KEY = 'earmarkWorkspaceScope'
 
 const HOME_VIEW: WorkspaceView = { name: 'home' }
 const TASK_NOT_FOUND_VIEW: WorkspaceView = { name: 'task-not-found' }
+const SONG_NOT_FOUND_VIEW: WorkspaceView = { name: 'song-not-found' }
 // Opaque mock/API ids: lowercase letters, digits and inner hyphens only. Any
 // other shape is never sent to the repository or written back to the URL.
-const TASK_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
+const RESOURCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export function isTaskId(value: unknown): value is string {
-  return typeof value === 'string' && TASK_ID_PATTERN.test(value)
+  return typeof value === 'string' && RESOURCE_ID_PATTERN.test(value)
+}
+
+export function isSongId(value: unknown): value is string {
+  return typeof value === 'string' && RESOURCE_ID_PATTERN.test(value)
 }
 
 // Views pushed by the app follow the same id rule as views read from a URL,
 // so the rendered view, the repository request and the URL never disagree.
 export function canonicalWorkspaceView(view: WorkspaceView): WorkspaceView {
-  return view.name === 'task' && !isTaskId(view.taskId)
-    ? TASK_NOT_FOUND_VIEW
-    : view
+  if (view.name === 'task' && !isTaskId(view.taskId)) return TASK_NOT_FOUND_VIEW
+  if (view.name === 'new-section' && !isSongId(view.songId))
+    return SONG_NOT_FOUND_VIEW
+  return view
 }
 
 export function readWorkspaceView(search: string): WorkspaceView {
@@ -34,10 +42,17 @@ export function readWorkspaceView(search: string): WorkspaceView {
     case 'settings':
     case 'task-not-found':
     case 'task-inaccessible':
+    case 'song-not-found':
       return { name: view }
     case 'task': {
       const taskId = params.get('task')
       return isTaskId(taskId) ? { name: 'task', taskId } : TASK_NOT_FOUND_VIEW
+    }
+    case 'new-section': {
+      const songId = params.get('song')
+      return isSongId(songId)
+        ? { name: 'new-section', songId }
+        : SONG_NOT_FOUND_VIEW
     }
     default:
       return HOME_VIEW
@@ -45,7 +60,9 @@ export function readWorkspaceView(search: string): WorkspaceView {
 }
 
 export function workspaceViewKey(view: WorkspaceView): string {
-  return view.name === 'task' ? `task:${view.taskId}` : view.name
+  if (view.name === 'task') return `task:${view.taskId}`
+  if (view.name === 'new-section') return `new-section:${view.songId}`
+  return view.name
 }
 
 export function hasWorkspaceScope(state: unknown, scope?: string): boolean {
@@ -80,6 +97,9 @@ export function workspaceUrl(
   if (canonical.name === 'task') {
     params.set('view', 'task')
     params.set('task', canonical.taskId)
+  } else if (canonical.name === 'new-section') {
+    params.set('view', 'new-section')
+    params.set('song', canonical.songId)
   } else if (canonical.name !== 'home') {
     params.set('view', canonical.name)
   }

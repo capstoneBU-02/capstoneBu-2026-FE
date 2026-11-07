@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   canonicalWorkspaceView,
+  isSongId,
   isTaskId,
   readWorkspaceView,
   scopedWorkspaceView,
@@ -14,6 +15,7 @@ import {
 const home = { name: 'home' }
 const settings = { name: 'settings' }
 const notFound = { name: 'task-not-found' }
+const songNotFound = { name: 'song-not-found' }
 
 test('workspace navigation is allowlisted and never derives a workspace from arbitrary input', () => {
   for (const name of ['settings', 'task-not-found', 'task-inaccessible']) {
@@ -162,4 +164,46 @@ test('URL normalization preserves allowed selectors when URLSearchParams.size is
   } finally {
     if (size) Object.defineProperty(URLSearchParams.prototype, 'size', size)
   }
+})
+
+test('the new-section view carries only an allowlisted song id', () => {
+  assert.deepEqual(readWorkspaceView('?view=new-section&song=song-upload-1'), {
+    name: 'new-section',
+    songId: 'song-upload-1',
+  })
+  assert.deepEqual(readWorkspaceView('?view=song-not-found'), songNotFound)
+  for (const search of [
+    '?view=new-section',
+    '?view=new-section&song=',
+    '?view=new-section&song=../task',
+    '?view=new-section&song=Song_Upload',
+    '?view=new-section&task=task-verse',
+  ]) {
+    assert.deepEqual(readWorkspaceView(search), songNotFound, search)
+  }
+  assert.equal(isSongId('song-neon-harbor'), true)
+  assert.equal(isSongId('Song'), false)
+
+  const section = { name: 'new-section', songId: 'song-neon-harbor' }
+  assert.equal(canonicalWorkspaceView(section), section)
+  assert.deepEqual(
+    canonicalWorkspaceView({ name: 'new-section', songId: 'Song_Upload' }),
+    songNotFound,
+  )
+  assert.notEqual(
+    workspaceViewKey(section),
+    workspaceViewKey({ name: 'new-section', songId: 'song-paper-moon' }),
+  )
+  assert.notEqual(
+    workspaceViewKey({ name: 'task', taskId: 'same-id' }),
+    workspaceViewKey({ name: 'new-section', songId: 'same-id' }),
+  )
+  assert.equal(
+    workspaceUrl('/', '?demo=workspace&task=old&view=task', section),
+    '/?demo=workspace&view=new-section&song=song-neon-harbor',
+  )
+  assert.equal(
+    workspaceUrl('/', '', { name: 'new-section', songId: '../private' }),
+    '/?view=song-not-found',
+  )
 })
