@@ -436,6 +436,12 @@ for (const width of [390, 320]) {
   }) => {
     await page.setViewportSize({ width, height: 720 })
     await openNewSection(page)
+    // 00:00.0 needs a colon, which numeric, decimal and tel keypads lack.
+    for (const input of [startInput(page), endInput(page)])
+      await expect(input).not.toHaveAttribute(
+        'inputmode',
+        /^(numeric|decimal|tel)$/,
+      )
     await fillRange(page, '00:42.1', '01:12.2')
     await expect(form(page).getByText(TOO_LONG)).toBeVisible()
     expect(

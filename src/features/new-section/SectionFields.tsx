@@ -59,8 +59,9 @@ function TimeField({
         ref={ref}
         id={inputId}
         className={styles.timeInput}
+        // No inputMode: numeric and decimal phone keypads have no colon,
+        // and 00:00.0 needs one.
         type="text"
-        inputMode="decimal"
         autoComplete="off"
         spellCheck={false}
         placeholder="00:00.0"
