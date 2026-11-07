@@ -147,8 +147,16 @@ export function AddSongDialog({
       className={pageStyles.dialog}
       aria-labelledby={titleId}
       onClose={(event) => {
+        const dialog = event.currentTarget
         // Ignore a queued close from StrictMode cleanup after showModal reruns.
-        if (!event.currentTarget.open) onClose()
+        if (dialog.open) return
+        // Chrome closes the modal on a repeated Escape even though cancel is
+        // prevented, so an add in flight reopens it instead of being dropped.
+        if (submittingRef.current) {
+          dialog.showModal()
+          return
+        }
+        onClose()
       }}
       onCancel={(event) => {
         // A cancelled file chooser fires a bubbling cancel on its input.
