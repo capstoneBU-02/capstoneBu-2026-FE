@@ -2,13 +2,13 @@ import { useRef, type KeyboardEvent, type PointerEvent } from 'react'
 import { formatSectionTime } from '../new-section/sectionTime.ts'
 import type { WaveformPeaks } from './peaks.ts'
 import {
-  dragIntent,
   keyboardRange,
   moveHandle,
   nearestHandle,
   ratioToTime,
   shiftRange,
   spanFrom,
+  startsDrag,
   timeToRatio,
   type RangeHandle,
   type SectionRange,
@@ -177,19 +177,17 @@ export function RangeTrack({
         emit(moveHandle(range, drag.handle, tenths - drag.offset, songTenths))
       return
     }
-    if (!drag.moved) {
-      const intent = dragIntent(
+    // A finger heading up or down is left to the browser. If the page scrolls,
+    // pointercancel ends the press; if not, it may still turn sideways.
+    if (
+      !drag.moved &&
+      !startsDrag(
         event.clientX - drag.startX,
         event.clientY - drag.startY,
         drag.mayScroll,
       )
-      if (intent === 'pending') return
-      if (intent === 'scroll') {
-        // The page scrolls; the range stays as it was.
-        stopDrag()
-        return
-      }
-    }
+    )
+      return
     dragRef.current = { ...drag, moved: true }
     emit(
       drag.kind === 'move' && drag.origin
@@ -203,7 +201,8 @@ export function RangeTrack({
     if (event.pointerId !== drag?.pointerId) return
     // The browser took the gesture over, so the drag never happened. A span
     // started on an empty track has nothing to go back to and stays.
-    if (event.type === 'pointercancel' && drag.origin) emit(drag.origin)
+    if (event.type === 'pointercancel' && drag.origin && !disabled)
+      emit(drag.origin)
     stopDrag()
   }
 

@@ -6,7 +6,6 @@ import {
   peakBars,
 } from '../src/features/waveform/peaks.ts'
 import {
-  dragIntent,
   formatTickLabel,
   keyboardRange,
   labelSteps,
@@ -16,6 +15,7 @@ import {
   ratioToTime,
   shiftRange,
   spanFrom,
+  startsDrag,
   tickTimes,
   timeToRatio,
   zoomWindow,
@@ -289,18 +289,24 @@ test('a press on overlapping handles takes the closer boundary', () => {
 })
 
 test('a mouse drags once it travels 3 px sideways', () => {
-  assert.equal(dragIntent(2, 0, false), 'pending')
-  assert.equal(dragIntent(-3, 0, false), 'drag')
+  assert.equal(startsDrag(2, 0, false), false)
+  assert.equal(startsDrag(-3, 0, false), true)
   // A mouse never scrolls the page, so only the sideways travel counts.
-  assert.equal(dragIntent(1, 40, false), 'pending')
+  assert.equal(startsDrag(1, 40, false), false)
 })
 
-test('a finger heading up or down is left to scroll the page', () => {
-  assert.equal(dragIntent(1, 2, true), 'pending')
-  assert.equal(dragIntent(4, 1, true), 'drag')
-  assert.equal(dragIntent(-4, -1, true), 'drag')
-  assert.equal(dragIntent(1, 3, true), 'scroll')
-  assert.equal(dragIntent(1, -6, true), 'scroll')
-  // A diagonal is not clearly sideways, so the page keeps it.
-  assert.equal(dragIntent(3, 3, true), 'scroll')
+test('a finger drags only while heading more sideways than up or down', () => {
+  assert.equal(startsDrag(1, 2, true), false)
+  assert.equal(startsDrag(4, 1, true), true)
+  assert.equal(startsDrag(-4, -1, true), true)
+  assert.equal(startsDrag(1, 3, true), false)
+  assert.equal(startsDrag(1, -6, true), false)
+  // A diagonal is not clearly sideways, so the page may still take it.
+  assert.equal(startsDrag(3, 3, true), false)
+})
+
+test('a finger that wobbles up first can still turn sideways into a drag', () => {
+  // The first move says nothing yet; the travel so far decides each time.
+  assert.equal(startsDrag(1, -3, true), false)
+  assert.equal(startsDrag(7, -4, true), true)
 })

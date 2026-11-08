@@ -419,70 +419,142 @@ test.describe('on a touch screen', () => {
     isMobile: true,
   })
 
+  type Point = { x: number; y: number }
   const canvas = (page: Page) => overview(page).locator('canvas')
 
-  // Real touch input, so the browser decides whether the page scrolls.
-  async function swipe(
-    page: Page,
-    from: { x: number; y: number },
-    step: { x: number; y: number },
-    steps = 12,
-  ) {
+  // The same step on every move.
+  const steady = (step: Point, steps = 12): Point[] =>
+    Array.from({ length: steps }, (_, index) => ({
+      x: step.x * (index + 1),
+      y: step.y * (index + 1),
+    }))
+
+  // Real touch input, so the browser decides whether the page scrolls. Each
+  // offset is measured from where the finger went down.
+  async function swipe(page: Page, from: Point, offsets: Point[]) {
     const client = await page.context().newCDPSession(page)
     const touch = (
       type: 'touchStart' | 'touchMove' | 'touchEnd',
-      point?: { x: number; y: number },
+      point?: Point,
     ) =>
       client.send('Input.dispatchTouchEvent', {
         type,
         touchPoints: point ? [point] : [],
       })
     await touch('touchStart', from)
-    for (let index = 1; index <= steps; index += 1) {
-      await touch('touchMove', {
-        x: from.x + step.x * index,
-        y: from.y + step.y * index,
-      })
+    for (const offset of offsets) {
+      await touch('touchMove', { x: from.x + offset.x, y: from.y + offset.y })
       await page.waitForTimeout(16)
     }
     await touch('touchEnd')
   }
 
+  async function openOnTouch(page: Page) {
+    await openNewSection(page)
+    await waitForWaveform(page)
+  }
+
+  async function scrollY(page: Page) {
+    return page.evaluate(() => window.scrollY)
+  }
+
+  const at = (page: Page, time: number) =>
+    trackPoint(canvas(page), time / SONG_SECONDS)
+
   test('a finger scrolling over the waveform keeps the range', async ({
     page,
   }) => {
-    await openNewSection(page)
-    await waitForWaveform(page)
+    await openOnTouch(page)
     await fillRange(page, '01:40.0', '01:50.0')
     await canvas(page).scrollIntoViewIfNeeded()
-    const before = await page.evaluate(() => window.scrollY)
+    const before = await scrollY(page)
 
     // About 18° off vertical: a little sideways on every step.
-    const from = await trackPoint(canvas(page), 30 / SONG_SECONDS)
-    await swipe(page, from, { x: 2, y: -6 })
+    await swipe(page, await at(page, 30), steady({ x: 2, y: -6 }))
 
-    await expect
-      .poll(() => page.evaluate(() => window.scrollY))
-      .toBeGreaterThan(before)
+    await expect.poll(() => scrollY(page)).toBeGreaterThan(before)
     await expect(startInput(page)).toHaveValue('01:40.0')
     await expect(endInput(page)).toHaveValue('01:50.0')
   })
 
+  test('a finger scrolling over an empty waveform leaves no range', async ({
+    page,
+  }) => {
+    await openOnTouch(page)
+    await canvas(page).scrollIntoViewIfNeeded()
+    const before = await scrollY(page)
+
+    await swipe(page, await at(page, 30), steady({ x: 2, y: -6 }))
+
+    await expect.poll(() => scrollY(page)).toBeGreaterThan(before)
+    await expect(startInput(page)).toHaveValue('')
+    await expect(endInput(page)).toHaveValue('')
+  })
+
   test('a sideways finger still selects a range', async ({ page }) => {
-    await openNewSection(page)
-    await waitForWaveform(page)
+    await openOnTouch(page)
     await canvas(page).scrollIntoViewIfNeeded()
     const secondsPerPixel =
       SONG_SECONDS / (await canvas(page).boundingBox())!.width
 
-    const from = await trackPoint(canvas(page), 100 / SONG_SECONDS)
-    await swipe(page, from, { x: 3, y: 0 })
+    await swipe(page, await at(page, 100), steady({ x: 3, y: 0 }))
 
     await expectRangeNear(
       page,
       { start: 100, end: 100 + 36 * secondsPerPixel },
       1,
     )
+    await expectInSync(page)
+  })
+
+  test('a finger that wobbles up before heading sideways selects a range', async ({
+    page,
+  }) => {
+    await openOnTouch(page)
+    await fillRange(page, '01:40.0', '01:50.0')
+    await canvas(page).scrollIntoViewIfNeeded()
+    const before = await scrollY(page)
+    const secondsPerPixel =
+      SONG_SECONDS / (await canvas(page).boundingBox())!.width
+
+    // Up a little first, then clearly sideways for 49 px.
+    await swipe(page, await at(page, 30), [
+      { x: 1, y: -3 },
+      ...steady({ x: 6, y: -1 }, 8).map(({ x, y }) => ({
+        x: x + 1,
+        y: y - 3,
+      })),
+    ])
+
+    await expectRangeNear(
+      page,
+      { start: 30, end: 30 + 49 * secondsPerPixel },
+      1,
+    )
+    await expectInSync(page)
+    expect(await scrollY(page)).toBe(before)
+  })
+
+  test('a finger that turns to scroll after a sideways start keeps the range', async ({
+    page,
+  }) => {
+    await openOnTouch(page)
+    await fillRange(page, '01:40.0', '01:50.0')
+    await canvas(page).scrollIntoViewIfNeeded()
+    const before = await scrollY(page)
+
+    // Sideways for a moment, so the drag starts, then up the page.
+    await swipe(page, await at(page, 30), [
+      { x: 4, y: -1 },
+      ...steady({ x: 1, y: -6 }, 10).map(({ x, y }) => ({
+        x: x + 4,
+        y: y - 1,
+      })),
+    ])
+
+    await expect.poll(() => scrollY(page)).toBeGreaterThan(before)
+    await expect(startInput(page)).toHaveValue('01:40.0')
+    await expect(endInput(page)).toHaveValue('01:50.0')
     await expectInSync(page)
   })
 })

@@ -191,19 +191,12 @@ export function nearestHandle(
 // A press that travels less than this is a click, not a drag.
 const DRAG_THRESHOLD_PX = 3
 
-export type DragIntent = 'pending' | 'drag' | 'scroll'
-
-// What a press on the overview turns into once it starts to travel. A mouse
-// only drags. A finger or pen may also scroll the page (the track allows
-// pan-y), so one that is not clearly heading sideways is left to the browser.
-export function dragIntent(
-  dx: number,
-  dy: number,
-  mayScroll: boolean,
-): DragIntent {
+// Whether a press on the overview has travelled far enough to become a drag.
+// A mouse drags once it moves sideways. A finger or pen may be scrolling the
+// page instead (the track allows pan-y), so it drags only while heading more
+// sideways than up or down. Until then the browser may still take it over.
+export function startsDrag(dx: number, dy: number, mayScroll: boolean) {
   const sideways = Math.abs(dx)
-  if (!mayScroll) return sideways < DRAG_THRESHOLD_PX ? 'pending' : 'drag'
-  const upright = Math.abs(dy)
-  if (Math.max(sideways, upright) < DRAG_THRESHOLD_PX) return 'pending'
-  return sideways > upright ? 'drag' : 'scroll'
+  if (sideways < DRAG_THRESHOLD_PX) return false
+  return !mayScroll || sideways > Math.abs(dy)
 }
