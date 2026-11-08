@@ -367,3 +367,122 @@ test('an expired session while loading the audio ends the workspace', async ({
   ).toBeVisible()
   await expect(form(page)).toHaveCount(0)
 })
+
+test('a typed range turns red only once the length message shows', async ({
+  page,
+}) => {
+  await openNewSection(page)
+  await waitForWaveform(page)
+  const selection = overview(page).locator('[data-over]').first()
+
+  await startInput(page).fill('00:10.0')
+  await startInput(page).press('Tab')
+  await endInput(page).fill('00:50.0')
+  // The end is still being typed, so neither the message nor the red shows.
+  await expect(selection).toHaveAttribute('data-over', 'false')
+  await expect(form(page).getByText(TOO_LONG)).toHaveCount(0)
+
+  await endInput(page).press('Tab')
+  await expect(form(page).getByText(TOO_LONG)).toBeVisible()
+  await expect(selection).toHaveAttribute('data-over', 'true')
+})
+
+test('a drag the browser cancels puts the range back', async ({ page }) => {
+  await openNewSection(page)
+  await waitForWaveform(page)
+  await fillRange(page, '01:40.0', '01:50.0')
+  const at = (time: number) => trackPoint(overview(page), time / SONG_SECONDS)
+
+  const from = await at(105)
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  const to = await at(130)
+  await page.mouse.move(to.x, to.y, { steps: 4 })
+  await expectRangeNear(page, { start: 125, end: 135 })
+
+  // Chrome gives the mouse pointer id 1.
+  await overview(page).locator('canvas').dispatchEvent('pointercancel', {
+    pointerId: 1,
+    pointerType: 'mouse',
+    isPrimary: true,
+  })
+  await expect(startInput(page)).toHaveValue('01:40.0')
+  await expect(endInput(page)).toHaveValue('01:50.0')
+  await page.mouse.up()
+  await expect(startInput(page)).toHaveValue('01:40.0')
+})
+
+test.describe('on a touch screen', () => {
+  test.use({
+    viewport: { width: 390, height: 500 },
+    hasTouch: true,
+    isMobile: true,
+  })
+
+  const canvas = (page: Page) => overview(page).locator('canvas')
+
+  // Real touch input, so the browser decides whether the page scrolls.
+  async function swipe(
+    page: Page,
+    from: { x: number; y: number },
+    step: { x: number; y: number },
+    steps = 12,
+  ) {
+    const client = await page.context().newCDPSession(page)
+    const touch = (
+      type: 'touchStart' | 'touchMove' | 'touchEnd',
+      point?: { x: number; y: number },
+    ) =>
+      client.send('Input.dispatchTouchEvent', {
+        type,
+        touchPoints: point ? [point] : [],
+      })
+    await touch('touchStart', from)
+    for (let index = 1; index <= steps; index += 1) {
+      await touch('touchMove', {
+        x: from.x + step.x * index,
+        y: from.y + step.y * index,
+      })
+      await page.waitForTimeout(16)
+    }
+    await touch('touchEnd')
+  }
+
+  test('a finger scrolling over the waveform keeps the range', async ({
+    page,
+  }) => {
+    await openNewSection(page)
+    await waitForWaveform(page)
+    await fillRange(page, '01:40.0', '01:50.0')
+    await canvas(page).scrollIntoViewIfNeeded()
+    const before = await page.evaluate(() => window.scrollY)
+
+    // About 18° off vertical: a little sideways on every step.
+    const from = await trackPoint(canvas(page), 30 / SONG_SECONDS)
+    await swipe(page, from, { x: 2, y: -6 })
+
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(before)
+    await expect(startInput(page)).toHaveValue('01:40.0')
+    await expect(endInput(page)).toHaveValue('01:50.0')
+  })
+
+  test('a sideways finger still selects a range', async ({ page }) => {
+    await openNewSection(page)
+    await waitForWaveform(page)
+    await canvas(page).scrollIntoViewIfNeeded()
+    const secondsPerPixel =
+      SONG_SECONDS / (await canvas(page).boundingBox())!.width
+
+    const from = await trackPoint(canvas(page), 100 / SONG_SECONDS)
+    await swipe(page, from, { x: 3, y: 0 })
+
+    await expectRangeNear(
+      page,
+      { start: 100, end: 100 + 36 * secondsPerPixel },
+      1,
+    )
+    await expectInSync(page)
+  })
+})

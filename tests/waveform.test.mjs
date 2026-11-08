@@ -6,6 +6,7 @@ import {
   peakBars,
 } from '../src/features/waveform/peaks.ts'
 import {
+  dragIntent,
   formatTickLabel,
   keyboardRange,
   labelSteps,
@@ -285,4 +286,21 @@ test('a press on overlapping handles takes the closer boundary', () => {
   // Halfway between, the handle the pointer landed on keeps it.
   assert.equal(nearestHandle(range, 1005, 'end'), 'end')
   assert.equal(nearestHandle(range, 1005, 'start'), 'start')
+})
+
+test('a mouse drags once it travels 3 px sideways', () => {
+  assert.equal(dragIntent(2, 0, false), 'pending')
+  assert.equal(dragIntent(-3, 0, false), 'drag')
+  // A mouse never scrolls the page, so only the sideways travel counts.
+  assert.equal(dragIntent(1, 40, false), 'pending')
+})
+
+test('a finger heading up or down is left to scroll the page', () => {
+  assert.equal(dragIntent(1, 2, true), 'pending')
+  assert.equal(dragIntent(4, 1, true), 'drag')
+  assert.equal(dragIntent(-4, -1, true), 'drag')
+  assert.equal(dragIntent(1, 3, true), 'scroll')
+  assert.equal(dragIntent(1, -6, true), 'scroll')
+  // A diagonal is not clearly sideways, so the page keeps it.
+  assert.equal(dragIntent(3, 3, true), 'scroll')
 })
