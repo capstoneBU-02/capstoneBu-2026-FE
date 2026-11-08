@@ -1,0 +1,223 @@
+/* Stays in view at the bottom of the main column while the page scrolls. */
+.bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  flex-shrink: 0;
+  background: var(--console-base);
+  color: var(--console-text);
+  /* The layout follows the main column, whose width the sidebar decides. */
+  container-type: inline-size;
+}
+
+/* Scrolling to a focused field leaves it clear of the bar. */
+:global(html):has(.bar) {
+  scroll-padding-bottom: calc(80px + env(safe-area-inset-bottom));
+}
+
+.row {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 24px max(8px, env(safe-area-inset-bottom));
+}
+
+.transport {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.iconButton,
+.play {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.iconButton {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--console-muted);
+}
+
+.iconButton:hover {
+  background: var(--console-raised);
+  color: var(--console-text);
+}
+
+.repeat[aria-pressed='true'] {
+  color: var(--accent-default);
+}
+
+/* A dot marks repeat as on, so the state does not rest on color alone. */
+.repeat[aria-pressed='true']::after {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+  transform: translateX(-50%);
+}
+
+.play {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--console-text);
+  color: var(--console-base);
+}
+
+.play[aria-disabled='true'],
+.iconButton[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.iconButton[aria-disabled='true']:hover {
+  background: transparent;
+  color: var(--console-muted);
+}
+
+.time {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.elapsed {
+  font-size: 24px;
+  line-height: 32px;
+}
+
+.length {
+  color: var(--console-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.output {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.mode {
+  margin-right: 4px;
+  color: var(--console-muted);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.volume {
+  width: 96px;
+  height: 20px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Buttons take the app's accent ring; the default dark one would vanish here. */
+.volume:focus-visible {
+  outline: 2px solid var(--accent-default);
+  outline-offset: 3px;
+}
+
+.volume[data-muted='true'] {
+  opacity: 0.4;
+}
+
+.volume::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--console-text) var(--fill),
+    var(--console-line) var(--fill)
+  );
+}
+
+.volume::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--console-text) var(--fill),
+    var(--console-line) var(--fill)
+  );
+}
+
+.volume::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border: 0;
+  border-radius: 50%;
+  appearance: none;
+  background: var(--console-text);
+}
+
+.volume::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--console-text);
+}
+
+@container (max-width: 680px) {
+  .mode {
+    display: none;
+  }
+}
+
+@container (max-width: 520px) {
+  .row {
+    gap: 12px;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .elapsed {
+    font-size: 20px;
+    line-height: 28px;
+  }
+
+  .volume {
+    width: 64px;
+  }
+}
+
+/* Phones have their own volume keys; muting stays. */
+@container (max-width: 440px) {
+  .volume {
+    display: none;
+  }
+}
+
+@container (max-width: 350px) {
+  .length {
+    display: none;
+  }
+}

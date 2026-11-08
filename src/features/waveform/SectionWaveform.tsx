@@ -2,21 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../shared/ui/Button.tsx'
 import { songLengthTenths } from '../new-section/sectionTime.ts'
 import { RangeTrack, type WaveformSection } from './RangeTrack.tsx'
-import {
-  rangeFromForm,
-  zoomWindow,
-  type SectionRange,
-  type TimeWindow,
-} from './timeline.ts'
+import { zoomWindow, type SectionRange, type TimeWindow } from './timeline.ts'
 import type { SongAudio } from './useSongAudio.ts'
 import styles from './Waveform.module.css'
 
 type Props = {
   songDurationSeconds: number
   audio: SongAudio
-  // The time inputs' text: the waveform and the inputs share one value.
-  start: string
-  end: string
+  // The range the time inputs hold; null while they do not form one.
+  range: SectionRange | null
   // The name the new section will get, shown on the selection.
   label: string
   sections: readonly WaveformSection[]
@@ -37,8 +31,7 @@ const STATUS_TEXT = {
 export function SectionWaveform({
   songDurationSeconds,
   audio,
-  start,
-  end,
+  range,
   label,
   sections,
   over,
@@ -46,7 +39,6 @@ export function SectionWaveform({
   onRange,
 }: Props) {
   const songTenths = songLengthTenths(songDurationSeconds)
-  const range = rangeFromForm(start, end, songTenths)
   // While a zoom handle is dragged the zoom keeps its scale under the pointer.
   const [frozenZoom, setFrozenZoom] = useState<TimeWindow | null>(null)
   const zoom = range ? (frozenZoom ?? zoomWindow(range, songTenths)) : null

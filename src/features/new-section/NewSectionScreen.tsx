@@ -10,7 +10,9 @@ import { Button } from '../../shared/ui/Button.tsx'
 import { canFocus, restoreFocus } from '../../shared/ui/dialogFocus.ts'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import { formatClockDuration } from '../add-song/songFile.ts'
+import { PlayerBar } from '../player/PlayerBar.tsx'
 import { SectionWaveform } from '../waveform/SectionWaveform.tsx'
+import { rangeFromForm } from '../waveform/timeline.ts'
 import { useSongAudio } from '../waveform/useSongAudio.ts'
 import { TaskBreadcrumb } from '../workspace/components/TaskWorkspace.tsx'
 import taskStyles from '../workspace/components/TaskWorkspace.module.css'
@@ -30,6 +32,7 @@ import {
   type SectionFormAction,
 } from './sectionForm.ts'
 import { SECTION_POLICY } from './sectionPolicy.ts'
+import { songLengthTenths } from './sectionTime.ts'
 import { SectionFields } from './SectionFields.tsx'
 import styles from './NewSection.module.css'
 
@@ -71,6 +74,12 @@ export function NewSectionScreen({
   const existingNames = songTasks.map((task) => task.sectionName)
   const numberText = sectionNumberText(form, existingNames)
   const audio = useSongAudio(song.id, loadAudio, onExpired)
+  // The waveform and the player follow the range the time inputs hold.
+  const range = rangeFromForm(
+    form.start,
+    form.end,
+    songLengthTenths(song.durationSeconds),
+  )
   const formId = useId()
   const titleId = useId()
   const lifetimeRef = useRef<AbortController | null>(null)
@@ -204,8 +213,7 @@ export function NewSectionScreen({
           <SectionWaveform
             songDurationSeconds={song.durationSeconds}
             audio={audio}
-            start={form.start}
-            end={form.end}
+            range={range}
             label={sectionName(form.baseName, numberText)}
             sections={songTasks.map((task) => ({
               id: task.id,
@@ -246,6 +254,10 @@ export function NewSectionScreen({
           </span>
         </form>
       </div>
+      <PlayerBar
+        buffer={audio.state.status === 'ready' ? audio.state.buffer : null}
+        range={range}
+      />
     </>
   )
 }

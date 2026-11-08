@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState } from 'react'
+import { Profiler, StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   MediaDurationError,
@@ -58,6 +58,14 @@ interface TestControls {
   audioCalls(): Array<{ songId: string; aborted: boolean }>
   // audio-error serves playable audio from here on.
   healAudio(): void
+  // The state of every playback output opened so far.
+  audioContexts(): AudioContextState[]
+  // Every sound source started so far, oldest first.
+  audioSources(): Array<{ loop: boolean; loopStart: number; loopEnd: number }>
+  // The latest output's volume; null before the first play.
+  outputGain(): number | null
+  // React commits anywhere in the page since it loaded.
+  commits(): number
 }
 
 declare global {
@@ -200,7 +208,8 @@ function createdTask(input: NewTaskInput): WorkspaceTask {
 }
 
 // Fixture songs play the mock's synthesized demo; added songs play their file.
-// audio-error serves bytes no browser decodes; pending-audio never answers.
+// audio-error serves bytes no browser decodes; pending-audio never answers;
+// short-audio decodes two seconds shorter than the song's listed length.
 const audioCalls: Array<{ songId: string; signal: AbortSignal }> = []
 const sessionFiles = new Map<string, File>()
 let audioBroken = scenario === 'audio-error'
@@ -217,12 +226,42 @@ function songAudio(songId: string, signal: AbortSignal): Promise<Blob> {
   const file = sessionFiles.get(songId)
   if (file) return Promise.resolve(file)
   const song = snapshot.songs.find((candidate) => candidate.id === songId)
+  const decodedSeconds =
+    scenario === 'short-audio' ? (song?.durationSeconds ?? 0) - 2 : undefined
   return song
-    ? createDemoSongAudio(song.id, song.durationSeconds, signal)
+    ? createDemoSongAudio(
+        song.id,
+        decodedSeconds ?? song.durationSeconds,
+        signal,
+      )
     : Promise.reject(
         new WorkspaceRepositoryError('audio-unavailable', 'Unavailable'),
       )
 }
+
+// Records each playback output, its sources and its volume, so tests can
+// check what really plays.
+const audioContexts: AudioContext[] = []
+const audioSources: AudioBufferSourceNode[] = []
+const audioGains: GainNode[] = []
+const NativeAudioContext = window.AudioContext
+window.AudioContext = class RecordedAudioContext extends NativeAudioContext {
+  constructor(options?: AudioContextOptions) {
+    super(options)
+    audioContexts.push(this)
+  }
+  createBufferSource() {
+    const source = super.createBufferSource()
+    audioSources.push(source)
+    return source
+  }
+  createGain() {
+    const gain = super.createGain()
+    audioGains.push(gain)
+    return gain
+  }
+}
+let commits = 0
 
 let pendingSave:
   | {
@@ -397,6 +436,15 @@ window.workspaceTest = {
   healAudio() {
     audioBroken = false
   },
+  audioContexts: () => audioContexts.map((context) => context.state),
+  audioSources: () =>
+    audioSources.map(({ loop, loopStart, loopEnd }) => ({
+      loop,
+      loopStart,
+      loopEnd,
+    })),
+  outputGain: () => audioGains.at(-1)?.gain.value ?? null,
+  commits: () => commits,
 }
 
 export function Harness() {
@@ -423,6 +471,13 @@ export function Harness() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Harness />
+    <Profiler
+      id="page"
+      onRender={() => {
+        commits += 1
+      }}
+    >
+      <Harness />
+    </Profiler>
   </StrictMode>,
 )
