@@ -218,12 +218,46 @@ test('losing the range stops playback and is reported', () => {
   assert.equal(sources.length, 1)
 })
 
-test('a paused position outside a new range moves to its start', () => {
-  const { player } = setup()
+test('before the first play the player follows the section start', () => {
+  const { player, sources } = setup()
   player.setRange({ start: 30, end: 40 })
   assert.equal(player.position(), 30)
-  player.setRange({ start: 25, end: 45 })
-  assert.equal(player.position(), 30)
+  player.setRange({ start: 20, end: 40 })
+  assert.equal(player.position(), 20)
+  assert.equal(player.elapsed(), 0)
+  player.play()
+  assert.equal(sources[0].started.offset, 20)
+})
+
+test('a paused position stays inside a new range and resets outside it', () => {
+  const { player, contexts } = setup({ range: { start: 10, end: 20 } })
+  player.play()
+  contexts[0].currentTime = 4
+  player.pause()
+  player.setRange({ start: 8, end: 20 })
+  assert.equal(player.position(), 14)
+  player.setRange({ start: 15, end: 20 })
+  assert.equal(player.position(), 15)
+  // Back at the start, it moves with the start again.
+  player.setRange({ start: 12, end: 20 })
+  assert.equal(player.position(), 12)
+})
+
+test('after going back or playing through, the start can still move', () => {
+  const { player, contexts, sources } = setup({ repeat: false })
+  player.play()
+  contexts[0].currentTime = 0.5
+  player.pause()
+  player.restart()
+  player.setRange({ start: 8, end: 12 })
+  assert.equal(player.position(), 8)
+
+  player.play()
+  contexts[0].currentTime = 5
+  sources[1].onended()
+  assert.equal(player.position(), 8)
+  player.setRange({ start: 6, end: 12 })
+  assert.equal(player.position(), 6)
 })
 
 test('the section never reaches past the decoded audio', () => {

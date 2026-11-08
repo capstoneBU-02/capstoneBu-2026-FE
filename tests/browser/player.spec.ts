@@ -203,6 +203,21 @@ test('a new range takes over playback', async ({ page }) => {
   await expect(elapsed(page)).toHaveText('00:00.0')
 })
 
+test('moving the start earlier before playing plays from the new start', async ({
+  page,
+}) => {
+  await openWithAudio(page, '00:30.0', '00:40.0')
+  await startInput(page).fill('00:20.0')
+  await startInput(page).press('Tab')
+  await expect(player(page)).toContainText('/ 00:20.0')
+  await expect(elapsed(page)).toHaveText('00:00.0')
+
+  await playButton(page).click()
+  await expect.poll(() => elapsedTenths(page)).toBeGreaterThan(0)
+  // Starting from the old start would show ten seconds already gone.
+  expect(await elapsedTenths(page)).toBeLessThan(100)
+})
+
 test('the player waits for the audio', async ({ page }) => {
   await openNewSection(page, 'pending-audio')
   await fillRange(page, '00:10.0', '00:20.0')

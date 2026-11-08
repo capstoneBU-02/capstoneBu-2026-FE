@@ -87,8 +87,9 @@ export function createSectionPlayer(
   let source: AudioBufferSourceNode | null = null
   // While playing: the position and context time playback last started from.
   let anchor = { offset: 0, time: 0 }
-  // While stopped: where play resumes.
-  let rest = 0
+  // While stopped: where play resumes. Null is the section start, wherever
+  // that moves; a number is a position the player was paused or cut off at.
+  let rest: number | null = null
   let disposed = false
 
   function now(): number {
@@ -96,7 +97,7 @@ export function createSectionPlayer(
   }
 
   function position(): number {
-    if (!source || !range) return rest
+    if (!source || !range) return rest ?? range?.start ?? 0
     return sectionPosition(anchor.offset, now() - anchor.time, range, repeat)
   }
 
@@ -142,7 +143,7 @@ export function createSectionPlayer(
       if (source !== node) return
       node.disconnect()
       source = null
-      rest = range?.start ?? rest
+      rest = null
       onStop()
     }
     node.start(context.currentTime, at)
@@ -165,7 +166,8 @@ export function createSectionPlayer(
       return
     }
     if (!source) {
-      rest = resumeAt(at, target)
+      // A position the new range leaves out goes back to its start.
+      if (rest !== null && !within(rest, target)) rest = null
       return
     }
     if (!within(at, target)) {
@@ -183,7 +185,7 @@ export function createSectionPlayer(
   return {
     play() {
       if (disposed || source || !range) return
-      startAt(resumeAt(rest, range))
+      startAt(rest === null ? range.start : resumeAt(rest, range))
     },
     pause() {
       if (!source || !range) return
@@ -193,7 +195,7 @@ export function createSectionPlayer(
     restart() {
       if (disposed || !range) return
       if (!source) {
-        rest = range.start
+        rest = null
         return
       }
       release()
