@@ -15,6 +15,7 @@ import {
   ratioToTime,
   shiftRange,
   spanFrom,
+  startsDrag,
   tickTimes,
   timeToRatio,
   zoomWindow,
@@ -285,4 +286,27 @@ test('a press on overlapping handles takes the closer boundary', () => {
   // Halfway between, the handle the pointer landed on keeps it.
   assert.equal(nearestHandle(range, 1005, 'end'), 'end')
   assert.equal(nearestHandle(range, 1005, 'start'), 'start')
+})
+
+test('a mouse drags once it travels 3 px sideways', () => {
+  assert.equal(startsDrag(2, 0, false), false)
+  assert.equal(startsDrag(-3, 0, false), true)
+  // A mouse never scrolls the page, so only the sideways travel counts.
+  assert.equal(startsDrag(1, 40, false), false)
+})
+
+test('a finger drags only while heading more sideways than up or down', () => {
+  assert.equal(startsDrag(1, 2, true), false)
+  assert.equal(startsDrag(4, 1, true), true)
+  assert.equal(startsDrag(-4, -1, true), true)
+  assert.equal(startsDrag(1, 3, true), false)
+  assert.equal(startsDrag(1, -6, true), false)
+  // A diagonal is not clearly sideways, so the page may still take it.
+  assert.equal(startsDrag(3, 3, true), false)
+})
+
+test('a finger that wobbles up first can still turn sideways into a drag', () => {
+  // The first move says nothing yet; the travel so far decides each time.
+  assert.equal(startsDrag(1, -3, true), false)
+  assert.equal(startsDrag(7, -4, true), true)
 })

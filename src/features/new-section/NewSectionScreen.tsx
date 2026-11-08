@@ -221,7 +221,7 @@ export function NewSectionScreen({
               startSeconds: task.rangeStartSeconds,
               endSeconds: task.rangeEndSeconds,
             }))}
-            over={Boolean(check.errors.range)}
+            over={Boolean(check.shown.range)}
             disabled={submitting}
             onRange={(startSeconds, endSeconds) =>
               onChange({

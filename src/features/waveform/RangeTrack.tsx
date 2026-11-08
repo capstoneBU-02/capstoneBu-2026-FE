@@ -8,6 +8,7 @@ import {
   ratioToTime,
   shiftRange,
   spanFrom,
+  startsDrag,
   timeToRatio,
   type RangeHandle,
   type SectionRange,
@@ -46,6 +47,7 @@ type Drag =
   | {
       readonly kind: 'handle'
       readonly pointerId: number
+      readonly origin: SectionRange
       readonly handle: RangeHandle
       // Where the press landed relative to the boundary, so it does not jump.
       readonly offset: number
@@ -56,11 +58,12 @@ type Drag =
       readonly origin: SectionRange | null
       readonly anchor: number
       readonly startX: number
+      readonly startY: number
+      // A finger or pen may be scrolling the page instead.
+      readonly mayScroll: boolean
       readonly moved: boolean
     }
 
-// A press that travels less than this is a click, not a drag.
-const DRAG_THRESHOLD_PX = 3
 const HANDLE_LABELS: Record<RangeHandle, string> = {
   start: '구간 시작',
   end: '구간 끝',
@@ -127,7 +130,13 @@ export function RangeTrack({
         hit.dataset.handle as RangeHandle,
       )
       const boundary = handle === 'start' ? range.startTenths : range.endTenths
-      drag = { kind: 'handle', pointerId, handle, offset: tenths - boundary }
+      drag = {
+        kind: 'handle',
+        pointerId,
+        origin: range,
+        handle,
+        offset: tenths - boundary,
+      }
       if (isOverview) focusHandle(handle)
     } else if (isOverview) {
       const inside =
@@ -140,10 +149,12 @@ export function RangeTrack({
         origin: range,
         anchor: tenths,
         startX: event.clientX,
+        startY: event.clientY,
+        mayScroll: event.pointerType !== 'mouse',
         moved: false,
       }
     } else return
-    // Keeps the page from selecting text or scrolling while dragging.
+    // Keeps the page from selecting text. Scrolling is up to touch-action.
     event.preventDefault()
     lastEmitted.current = range
     dragRef.current = drag
@@ -166,9 +177,15 @@ export function RangeTrack({
         emit(moveHandle(range, drag.handle, tenths - drag.offset, songTenths))
       return
     }
+    // A finger heading up or down is left to the browser. If the page scrolls,
+    // pointercancel ends the press; if not, it may still turn sideways.
     if (
       !drag.moved &&
-      Math.abs(event.clientX - drag.startX) < DRAG_THRESHOLD_PX
+      !startsDrag(
+        event.clientX - drag.startX,
+        event.clientY - drag.startY,
+        drag.mayScroll,
+      )
     )
       return
     dragRef.current = { ...drag, moved: true }
@@ -180,7 +197,13 @@ export function RangeTrack({
   }
 
   function endDrag(event: PointerEvent<HTMLDivElement>) {
-    if (event.pointerId === dragRef.current?.pointerId) stopDrag()
+    const drag = dragRef.current
+    if (event.pointerId !== drag?.pointerId) return
+    // The browser took the gesture over, so the drag never happened. A span
+    // started on an empty track has nothing to go back to and stays.
+    if (event.type === 'pointercancel' && drag.origin && !disabled)
+      emit(drag.origin)
+    stopDrag()
   }
 
   function stopDrag() {

@@ -187,3 +187,16 @@ export function nearestHandle(
   if (toStart === toEnd) return hit
   return toStart < toEnd ? 'start' : 'end'
 }
+
+// A press that travels less than this is a click, not a drag.
+const DRAG_THRESHOLD_PX = 3
+
+// Whether a press on the overview has travelled far enough to become a drag.
+// A mouse drags once it moves sideways. A finger or pen may be scrolling the
+// page instead (the track allows pan-y), so it drags only while heading more
+// sideways than up or down. Until then the browser may still take it over.
+export function startsDrag(dx: number, dy: number, mayScroll: boolean) {
+  const sideways = Math.abs(dx)
+  if (sideways < DRAG_THRESHOLD_PX) return false
+  return !mayScroll || sideways > Math.abs(dy)
+}
