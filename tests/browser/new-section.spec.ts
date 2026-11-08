@@ -7,9 +7,13 @@ const sidebar = (page: Page) =>
 const form = (page: Page) => main(page).getByRole('form', { name: '새 구간' })
 const submitButton = (page: Page) =>
   main(page).getByRole('button', { name: '타브 만들기' })
-const startInput = (page: Page) => form(page).getByLabel('시작')
+const startInput = (page: Page) =>
+  form(page).getByLabel('시작', { exact: true })
 const endInput = (page: Page) => form(page).getByLabel('끝', { exact: true })
 const numberInput = (page: Page) => form(page).getByLabel('번호')
+// The waveform has its own status; this is the one for creating the task.
+const submitStatus = (page: Page) =>
+  form(page).getByRole('status').and(form(page).locator(':scope > *'))
 const draftRow = (page: Page) =>
   sidebar(page).getByRole('button', { name: '새 구간 작성 중' })
 const replaceButton = (page: Page) =>
@@ -215,9 +219,7 @@ test('while creating, input is locked and a failure keeps it for a retry', async
   // Enter from the field: disabling it during the request drops its focus.
   await endInput(page).press('Enter')
 
-  await expect(form(page).getByRole('status')).toHaveText(
-    '작업을 만들고 있어요.',
-  )
+  await expect(submitStatus(page)).toHaveText('작업을 만들고 있어요.')
   await expect(submitButton(page)).toHaveAttribute('aria-disabled', 'true')
   await expect(endInput(page)).toBeDisabled()
   await expect(main(page).getByRole('button', { name: '취소' })).toBeDisabled()
@@ -237,9 +239,7 @@ test('while creating, input is locked and a failure keeps it for a retry', async
   await expect(submitButton(page)).toBeFocused()
 
   await page.keyboard.press('Enter')
-  await expect(form(page).getByRole('status')).toHaveText(
-    '작업을 만들고 있어요.',
-  )
+  await expect(submitStatus(page)).toHaveText('작업을 만들고 있어요.')
   await page.evaluate(() =>
     window.workspaceTest.failCreate('create-task-failed'),
   )
@@ -264,9 +264,7 @@ test('a dialog opened while creating stays open over the new task', async ({
   await openNewSection(page, 'pending-create')
   await fillRange(page, '00:42.1', '01:05.8')
   await pressSubmit(page)
-  await expect(form(page).getByRole('status')).toHaveText(
-    '작업을 만들고 있어요.',
-  )
+  await expect(submitStatus(page)).toHaveText('작업을 만들고 있어요.')
   const addButton = sidebar(page).getByRole('button', { name: '곡 추가' })
   await addButton.click()
   const addDialog = page.getByRole('dialog', { name: '곡 추가' })

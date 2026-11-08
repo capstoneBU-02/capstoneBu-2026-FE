@@ -361,9 +361,7 @@ export function WorkspacePage({
           <NewSectionScreen
             key={newSection.id}
             song={newSection}
-            existingNames={tasks
-              .filter((task) => task.songId === newSection.id)
-              .map((task) => task.sectionName)}
+            songTasks={tasks.filter((task) => task.songId === newSection.id)}
             form={drafts.form(newSection.id)}
             onChange={(action) => drafts.dispatch(newSection.id, action)}
             onCancel={() => {
@@ -382,6 +380,10 @@ export function WorkspacePage({
               setKeepDialogsViewKey(workspaceViewKey(taskView))
               go(taskView)
             }}
+            loadAudio={(songId, signal) =>
+              repository.loadSongAudio(songId, signal)
+            }
+            onExpired={workspace.markExpired}
             notice={consentFeedback}
           />
         )}

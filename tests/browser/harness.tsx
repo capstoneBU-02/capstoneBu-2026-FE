@@ -6,6 +6,7 @@ import {
 } from '../../src/features/add-song/mediaDuration.ts'
 import { songNameFromFileName } from '../../src/features/add-song/songFile.ts'
 import { isPolicySectionName } from '../../src/features/new-section/sectionForm.ts'
+import { createDemoSongAudio } from '../../src/features/workspace/demoSongAudio.ts'
 import { SECTION_POLICY } from '../../src/features/new-section/sectionPolicy.ts'
 import { WorkspacePage } from '../../src/features/workspace/WorkspacePage.tsx'
 import { createMockWorkspaceRepository } from '../../src/features/workspace/mockRepository.ts'
@@ -53,6 +54,10 @@ interface TestControls {
   // slow.mp3 duration reads stay pending until resolved here.
   resolveProbe(seconds: number): void
   probeCalls(): string[]
+  // Song audio requests and whether the screen has cancelled each one.
+  audioCalls(): Array<{ songId: string; aborted: boolean }>
+  // audio-error serves playable audio from here on.
+  healAudio(): void
 }
 
 declare global {
@@ -159,6 +164,7 @@ function addedSong(input: NewSongInput): WorkspaceSong {
     durationSeconds: input.durationSeconds,
   }
   sessionSongs.push(song)
+  sessionFiles.set(song.id, input.file)
   return song
 }
 
@@ -191,6 +197,31 @@ function createdTask(input: NewTaskInput): WorkspaceTask {
   }
   sessionTasks.push(task)
   return task
+}
+
+// Fixture songs play the mock's synthesized demo; added songs play their file.
+// audio-error serves bytes no browser decodes; pending-audio never answers.
+const audioCalls: Array<{ songId: string; signal: AbortSignal }> = []
+const sessionFiles = new Map<string, File>()
+let audioBroken = scenario === 'audio-error'
+
+function songAudio(songId: string, signal: AbortSignal): Promise<Blob> {
+  audioCalls.push({ songId, signal })
+  if (scenario === 'audio-expired')
+    return Promise.reject(
+      new WorkspaceRepositoryError('expired', 'Expired while loading audio'),
+    )
+  if (scenario === 'pending-audio') return new Promise(() => {})
+  if (audioBroken)
+    return Promise.resolve(new Blob(['not audio'], { type: 'audio/wav' }))
+  const file = sessionFiles.get(songId)
+  if (file) return Promise.resolve(file)
+  const song = snapshot.songs.find((candidate) => candidate.id === songId)
+  return song
+    ? createDemoSongAudio(song.id, song.durationSeconds, signal)
+    : Promise.reject(
+        new WorkspaceRepositoryError('audio-unavailable', 'Unavailable'),
+      )
 }
 
 let pendingSave:
@@ -260,6 +291,7 @@ const repository: WorkspaceRepository = {
     }
     return Promise.resolve(createdTask(input))
   },
+  loadSongAudio: songAudio,
 }
 
 const secondRepository: WorkspaceRepository = {
@@ -288,6 +320,10 @@ const secondRepository: WorkspaceRepository = {
   createTask: () =>
     Promise.reject(
       new WorkspaceRepositoryError('create-task-failed', 'Unavailable'),
+    ),
+  loadSongAudio: () =>
+    Promise.reject(
+      new WorkspaceRepositoryError('audio-unavailable', 'Unavailable'),
     ),
 }
 
@@ -353,6 +389,14 @@ window.workspaceTest = {
     pendingProbes.splice(0).forEach((resolve) => resolve(seconds))
   },
   probeCalls: () => [...probeCalls],
+  audioCalls: () =>
+    audioCalls.map(({ songId, signal }) => ({
+      songId,
+      aborted: signal.aborted,
+    })),
+  healAudio() {
+    audioBroken = false
+  },
 }
 
 export function Harness() {
