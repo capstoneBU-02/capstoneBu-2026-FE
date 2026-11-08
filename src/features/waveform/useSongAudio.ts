@@ -4,9 +4,13 @@ import { computePeaks, type WaveformPeaks } from './peaks.ts'
 
 export type SongAudioState =
   | { readonly status: 'loading' }
-  // The decoded audio is dropped once measured: a long stereo song takes
-  // around 100 MB. Playback loads what it needs on its own.
-  | { readonly status: 'ready'; readonly peaks: WaveformPeaks }
+  // The decoded audio stays for playback while the screen is open: a long
+  // stereo song takes around 100 MB, released when the screen goes.
+  | {
+      readonly status: 'ready'
+      readonly peaks: WaveformPeaks
+      readonly buffer: AudioBuffer
+    }
   | { readonly status: 'failed' }
 
 export interface SongAudio {
@@ -72,7 +76,7 @@ export function useSongAudio(
       const peaks = await computePeaks(channelsOf(buffer), buffer.sampleRate, {
         signal,
       })
-      return { status: 'ready', peaks }
+      return { status: 'ready', peaks, buffer }
     }
 
     run().then(
