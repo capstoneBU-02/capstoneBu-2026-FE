@@ -36,6 +36,9 @@ export function useWorkspaceNavigation() {
   })
   const [view, setView] = useState<WorkspaceView>(entry.view)
   const currentView = useRef<WorkspaceView>(entry.view)
+  // The last push, while its entry is still the current one. Moving through
+  // history or replacing the entry forgets it.
+  const lastPush = useRef<{ from: string; to: string } | null>(null)
 
   useEffect(() => {
     function replace(next: WorkspaceView) {
@@ -53,6 +56,7 @@ export function useWorkspaceNavigation() {
         entry.scope,
       )
       replace(next)
+      lastPush.current = null
       currentView.current = next
       setView(next)
     }
@@ -62,15 +66,42 @@ export function useWorkspaceNavigation() {
 
   function navigate(requested: WorkspaceView) {
     const next = canonicalWorkspaceView(requested)
-    if (workspaceViewKey(currentView.current) === workspaceViewKey(next)) return
+    const from = workspaceViewKey(currentView.current)
+    const to = workspaceViewKey(next)
+    if (from === to) return
     window.history.pushState(
       { [WORKSPACE_SCOPE_KEY]: entry.scope },
       '',
       workspaceUrl(entry.pathname, entry.selectorSearch, next),
     )
+    lastPush.current = { from, to }
     currentView.current = next
     setView(next)
   }
 
-  return { view, navigate }
+  // Closes a screen such as 구간 수정 without leaving it in history: Back
+  // then skips it. Opened from the requested view, the screen's entry is
+  // popped; otherwise it is replaced.
+  function leave(requested: WorkspaceView) {
+    const next = canonicalWorkspaceView(requested)
+    const from = workspaceViewKey(currentView.current)
+    const to = workspaceViewKey(next)
+    if (from === to) return
+    const push = lastPush.current
+    lastPush.current = null
+    // The view changes now; the popstate that follows finds it in place.
+    currentView.current = next
+    setView(next)
+    if (push && push.from === to && push.to === from) {
+      window.history.back()
+      return
+    }
+    window.history.replaceState(
+      { [WORKSPACE_SCOPE_KEY]: entry.scope },
+      '',
+      workspaceUrl(entry.pathname, entry.selectorSearch, next),
+    )
+  }
+
+  return { view, navigate, leave }
 }

@@ -207,3 +207,43 @@ test('the new-section view carries only an allowlisted song id', () => {
     '/?view=song-not-found',
   )
 })
+
+test('the edit-section view carries only an allowlisted task id', () => {
+  const edit = { name: 'edit-section', taskId: 'task-verse' }
+  assert.deepEqual(
+    readWorkspaceView('?view=edit-section&task=task-verse'),
+    edit,
+  )
+  for (const search of [
+    '?view=edit-section',
+    '?view=edit-section&task=',
+    '?view=edit-section&task=../settings',
+    '?view=edit-section&task=Task_Verse',
+    '?view=edit-section&song=song-neon-harbor',
+  ]) {
+    assert.deepEqual(readWorkspaceView(search), notFound, search)
+  }
+
+  assert.equal(canonicalWorkspaceView(edit), edit)
+  assert.deepEqual(
+    canonicalWorkspaceView({ name: 'edit-section', taskId: 'Task_Verse' }),
+    notFound,
+  )
+  // Opening the editor is a different entry from viewing the same task.
+  assert.notEqual(
+    workspaceViewKey(edit),
+    workspaceViewKey({ name: 'task', taskId: 'task-verse' }),
+  )
+  assert.notEqual(
+    workspaceViewKey(edit),
+    workspaceViewKey({ name: 'edit-section', taskId: 'task-solo' }),
+  )
+  assert.equal(
+    workspaceUrl('/', '?demo=workspace&song=old&view=task', edit),
+    '/?demo=workspace&view=edit-section&task=task-verse',
+  )
+  assert.equal(
+    workspaceUrl('/', '', { name: 'edit-section', taskId: '../private' }),
+    '/?view=task-not-found',
+  )
+})

@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, type ReactNode } from 'react'
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import { TaskUnavailablePanel } from '../../support/TaskUnavailablePanel.tsx'
 import {
@@ -33,8 +33,9 @@ export function TaskBreadcrumb({
 }
 
 function TaskWorkspace({ detail }: { detail: TaskDetail }) {
-  const { task, song } = detail
+  const { task, song, previousResults } = detail
   const pendingId = useId()
+  const previousId = useId()
   return (
     <div className={styles.workspace}>
       <header className={styles.header}>
@@ -58,26 +59,54 @@ function TaskWorkspace({ detail }: { detail: TaskDetail }) {
       <section className={styles.pending} aria-labelledby={pendingId}>
         <h2 id={pendingId}>작업 화면 준비 중</h2>
         <p>
-          파형, 타브, 비교는 다음 단계에서 연결돼요. 내려받기, 녹음, 구간 수정,
-          카피 완료 표시도 그때 사용할 수 있어요.
+          파형, 타브, 비교는 다음 단계에서 연결돼요. 내려받기, 녹음, 카피 완료
+          표시도 그때 사용할 수 있어요.
         </p>
       </section>
+      {/* SEG-04: each kept result names the section it was made from. */}
+      {previousResults.length > 0 && (
+        <section className={styles.previous} aria-labelledby={previousId}>
+          <h2 id={previousId}>이전 결과</h2>
+          <p>구간을 바꾸기 전에 만든 결과예요. 최근 것부터 보여요.</p>
+          {/* Safari drops the list role when list-style is none. */}
+          <ul role="list">
+            {previousResults.map((result) => (
+              <li key={result.id} className={styles.meta}>
+                <span className={styles.previousName}>
+                  {result.sectionName}
+                </span>
+                <span className={styles.range}>{formatTaskRange(result)}</span>
+                <span>{result.partLabel}</span>
+                <span>{result.tuningLabel}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   )
 }
 
+function showTaskWorkspace(detail: TaskDetail) {
+  return <TaskWorkspace detail={detail} />
+}
+
+// The loading, missing and failed states of a task. A loaded task shows as
+// its workspace unless the view renders it another way.
 export function TaskPanel({
   result,
   onRetry,
   onReturnHome,
+  renderDetail = showTaskWorkspace,
 }: {
   result: UseTaskDetailResult
   onRetry: () => void
   onReturnHome: () => void
+  renderDetail?: (detail: TaskDetail) => ReactNode
 }) {
   switch (result.status) {
     case 'success':
-      return result.detail && <TaskWorkspace detail={result.detail} />
+      return result.detail && renderDetail(result.detail)
     case 'unavailable':
       // Missing and inaccessible tasks share one message by design.
       return (

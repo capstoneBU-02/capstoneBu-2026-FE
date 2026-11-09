@@ -7,6 +7,8 @@ import {
   type MediaDurationProbe,
 } from '../add-song/mediaDuration.ts'
 import { UPLOAD_POLICY } from '../add-song/uploadPolicy.ts'
+import { EditSectionScreen } from '../edit-section/EditSectionScreen.tsx'
+import { canReviseSection } from '../edit-section/sectionEdit.ts'
 import { NewSectionScreen } from '../new-section/NewSectionScreen.tsx'
 import { ReplaceFileDialog } from '../new-section/ReplaceFileDialog.tsx'
 import { useSectionDrafts } from '../new-section/useSectionDrafts.ts'
@@ -43,6 +45,7 @@ const TOP_BAR_LABELS: Record<WorkspaceView['name'], string> = {
   'task-inaccessible': '작업 공간',
   'new-section': '새 구간',
   'song-not-found': '새 구간',
+  'edit-section': '구간 수정',
 }
 
 const defaultDurationProbe = createMediaDurationProbe(
@@ -82,14 +85,16 @@ export function WorkspacePage({
   probeDuration?: MediaDurationProbe
 }) {
   const [filter, setFilter] = useState<Filter>('all')
-  const { view, navigate } = useWorkspaceNavigation()
+  const { view, navigate, leave } = useWorkspaceNavigation()
   const [consentWorkspaceId, setConsentWorkspaceId] = useState<string | null>(
     null,
   )
   const viewKey = workspaceViewKey(view)
+  // The task and its 구간 수정 share one request, so the button and the
+  // editor see the same copy of the task.
   const taskDetail = useTaskDetail(
     repository,
-    view.name === 'task' ? view.taskId : null,
+    view.name === 'task' || view.name === 'edit-section' ? view.taskId : null,
     workspace.markExpired,
   )
   const [previousViewKey, setPreviousViewKey] = useState(viewKey)
@@ -220,6 +225,24 @@ export function WorkspacePage({
   }
   const goHome = () => go({ name: 'home' })
   const openTask = (taskId: string) => go({ name: 'task', taskId })
+  // A dialog the user opened while the task was being saved stays open over
+  // the task instead of closing.
+  const openSavedTask = (taskId: string) => {
+    const taskView = { name: 'task', taskId } as const
+    setKeepDialogsViewKey(workspaceViewKey(taskView))
+    go(taskView)
+  }
+  // 구간 수정 closes back to its task, and Back then skips the editor.
+  const leaveEdit = (taskId: string) => {
+    leave({ name: 'task', taskId })
+    focusContent()
+  }
+  const finishEdit = (taskId: string) => {
+    // The task view shares the editor's request; load the queued task again.
+    taskDetail.retry()
+    setKeepDialogsViewKey(workspaceViewKey({ name: 'task', taskId }))
+    leaveEdit(taskId)
+  }
   const newSectionSong =
     view.name === 'new-section'
       ? (songs.find((song) => song.id === view.songId) ?? null)
@@ -232,6 +255,14 @@ export function WorkspacePage({
         : task.processingStatus === filter,
   )
   const newSection = workspaceReady ? newSectionSong : null
+  const detail = workspaceReady ? taskDetail.detail : null
+  const editSection =
+    view.name === 'edit-section' && detail && canReviseSection(detail.task)
+      ? detail
+      : null
+  const shownTask = view.name === 'task' ? detail?.task : undefined
+  // The section screens render their own bar with their actions.
+  const ownTopBar = Boolean(newSection || editSection)
   const consentFeedback = workspaceId &&
     consentWorkspaceId !== workspaceId &&
     workspace.consent.errorMessage && (
@@ -289,20 +320,30 @@ export function WorkspacePage({
         id="workspace-content"
         tabIndex={-1}
       >
-        {/* The new-section screen renders its own bar with its actions. */}
-        {!newSection && (
-          <header className={styles.topBar}>
-            {view.name === 'task' && workspaceReady && taskDetail.detail ? (
+        {!ownTopBar && (
+          <header className={`${styles.topBar} ${styles.taskTopBar}`}>
+            {view.name === 'task' && detail ? (
               <TaskBreadcrumb
-                songName={taskDetail.detail.song.name}
-                current={taskDetail.detail.task.sectionName}
+                songName={detail.song.name}
+                current={detail.task.sectionName}
               />
             ) : (
               TOP_BAR_LABELS[view.name]
             )}
+            {shownTask && canReviseSection(shownTask) && (
+              <Button
+                variant="ghost"
+                compact
+                onClick={() =>
+                  go({ name: 'edit-section', taskId: shownTask.id })
+                }
+              >
+                구간 수정
+              </Button>
+            )}
           </header>
         )}
-        {!newSection && consentFeedback}
+        {!ownTopBar && consentFeedback}
         {loadState === 'loading' && (
           <LoadingState title="작업을 불러오고 있어요" />
         )}
@@ -375,11 +416,44 @@ export function WorkspacePage({
             }}
             onSubmit={workspace.createTask}
             onCreated={(task) => {
-              const taskView = { name: 'task', taskId: task.id } as const
               drafts.discard(newSection.id)
-              setKeepDialogsViewKey(workspaceViewKey(taskView))
-              go(taskView)
+              openSavedTask(task.id)
             }}
+            loadAudio={(songId, signal) =>
+              repository.loadSongAudio(songId, signal)
+            }
+            onExpired={workspace.markExpired}
+            notice={consentFeedback}
+          />
+        )}
+        {workspaceReady && view.name === 'edit-section' && !editSection && (
+          <TaskPanel
+            result={taskDetail}
+            onRetry={retryWith(taskDetail.retry)}
+            onReturnHome={goHome}
+            renderDetail={({ task }) => (
+              <div className={styles.centeredState}>
+                <TaskUnavailablePanel
+                  title="구간을 바꿀 수 없어요"
+                  description="타브가 완성된 작업만 구간을 바꿀 수 있어요."
+                  actionLabel="작업으로 돌아가기"
+                  onReturnToWorkspace={() => leaveEdit(task.id)}
+                />
+              </div>
+            )}
+          />
+        )}
+        {editSection && (
+          <EditSectionScreen
+            key={editSection.task.id}
+            task={editSection.task}
+            song={editSection.song}
+            songTasks={tasks.filter(
+              (task) => task.songId === editSection.song.id,
+            )}
+            onCancel={() => leaveEdit(editSection.task.id)}
+            onSubmit={workspace.reviseTask}
+            onRevised={(task) => finishEdit(task.id)}
             loadAudio={(songId, signal) =>
               repository.loadSongAudio(songId, signal)
             }

@@ -179,17 +179,27 @@ export function sectionName(baseName: string, numberText: string): string {
   return numberText ? `${baseName} ${numberText}` : baseName
 }
 
-// The names the screen can compose: a policy name, optionally with 1–max.
+// Splits a name the screen can compose: a policy name, optionally with
+// 1–max. A bare name has the number ''.
+export function parseSectionName(
+  name: string,
+  policy: SectionPolicy = SECTION_POLICY,
+): { baseName: string; number: string } | null {
+  for (const baseName of policy.names) {
+    if (name === baseName) return { baseName, number: '' }
+    if (!name.startsWith(`${baseName} `)) continue
+    const number = name.slice(baseName.length + 1)
+    if (/^[1-9]\d*$/.test(number) && isValidNumber(number, policy))
+      return { baseName, number }
+  }
+  return null
+}
+
 export function isPolicySectionName(
   name: string,
   policy: SectionPolicy = SECTION_POLICY,
 ): boolean {
-  return policy.names.some((baseName) => {
-    if (name === baseName) return true
-    if (!name.startsWith(`${baseName} `)) return false
-    const numberText = name.slice(baseName.length + 1)
-    return /^[1-9]\d*$/.test(numberText) && isValidNumber(numberText, policy)
-  })
+  return parseSectionName(name, policy) !== null
 }
 
 function startError(start: number | null, songTenths: number) {

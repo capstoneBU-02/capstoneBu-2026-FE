@@ -43,10 +43,16 @@ export interface NewTaskInput {
   readonly rangeEndSeconds: number
 }
 
+// What 구간 수정 hands to the repository: the task keeps its song.
+export type ReviseTaskInput = Omit<NewTaskInput, 'songId'>
+
 export interface WorkspaceTask {
   readonly id: string
   readonly songId: string
   readonly sectionName: string
+  // The ids prefill 구간 수정; the labels are what the screens show.
+  readonly part: SectionPart
+  readonly tuningId: string
   readonly partLabel: string
   readonly tuningLabel: string
   readonly rangeStartSeconds: number
@@ -61,9 +67,24 @@ export interface WorkspaceTask {
   readonly updatedAtLabel: string
 }
 
+// A result kept when its task's section changed (D10, SEG-04). It carries the
+// section it was made from, so it is never shown as the new section's result.
+export interface PreviousTaskResult {
+  readonly id: string
+  readonly sectionName: string
+  readonly partLabel: string
+  readonly tuningLabel: string
+  readonly rangeStartSeconds: number
+  readonly rangeEndSeconds: number
+  readonly comparisonCount: number
+  readonly copyStatus: WorkspaceTask['copyStatus']
+}
+
 export interface TaskDetail {
   readonly task: WorkspaceTask
   readonly song: WorkspaceSong
+  // Newest first. The storage limit per workspace (D10) is still open.
+  readonly previousResults: readonly PreviousTaskResult[]
 }
 
 export interface WorkspaceSnapshot {

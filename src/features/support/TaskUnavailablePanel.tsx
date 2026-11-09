@@ -6,12 +6,14 @@ export type TaskUnavailablePanelProps = {
   onReturnToWorkspace: () => void
   title?: string
   description?: string
+  actionLabel?: string
 }
 
 export function TaskUnavailablePanel({
   onReturnToWorkspace,
   title = '작업을 찾을 수 없어요',
   description = '삭제됐거나 이 워크스페이스의 작업이 아니에요.',
+  actionLabel = '내 작업으로',
 }: TaskUnavailablePanelProps) {
   return (
     <div className="support-unavailable">
@@ -22,7 +24,7 @@ export function TaskUnavailablePanel({
       <p>{description}</p>
       <div className="support-unavailable-action">
         <Button variant="primary" onClick={onReturnToWorkspace}>
-          내 작업으로
+          {actionLabel}
         </Button>
       </div>
     </div>

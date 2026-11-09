@@ -6,6 +6,7 @@ export type WorkspaceView =
   | { readonly name: 'task'; readonly taskId: string }
   | { readonly name: 'task-not-found' }
   | { readonly name: 'task-inaccessible' }
+  | { readonly name: 'edit-section'; readonly taskId: string }
   | { readonly name: 'new-section'; readonly songId: string }
   | { readonly name: 'song-not-found' }
 
@@ -29,7 +30,11 @@ export function isSongId(value: unknown): value is string {
 // Views pushed by the app follow the same id rule as views read from a URL,
 // so the rendered view, the repository request and the URL never disagree.
 export function canonicalWorkspaceView(view: WorkspaceView): WorkspaceView {
-  if (view.name === 'task' && !isTaskId(view.taskId)) return TASK_NOT_FOUND_VIEW
+  if (
+    (view.name === 'task' || view.name === 'edit-section') &&
+    !isTaskId(view.taskId)
+  )
+    return TASK_NOT_FOUND_VIEW
   if (view.name === 'new-section' && !isSongId(view.songId))
     return SONG_NOT_FOUND_VIEW
   return view
@@ -44,9 +49,10 @@ export function readWorkspaceView(search: string): WorkspaceView {
     case 'task-inaccessible':
     case 'song-not-found':
       return { name: view }
-    case 'task': {
+    case 'task':
+    case 'edit-section': {
       const taskId = params.get('task')
-      return isTaskId(taskId) ? { name: 'task', taskId } : TASK_NOT_FOUND_VIEW
+      return isTaskId(taskId) ? { name: view, taskId } : TASK_NOT_FOUND_VIEW
     }
     case 'new-section': {
       const songId = params.get('song')
@@ -61,6 +67,7 @@ export function readWorkspaceView(search: string): WorkspaceView {
 
 export function workspaceViewKey(view: WorkspaceView): string {
   if (view.name === 'task') return `task:${view.taskId}`
+  if (view.name === 'edit-section') return `edit-section:${view.taskId}`
   if (view.name === 'new-section') return `new-section:${view.songId}`
   return view.name
 }
@@ -94,8 +101,8 @@ export function workspaceUrl(
     params.set('access', mode.scenario)
   }
   const canonical = canonicalWorkspaceView(view)
-  if (canonical.name === 'task') {
-    params.set('view', 'task')
+  if (canonical.name === 'task' || canonical.name === 'edit-section') {
+    params.set('view', canonical.name)
     params.set('task', canonical.taskId)
   } else if (canonical.name === 'new-section') {
     params.set('view', 'new-section')
