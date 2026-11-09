@@ -13,6 +13,8 @@ import { createMockWorkspaceRepository } from '../../src/features/workspace/mock
 import type {
   NewSongInput,
   NewTaskInput,
+  PreviousTaskResult,
+  ReviseTaskInput,
   SavedConsentChoice,
   SongInputKind,
   TaskDetail,
@@ -51,6 +53,13 @@ interface TestControls {
   resolveCreate(): void
   failCreate(code: 'create-task-failed' | 'expired'): void
   createCalls(): NewTaskInput[]
+  // pending-revise keeps reviseTask requests open until settled here.
+  resolveRevise(): void
+  failRevise(code: 'revise-task-failed' | 'expired'): void
+  reviseCalls(): Array<{ taskId: string; input: ReviseTaskInput }>
+  // Queues a task on the server only, as another tab's change would. The
+  // loaded list keeps showing its old state.
+  queueTaskOnServer(taskId: string): void
   // slow.mp3 duration reads stay pending until resolved here.
   resolveProbe(seconds: number): void
   probeCalls(): string[]
@@ -105,15 +114,27 @@ const pendingTasks: Array<{
 // Songs and tasks added during the test, so created tasks can be opened.
 const sessionSongs: WorkspaceSong[] = []
 const sessionTasks: WorkspaceTask[] = []
+// Tasks changed by 구간 수정 and the results each change kept, newest first.
+const revisedTasks = new Map<string, WorkspaceTask>()
+const keptResults = new Map<string, PreviousTaskResult[]>()
+
+function findTask(taskId: string): WorkspaceTask | undefined {
+  return (
+    revisedTasks.get(taskId) ??
+    [...snapshot.tasks, ...sessionTasks].find(
+      (candidate) => candidate.id === taskId,
+    )
+  )
+}
 
 function taskDetail(taskId: string): TaskDetail | null {
-  const task = [...snapshot.tasks, ...sessionTasks].find(
-    (candidate) => candidate.id === taskId,
-  )
+  const task = findTask(taskId)
   const song = [...snapshot.songs, ...sessionSongs].find(
     (candidate) => candidate.id === task?.songId,
   )
-  return task && song ? { task, song } : null
+  return task && song
+    ? { task, song, previousResults: keptResults.get(taskId) ?? [] }
+    : null
 }
 
 // StrictMode issues an aborted duplicate request in development; settle every
@@ -183,16 +204,24 @@ const pendingCreates: Array<{
   reject: (error: Error) => void
 }> = []
 
-function createdTask(input: NewTaskInput): WorkspaceTask {
-  const task: WorkspaceTask = {
-    id: `task-created-${sessionTasks.length + 1}`,
-    songId: input.songId,
-    sectionName: input.sectionName,
+function sectionLabels(input: ReviseTaskInput) {
+  return {
+    part: input.part,
+    tuningId: input.tuningId,
     partLabel:
       SECTION_POLICY.parts.find((part) => part.id === input.part)?.label ?? '',
     tuningLabel:
       SECTION_POLICY.tunings.find((tuning) => tuning.id === input.tuningId)
         ?.label ?? '',
+  }
+}
+
+function createdTask(input: NewTaskInput): WorkspaceTask {
+  const task: WorkspaceTask = {
+    id: `task-created-${sessionTasks.length + 1}`,
+    songId: input.songId,
+    sectionName: input.sectionName,
+    ...sectionLabels(input),
     rangeStartSeconds: input.rangeStartSeconds,
     rangeEndSeconds: input.rangeEndSeconds,
     processingStatus: 'queued',
@@ -205,6 +234,47 @@ function createdTask(input: NewTaskInput): WorkspaceTask {
   }
   sessionTasks.push(task)
   return task
+}
+
+const reviseCalls: Array<{ taskId: string; input: ReviseTaskInput }> = []
+const pendingRevises: Array<{
+  taskId: string
+  input: ReviseTaskInput
+  resolve: (task: WorkspaceTask) => void
+  reject: (error: Error) => void
+}> = []
+
+function revisedTask(taskId: string, input: ReviseTaskInput): WorkspaceTask {
+  const task = findTask(taskId)!
+  keptResults.set(taskId, [
+    {
+      id: `kept-${taskId}-${(keptResults.get(taskId)?.length ?? 0) + 1}`,
+      sectionName: task.sectionName,
+      partLabel: task.partLabel,
+      tuningLabel: task.tuningLabel,
+      rangeStartSeconds: task.rangeStartSeconds,
+      rangeEndSeconds: task.rangeEndSeconds,
+      comparisonCount: task.comparisonCount,
+      copyStatus: task.copyStatus,
+    },
+    ...(keptResults.get(taskId) ?? []),
+  ])
+  const revised: WorkspaceTask = {
+    ...task,
+    sectionName: input.sectionName,
+    ...sectionLabels(input),
+    rangeStartSeconds: input.rangeStartSeconds,
+    rangeEndSeconds: input.rangeEndSeconds,
+    processingStatus: 'queued',
+    failureKind: null,
+    progressPercent: null,
+    hasSeparatedAudio: false,
+    comparisonCount: 0,
+    copyStatus: 'unreviewed',
+    updatedAtLabel: '방금',
+  }
+  revisedTasks.set(taskId, revised)
+  return revised
 }
 
 // Fixture songs play the mock's synthesized demo; added songs play their file.
@@ -330,6 +400,23 @@ const repository: WorkspaceRepository = {
     }
     return Promise.resolve(createdTask(input))
   },
+  reviseTask(taskId, input) {
+    reviseCalls.push({ taskId, input: { ...input } })
+    if (!findTask(taskId))
+      return Promise.reject(
+        new WorkspaceRepositoryError('task-unavailable', 'Unavailable'),
+      )
+    if (!isPolicySectionName(input.sectionName))
+      return Promise.reject(
+        new WorkspaceRepositoryError('revise-task-failed', 'Bad name'),
+      )
+    if (scenario === 'pending-revise') {
+      return new Promise((resolve, reject) =>
+        pendingRevises.push({ taskId, input, resolve, reject }),
+      )
+    }
+    return Promise.resolve(revisedTask(taskId, input))
+  },
   loadSongAudio: songAudio,
 }
 
@@ -359,6 +446,10 @@ const secondRepository: WorkspaceRepository = {
   createTask: () =>
     Promise.reject(
       new WorkspaceRepositoryError('create-task-failed', 'Unavailable'),
+    ),
+  reviseTask: () =>
+    Promise.reject(
+      new WorkspaceRepositoryError('task-unavailable', 'Unavailable'),
     ),
   loadSongAudio: () =>
     Promise.reject(
@@ -424,6 +515,27 @@ window.workspaceTest = {
       )
   },
   createCalls: () => createCalls.map((call) => ({ ...call })),
+  // StrictMode may leave an aborted duplicate; settle every pending request.
+  resolveRevise() {
+    pendingRevises
+      .splice(0)
+      .forEach(({ taskId, input, resolve }) =>
+        resolve(revisedTask(taskId, input)),
+      )
+  },
+  failRevise(code) {
+    pendingRevises
+      .splice(0)
+      .forEach(({ reject }) =>
+        reject(new WorkspaceRepositoryError(code, 'Revise failed')),
+      )
+  },
+  reviseCalls: () =>
+    reviseCalls.map(({ taskId, input }) => ({ taskId, input: { ...input } })),
+  queueTaskOnServer(taskId) {
+    const task = findTask(taskId)
+    if (task) revisedTasks.set(taskId, { ...task, processingStatus: 'queued' })
+  },
   resolveProbe(seconds) {
     pendingProbes.splice(0).forEach((resolve) => resolve(seconds))
   },

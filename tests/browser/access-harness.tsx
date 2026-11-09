@@ -132,6 +132,13 @@ const repository: AccessRepository = {
               )
             : workspace.createTask(input, signal)
         },
+        reviseTask(taskId, input, signal) {
+          return expired
+            ? Promise.reject(
+                new WorkspaceRepositoryError('expired', 'Expired test session'),
+              )
+            : workspace.reviseTask(taskId, input, signal)
+        },
         loadSongAudio(songId, signal) {
           return expired
             ? Promise.reject(

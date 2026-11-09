@@ -5,6 +5,10 @@ import {
   songNameFromFileName,
 } from '../add-song/songFile.ts'
 import {
+  canReviseSection,
+  changesSectionResult,
+} from '../edit-section/sectionEdit.ts'
+import {
   checkSectionRange,
   isPolicySectionName,
 } from '../new-section/sectionForm.ts'
@@ -13,6 +17,7 @@ import type {
   ConsentChoice,
   DemoScenario,
   NewTaskInput,
+  PreviousTaskResult,
   SavedConsentChoice,
   WorkspaceInfo,
   WorkspaceSong,
@@ -53,6 +58,8 @@ const mockTasks: readonly WorkspaceTask[] = [
     id: 'task-verse',
     sectionName: '벌스 1',
     songId: 'song-neon-harbor',
+    part: 'rhythm',
+    tuningId: 'e-standard',
     partLabel: '리듬 기타',
     tuningLabel: 'E 표준 6현',
     rangeStartSeconds: 42.1,
@@ -69,6 +76,8 @@ const mockTasks: readonly WorkspaceTask[] = [
     id: 'task-solo',
     sectionName: '솔로',
     songId: 'song-neon-harbor',
+    part: 'lead',
+    tuningId: 'e-standard',
     partLabel: '리드 기타',
     tuningLabel: 'E 표준 6현',
     rangeStartSeconds: 151,
@@ -85,6 +94,8 @@ const mockTasks: readonly WorkspaceTask[] = [
     id: 'task-intro',
     sectionName: '인트로',
     songId: 'song-paper-moon',
+    part: 'lead',
+    tuningId: 'e-standard',
     partLabel: '리드 기타',
     tuningLabel: 'E 표준 6현',
     rangeStartSeconds: 0,
@@ -101,6 +112,8 @@ const mockTasks: readonly WorkspaceTask[] = [
     id: 'task-chorus',
     sectionName: '코러스 2',
     songId: 'song-late-train',
+    part: 'rhythm',
+    tuningId: 'e-standard',
     partLabel: '리듬 기타',
     tuningLabel: 'E 표준 6현',
     rangeStartSeconds: 190,
@@ -175,6 +188,19 @@ function newTaskLabels(
   return valid ? { partLabel: part.label, tuningLabel: tuning.label } : null
 }
 
+function keptResult(task: WorkspaceTask, id: string): PreviousTaskResult {
+  return {
+    id,
+    sectionName: task.sectionName,
+    partLabel: task.partLabel,
+    tuningLabel: task.tuningLabel,
+    rangeStartSeconds: task.rangeStartSeconds,
+    rangeEndSeconds: task.rangeEndSeconds,
+    comparisonCount: task.comparisonCount,
+    copyStatus: task.copyStatus,
+  }
+}
+
 interface MockWorkspaceOptions {
   readonly workspace?: WorkspaceInfo
   // Without explicit songs, only the fixture songs referenced by tasks remain.
@@ -210,8 +236,11 @@ export function createMockWorkspaceRepository(
   const songFiles = new Map<string, File>()
   // Synthesized once per session, like a file the server keeps.
   const demoAudio = new Map<string, Promise<Blob>>()
+  // Results kept by 구간 수정, newest first, per task id (D10).
+  const previousResults = new Map<string, readonly PreviousTaskResult[]>()
   let addedSongCount = 0
   let createdTaskCount = 0
+  let keptResultCount = 0
 
   function throwIfExpired() {
     if (scenario === 'expired') {
@@ -277,7 +306,13 @@ export function createMockWorkspaceRepository(
           '작업을 찾을 수 없어요.',
         )
       }
-      return { task: { ...task }, song: { ...song } }
+      return {
+        task: { ...task },
+        song: { ...song },
+        previousResults: (previousResults.get(taskId) ?? []).map((result) => ({
+          ...result,
+        })),
+      }
     },
     async addSong(input, signal) {
       await waitForMockRequest(300, signal)
@@ -322,6 +357,8 @@ export function createMockWorkspaceRepository(
         id: `task-new-${createdTaskCount}`,
         songId: input.songId,
         sectionName: input.sectionName,
+        part: input.part,
+        tuningId: input.tuningId,
         ...labels,
         rangeStartSeconds: input.rangeStartSeconds,
         rangeEndSeconds: input.rangeEndSeconds,
@@ -335,6 +372,56 @@ export function createMockWorkspaceRepository(
       }
       tasks.push(task)
       return { ...task }
+    },
+    async reviseTask(taskId, input, signal) {
+      await waitForMockRequest(300, signal)
+      throwIfExpired()
+      const index = tasks.findIndex((candidate) => candidate.id === taskId)
+      if (index < 0) {
+        throw new WorkspaceRepositoryError(
+          'task-unavailable',
+          '작업을 찾을 수 없어요.',
+        )
+      }
+      const task = tasks[index]
+      const song = songs.find((candidate) => candidate.id === task.songId)
+      const labels = newTaskLabels({ ...input, songId: task.songId }, song)
+      if (
+        !labels ||
+        !canReviseSection(task) ||
+        !changesSectionResult(task, input)
+      ) {
+        throw new WorkspaceRepositoryError(
+          'revise-task-failed',
+          '타브를 다시 만들지 못했어요.',
+        )
+      }
+
+      keptResultCount += 1
+      previousResults.set(taskId, [
+        keptResult(task, `result-kept-${keptResultCount}`),
+        ...(previousResults.get(taskId) ?? []),
+      ])
+      // The new section starts like a created task; its tab, comparisons and
+      // copy status went with the previous result.
+      const revised: WorkspaceTask = {
+        ...task,
+        sectionName: input.sectionName,
+        part: input.part,
+        tuningId: input.tuningId,
+        ...labels,
+        rangeStartSeconds: input.rangeStartSeconds,
+        rangeEndSeconds: input.rangeEndSeconds,
+        processingStatus: 'queued',
+        failureKind: null,
+        progressPercent: null,
+        hasSeparatedAudio: false,
+        comparisonCount: 0,
+        copyStatus: 'unreviewed',
+        updatedAtLabel: '방금',
+      }
+      tasks.splice(index, 1, revised)
+      return { ...revised }
     },
     async loadSongAudio(songId, signal) {
       await waitForMockRequest(200, signal)

@@ -58,8 +58,9 @@ test('a list row opens a read-only task header and history reopens the same task
     'aria-current',
     'page',
   )
-  // Unimplemented task actions are not offered as working controls.
-  await expect(main(page).getByRole('button')).toHaveCount(0)
+  // Unimplemented task actions are not offered as working controls; a
+  // finished task offers only 구간 수정 so far.
+  await expect(main(page).getByRole('button')).toHaveText(['구간 수정'])
   await expect(page.getByRole('checkbox')).toHaveCount(0)
   await expect(page.getByRole('tab')).toHaveCount(0)
 

@@ -35,6 +35,25 @@
   margin: -4px 0;
 }
 
+/* 구간 수정 explains what a change does to the current tab. */
+.intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  border-radius: var(--radius-m);
+  padding: 10px 12px;
+  background: var(--surface-canvas);
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.intro > img {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
 .form {
   display: flex;
   min-width: 0;

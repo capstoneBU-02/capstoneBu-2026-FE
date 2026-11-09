@@ -79,7 +79,7 @@
 }
 
 .homeRow[aria-current='page'],
-.sectionRow[aria-current='page'],
+.sectionRow[aria-current],
 .footerRow[aria-current='page'] {
   background: var(--surface-selected);
   color: var(--ink-primary);
@@ -141,7 +141,7 @@
 }
 
 .songHeading:hover,
-.sectionRow:not([aria-disabled='true'], [aria-current='page']):hover,
+.sectionRow:not([aria-disabled='true'], [aria-current]):hover,
 .footerRow:not(:disabled, [aria-disabled='true']):hover {
   background: var(--surface-subtle);
 }
@@ -282,6 +282,12 @@
   align-items: center;
   border-bottom: 1px solid var(--border-default);
   padding: 0 24px;
+}
+
+/* The task view's breadcrumb with its actions on the right. */
+.taskTopBar {
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .body {

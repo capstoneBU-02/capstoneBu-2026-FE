@@ -20,6 +20,9 @@
 }
 
 .breadcrumb [aria-current='page'] {
+  /* The song name gives way first, so a narrow bar still names the place. */
+  flex-shrink: 0;
+  max-width: 60%;
   color: var(--ink-primary);
 }
 
@@ -110,6 +113,41 @@
   line-height: 20px;
 }
 
+.previous {
+  margin: 0 28px 28px;
+}
+
+.previous h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.previous p {
+  margin: 2px 0 0;
+  color: var(--ink-tertiary);
+  line-height: 20px;
+}
+
+.previous ul {
+  margin: 8px 0 0;
+  border-top: 1px solid var(--border-default);
+  padding: 0;
+  list-style: none;
+}
+
+.previous li {
+  margin: 0;
+  border-bottom: 1px solid var(--border-default);
+  padding: 10px 0;
+}
+
+.previousName {
+  color: var(--ink-primary);
+  font-weight: 500;
+}
+
 @media (max-width: 1100px) {
   .header {
     padding-right: 24px;
@@ -118,6 +156,11 @@
 
   .pending {
     margin: 24px;
+  }
+
+  .previous {
+    margin-right: 24px;
+    margin-left: 24px;
   }
 }
 
@@ -129,5 +172,9 @@
   .pending {
     margin: 20px 16px;
     padding: 20px 16px;
+  }
+
+  .previous {
+    margin: 0 16px 20px;
   }
 }

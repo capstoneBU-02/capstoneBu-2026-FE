@@ -99,6 +99,15 @@ test('songs carry the input kind and every task references a listed song', async
     )
   }
   assert.ok(tasks.every((task) => task.tuningLabel.length > 0))
+  // The edit screen starts from the ids, the other screens show the labels.
+  for (const task of tasks) {
+    const part = SECTION_POLICY.parts.find((item) => item.id === task.part)
+    const tuning = SECTION_POLICY.tunings.find(
+      (item) => item.id === task.tuningId,
+    )
+    assert.equal(part?.label, task.partLabel, task.id)
+    assert.equal(tuning?.label, task.tuningLabel, task.id)
+  }
 })
 
 test('a workspace without tasks lists no songs', async () => {
@@ -119,6 +128,7 @@ test('task detail returns copies of the task and its song', async () => {
   assert.equal(detail.task.id, 'task-intro')
   assert.equal(detail.song.id, detail.task.songId)
   assert.equal(detail.song.inputKind, 'separated-guitar')
+  assert.deepEqual(detail.previousResults, [])
   detail.task.sectionName = 'changed'
   detail.song.name = 'changed'
   const again = await repository.loadTask('task-intro', signal())
@@ -259,6 +269,8 @@ test('a created task waits in the queue and opens like any other task', async ()
       id: 'id',
       songId: 'song-neon-harbor',
       sectionName: '벌스 2',
+      part: 'lead',
+      tuningId: SECTION_POLICY.tunings[0].id,
       partLabel: '리드 기타',
       tuningLabel: SECTION_POLICY.tunings[0].label,
       rangeStartSeconds: 42.1,
@@ -333,6 +345,138 @@ test('creating a task honours cancellation and expiry', async () => {
 
   await assert.rejects(
     createMockWorkspaceRepository('expired').createTask(section(), signal()),
+    { code: 'expired' },
+  )
+})
+
+const revision = (overrides = {}) => ({
+  sectionName: '벌스 1',
+  part: 'rhythm',
+  tuningId: 'e-standard',
+  rangeStartSeconds: 42.1,
+  rangeEndSeconds: 60,
+  ...overrides,
+})
+
+test('a section change queues the task again and keeps the old result', async () => {
+  const repository = createMockWorkspaceRepository()
+  const before = await repository.loadWorkspace(signal())
+  const revised = await repository.reviseTask(
+    'task-verse',
+    revision({ sectionName: '코러스 1', part: 'lead', tuningId: 'drop-d' }),
+    signal(),
+  )
+
+  assert.deepEqual(revised, {
+    id: 'task-verse',
+    songId: 'song-neon-harbor',
+    sectionName: '코러스 1',
+    part: 'lead',
+    tuningId: 'drop-d',
+    partLabel: '리드 기타',
+    tuningLabel: SECTION_POLICY.tunings.find((item) => item.id === 'drop-d')
+      .label,
+    rangeStartSeconds: 42.1,
+    rangeEndSeconds: 60,
+    processingStatus: 'queued',
+    failureKind: null,
+    progressPercent: null,
+    hasSeparatedAudio: false,
+    comparisonCount: 0,
+    copyStatus: 'unreviewed',
+    updatedAtLabel: '방금',
+  })
+
+  // The task keeps its place in the list; nothing is added or removed.
+  const after = await repository.loadWorkspace(signal())
+  assert.deepEqual(
+    after.tasks.map((task) => task.id),
+    before.tasks.map((task) => task.id),
+  )
+  assert.deepEqual(
+    after.tasks.find((task) => task.id === 'task-verse'),
+    revised,
+  )
+
+  // D10, SEG-04: the old result stays with the section it was made from.
+  const detail = await repository.loadTask('task-verse', signal())
+  assert.deepEqual(detail.task, revised)
+  assert.equal(detail.previousResults.length, 1)
+  const [previous] = detail.previousResults
+  assert.equal(typeof previous.id, 'string')
+  assert.deepEqual(
+    { ...previous, id: 'id' },
+    {
+      id: 'id',
+      sectionName: '벌스 1',
+      partLabel: '리듬 기타',
+      tuningLabel: 'E 표준 6현',
+      rangeStartSeconds: 42.1,
+      rangeEndSeconds: 65.8,
+      comparisonCount: 2,
+      copyStatus: 'confirmed',
+    },
+  )
+
+  // Returned values are copies of what the session keeps.
+  revised.sectionName = 'changed'
+  previous.sectionName = 'changed'
+  const again = await repository.loadTask('task-verse', signal())
+  assert.equal(again.task.sectionName, '코러스 1')
+  assert.equal(again.previousResults[0].sectionName, '벌스 1')
+})
+
+test('the mock refuses a section change a server would refuse', async () => {
+  const repository = createMockWorkspaceRepository()
+  for (const [taskId, input] of [
+    // Nothing the tab is made from changed.
+    ['task-verse', revision({ rangeEndSeconds: 65.8 })],
+    ['task-verse', revision({ rangeEndSeconds: 65.8, sectionName: '벌스 2' })],
+    // The policy rejects the section.
+    ['task-verse', revision({ rangeEndSeconds: 72.2 })],
+    ['task-verse', revision({ sectionName: '<script>' })],
+    ['task-verse', revision({ part: 'bass' })],
+    ['task-verse', revision({ tuningId: 'seven-string' })],
+    ['task-verse', revision({ rangeStartSeconds: 250, rangeEndSeconds: 253 })],
+    // Only a finished task can change its section.
+    ['task-solo', revision({ rangeStartSeconds: 151, rangeEndSeconds: 170 })],
+    ['task-intro', revision({ rangeStartSeconds: 0, rangeEndSeconds: 10 })],
+  ]) {
+    await assert.rejects(
+      repository.reviseTask(taskId, input, signal()),
+      { code: 'revise-task-failed' },
+      `${taskId} ${JSON.stringify(input)}`,
+    )
+  }
+  await assert.rejects(
+    repository.reviseTask('task-unknown', revision(), signal()),
+    { code: 'task-unavailable' },
+  )
+  const detail = await repository.loadTask('task-verse', signal())
+  assert.equal(detail.task.rangeEndSeconds, 65.8)
+  assert.deepEqual(detail.previousResults, [])
+})
+
+test('a section change honours cancellation and expiry', async () => {
+  const repository = createMockWorkspaceRepository()
+  const controller = new AbortController()
+  const revising = repository.reviseTask(
+    'task-verse',
+    revision(),
+    controller.signal,
+  )
+  controller.abort()
+  await assert.rejects(revising, { name: 'AbortError' })
+  assert.equal(
+    (await repository.loadTask('task-verse', signal())).task.processingStatus,
+    'completed',
+  )
+  await assert.rejects(
+    createMockWorkspaceRepository('expired').reviseTask(
+      'task-verse',
+      revision(),
+      signal(),
+    ),
     { code: 'expired' },
   )
 })

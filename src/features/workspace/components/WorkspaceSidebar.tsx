@@ -40,7 +40,7 @@ function SongGroup({
   tasks,
   showDraft,
   draftCurrent,
-  currentTaskId,
+  currentTask,
   onOpenTask,
   onOpenNewSection,
 }: {
@@ -48,7 +48,7 @@ function SongGroup({
   tasks: readonly WorkspaceTask[]
   showDraft: boolean
   draftCurrent: boolean
-  currentTaskId: string | null
+  currentTask: { id: string; current: 'page' | 'true' } | null
   onOpenTask: (taskId: string) => void
   onOpenNewSection: () => void
 }) {
@@ -77,7 +77,9 @@ function SongGroup({
               key={task.id}
               type="button"
               className={styles.sectionRow}
-              aria-current={task.id === currentTaskId ? 'page' : undefined}
+              aria-current={
+                task.id === currentTask?.id ? currentTask.current : undefined
+              }
               onClick={() => onOpenTask(task.id)}
             >
               <Icon name={taskStatusIcon(task)} />
@@ -139,7 +141,15 @@ export function WorkspaceSidebar({
   }
   if (helpOpen && !info) setHelpOpen(false)
   const navigationId = useId()
-  const currentTaskId = view.name === 'task' ? view.taskId : null
+  // 구간 수정 keeps the edited task highlighted, but its row opens the task,
+  // another page, so there it is the current item instead of the page.
+  const currentTask =
+    view.name === 'task' || view.name === 'edit-section'
+      ? {
+          id: view.taskId,
+          current: view.name === 'task' ? ('page' as const) : ('true' as const),
+        }
+      : null
   const newSectionSongId = view.name === 'new-section' ? view.songId : null
 
   return (
@@ -221,7 +231,7 @@ export function WorkspaceSidebar({
                 draftSongIds.has(song.id) || newSectionSongId === song.id
               }
               draftCurrent={newSectionSongId === song.id}
-              currentTaskId={currentTaskId}
+              currentTask={currentTask}
               onOpenTask={(taskId) => {
                 onOpenTask(taskId)
                 setNavigationOpen(false)
