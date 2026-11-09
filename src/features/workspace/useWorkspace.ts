@@ -64,6 +64,8 @@ export interface UseWorkspaceResult {
     input: ReviseTaskInput,
     signal: AbortSignal,
   ): Promise<ReviseTaskResult>
+  // A task loaded on its own screen updates the same task in the list.
+  syncTask(task: WorkspaceTask): void
 }
 
 interface WorkspaceState {
@@ -82,6 +84,14 @@ const initialConsent: ConsentState = {
   choice: 'undecided',
   status: 'idle',
   errorMessage: null,
+}
+
+function sameTask(a: WorkspaceTask, b: WorkspaceTask) {
+  const keys = Object.keys(a) as (keyof WorkspaceTask)[]
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => a[key] === b[key])
+  )
 }
 
 // Expiry hides every piece of workspace data, whichever request found it.
@@ -387,6 +397,26 @@ export function useWorkspace(
       : result
   }
 
+  function syncTask(loaded: WorkspaceTask) {
+    setState((previous) => {
+      const listed = previous.snapshot?.tasks.find(
+        (task) => task.id === loaded.id,
+      )
+      // An unchanged task keeps the list as it is, without a new render.
+      if (!previous.snapshot || !listed || sameTask(listed, loaded))
+        return previous
+      return {
+        ...previous,
+        snapshot: {
+          ...previous.snapshot,
+          tasks: previous.snapshot.tasks.map((task) =>
+            task.id === loaded.id ? loaded : task,
+          ),
+        },
+      }
+    })
+  }
+
   function markExpired() {
     consentController.current?.abort()
     consentController.current = null
@@ -429,5 +459,6 @@ export function useWorkspace(
     addSong,
     createTask,
     reviseTask,
+    syncTask,
   }
 }

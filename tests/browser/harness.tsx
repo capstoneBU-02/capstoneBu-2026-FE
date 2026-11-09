@@ -10,6 +10,7 @@ import { createDemoSongAudio } from '../../src/features/workspace/demoSongAudio.
 import { SECTION_POLICY } from '../../src/features/new-section/sectionPolicy.ts'
 import { WorkspacePage } from '../../src/features/workspace/WorkspacePage.tsx'
 import { createMockWorkspaceRepository } from '../../src/features/workspace/mockRepository.ts'
+import { taskStages } from '../../src/features/workspace/processing.ts'
 import type {
   NewSongInput,
   NewTaskInput,
@@ -60,6 +61,11 @@ interface TestControls {
   // Queues a task on the server only, as another tab's change would. The
   // loaded list keeps showing its old state.
   queueTaskOnServer(taskId: string): void
+  // Moves a task on the server only, as its processing would; the screen
+  // sees it on its next request.
+  updateTaskOnServer(taskId: string, change: ServerTaskChange): void
+  // The next task request fails once with this code.
+  failNextTaskLoad(code: 'load-failed' | 'task-unavailable' | 'expired'): void
   // slow.mp3 duration reads stay pending until resolved here.
   resolveProbe(seconds: number): void
   probeCalls(): string[]
@@ -77,6 +83,13 @@ interface TestControls {
   commits(): number
 }
 
+type ServerTaskChange = Partial<
+  Pick<
+    WorkspaceTask,
+    'processingStatus' | 'failureKind' | 'progressPercent' | 'hasSeparatedAudio'
+  >
+> & { readonly queueAhead?: number | null }
+
 declare global {
   interface Window {
     workspaceTest: TestControls
@@ -85,7 +98,10 @@ declare global {
 
 // The harness renders production hooks/components. Only the async boundary is
 // controlled; ignoring AbortSignal here exercises stale-response protection.
-const scenario = new URLSearchParams(window.location.search).get('scenario')
+const query = new URLSearchParams(window.location.search)
+const scenario = query.get('scenario')
+// refresh=<ms> turns on refreshing an open task; other tests count requests.
+const taskRefreshMs = query.has('refresh') ? Number(query.get('refresh')) : null
 const fixture = await createMockWorkspaceRepository().loadWorkspace(
   new AbortController().signal,
 )
@@ -117,6 +133,10 @@ const sessionTasks: WorkspaceTask[] = []
 // Tasks changed by 구간 수정 and the results each change kept, newest first.
 const revisedTasks = new Map<string, WorkspaceTask>()
 const keptResults = new Map<string, PreviousTaskResult[]>()
+// Tasks ahead of a queued task, as the server reports them.
+const queueAhead = new Map<string, number | null>()
+let nextTaskFailure: 'load-failed' | 'task-unavailable' | 'expired' | null =
+  null
 
 function findTask(taskId: string): WorkspaceTask | undefined {
   return (
@@ -133,7 +153,16 @@ function taskDetail(taskId: string): TaskDetail | null {
     (candidate) => candidate.id === task?.songId,
   )
   return task && song
-    ? { task, song, previousResults: keptResults.get(taskId) ?? [] }
+    ? {
+        task,
+        song,
+        previousResults: keptResults.get(taskId) ?? [],
+        stages: taskStages(task, song.inputKind),
+        queueAhead:
+          task.processingStatus === 'queued'
+            ? (queueAhead.get(taskId) ?? null)
+            : null,
+      }
     : null
 }
 
@@ -361,6 +390,11 @@ const repository: WorkspaceRepository = {
   },
   loadTask(taskId) {
     taskCalls.push(taskId)
+    if (nextTaskFailure) {
+      const code = nextTaskFailure
+      nextTaskFailure = null
+      return Promise.reject(new WorkspaceRepositoryError(code, 'Task failed'))
+    }
     if (scenario === 'pending-task') {
       return new Promise((resolve, reject) =>
         pendingTasks.push({ taskId, resolve, reject }),
@@ -536,6 +570,14 @@ window.workspaceTest = {
     const task = findTask(taskId)
     if (task) revisedTasks.set(taskId, { ...task, processingStatus: 'queued' })
   },
+  updateTaskOnServer(taskId, { queueAhead: ahead, ...change }) {
+    const task = findTask(taskId)
+    if (task) revisedTasks.set(taskId, { ...task, ...change })
+    if (ahead !== undefined) queueAhead.set(taskId, ahead)
+  },
+  failNextTaskLoad(code) {
+    nextTaskFailure = code
+  },
   resolveProbe(seconds) {
     pendingProbes.splice(0).forEach((resolve) => resolve(seconds))
   },
@@ -577,6 +619,7 @@ export function Harness() {
       workspace={workspace}
       repository={activeRepository}
       probeDuration={scenario === 'real-probe' ? undefined : fakeProbe}
+      taskRefreshMs={taskRefreshMs}
     />
   )
 }

@@ -51,6 +51,8 @@ const TOP_BAR_LABELS: Record<WorkspaceView['name'], string> = {
 const defaultDurationProbe = createMediaDurationProbe(
   UPLOAD_POLICY.metadataTimeoutMs,
 )
+// Set for the mock's pace; to be revisited with the server's status contract.
+const TASK_REFRESH_MS = 3_000
 
 interface AddSongRequest {
   readonly workspaceId: string
@@ -76,6 +78,7 @@ export function WorkspacePage({
   onLeave,
   focusOnEntry = false,
   probeDuration = defaultDurationProbe,
+  taskRefreshMs = TASK_REFRESH_MS,
 }: {
   workspace: UseWorkspaceResult
   repository: WorkspaceRepository
@@ -83,6 +86,9 @@ export function WorkspacePage({
   onLeave?: () => void
   focusOnEntry?: boolean
   probeDuration?: MediaDurationProbe
+  // How often an open queued or processing task is loaded again; null
+  // keeps the first load only.
+  taskRefreshMs?: number | null
 }) {
   const [filter, setFilter] = useState<Filter>('all')
   const { view, navigate, leave } = useWorkspaceNavigation()
@@ -92,10 +98,16 @@ export function WorkspacePage({
   const viewKey = workspaceViewKey(view)
   // The task and its 구간 수정 share one request, so the button and the
   // editor see the same copy of the task.
+  // Only the task view follows the task while it runs; 구간 수정 keeps the
+  // copy it opened with.
   const taskDetail = useTaskDetail(
     repository,
     view.name === 'task' || view.name === 'edit-section' ? view.taskId : null,
-    workspace.markExpired,
+    {
+      onExpired: workspace.markExpired,
+      onLoaded: ({ task }) => workspace.syncTask(task),
+      refreshMs: view.name === 'task' ? taskRefreshMs : null,
+    },
   )
   const [previousViewKey, setPreviousViewKey] = useState(viewKey)
   // Set when a created task opens: a dialog the user opened while it was

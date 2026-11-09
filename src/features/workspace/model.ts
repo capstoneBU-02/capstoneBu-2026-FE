@@ -80,11 +80,26 @@ export interface PreviousTaskResult {
   readonly copyStatus: WorkspaceTask['copyStatus']
 }
 
+// Separation and transcription succeed or fail separately (JOB-01).
+// Separated-guitar input skips separation (JOB-02).
+export type TaskStageId = 'separation' | 'transcription'
+export type TaskStageStatus =
+  'waiting' | 'running' | 'done' | 'failed' | 'skipped'
+
+export interface TaskStage {
+  readonly id: TaskStageId
+  readonly status: TaskStageStatus
+}
+
 export interface TaskDetail {
   readonly task: WorkspaceTask
   readonly song: WorkspaceSong
   // Newest first. The storage limit per workspace (D10) is still open.
   readonly previousResults: readonly PreviousTaskResult[]
+  // Separation first, then transcription.
+  readonly stages: readonly TaskStage[]
+  // Tasks ahead of a queued task; null when not queued or not known.
+  readonly queueAhead: number | null
 }
 
 export interface WorkspaceSnapshot {
