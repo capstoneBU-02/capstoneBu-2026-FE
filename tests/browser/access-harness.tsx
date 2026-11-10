@@ -146,6 +146,13 @@ const repository: AccessRepository = {
               )
             : workspace.loadSongAudio(songId, signal)
         },
+        loadSeparatedAudio(taskId, signal) {
+          return expired
+            ? Promise.reject(
+                new WorkspaceRepositoryError('expired', 'Expired test session'),
+              )
+            : workspace.loadSeparatedAudio(taskId, signal)
+        },
       }
       wrappers.set(workspace, wrapper)
     }

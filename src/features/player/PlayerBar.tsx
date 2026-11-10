@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+} from 'react'
 import { formatSectionTime } from '../new-section/sectionTime.ts'
 import type { SectionRange } from '../waveform/timeline.ts'
 import {
@@ -15,6 +21,9 @@ type Props = {
   // The decoded song; null while it loads or when it failed.
   buffer: AudioBuffer | null
   range: SectionRange | null
+  // The name of the track that plays, on screens built from tracks.
+  source?: string
+  onPlayingChange?: (playing: boolean) => void
 }
 
 // Rounded down, so the display never reads the full length before wrapping.
@@ -28,12 +37,19 @@ function paintTime(element: HTMLElement | null, seconds: number): void {
   if (element.textContent !== text) element.textContent = text
 }
 
-export function PlayerBar({ buffer, range }: Props) {
+export function PlayerBar({ buffer, range, source, onPlayingChange }: Props) {
   const playback = useSectionPlayer(buffer, range)
   const { available, length, playing, repeat, volume, muted, elapsed } =
     playback
   const timeRef = useRef<HTMLSpanElement>(null)
   const percent = Math.round(volume * 100)
+  const reportPlaying = useEffectEvent((next: boolean) =>
+    onPlayingChange?.(next),
+  )
+
+  useEffect(() => {
+    reportPlaying(playing)
+  }, [playing])
 
   // The playback time is written straight into the element, which React
   // leaves empty: a frame updates one text node and renders nothing.
@@ -98,6 +114,12 @@ export function PlayerBar({ buffer, range }: Props) {
             / {formatSectionTime(Math.round(length * 10))}
           </span>
         </p>
+        {source && (
+          <p className={styles.source}>
+            <span className={styles.hidden}>재생 트랙 </span>
+            {source}
+          </p>
+        )}
         <div className={styles.output}>
           {/* The repeat button's pressed state says the same to assistive tech. */}
           <span className={styles.mode} aria-hidden="true">

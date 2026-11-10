@@ -20,7 +20,7 @@ export interface SongAudio {
   retry(): void
 }
 
-type LoadAudio = (songId: string, signal: AbortSignal) => Promise<Blob>
+type LoadAudio = (audioId: string, signal: AbortSignal) => Promise<Blob>
 
 // Common for music files; the browser resamples on playback if needed.
 const DECODE_SAMPLE_RATE = 44_100
@@ -40,17 +40,28 @@ function channelsOf(buffer: AudioBuffer): Float32Array[] {
 }
 
 interface Request {
-  readonly songId: string
+  readonly audioId: string
   readonly version: number
 }
 
-// Loads, decodes and measures a song's audio while the screen is open.
-// Leaving the screen or switching songs cancels the work in progress.
+// Loads, decodes and measures a song's audio, or a track made from it, while
+// the screen is open. Leaving the screen or switching to other audio cancels
+// the work in progress. Without an id there is nothing to load: null.
 export function useSongAudio(
-  songId: string,
+  audioId: string,
   load: LoadAudio,
   onExpired: () => void,
-): SongAudio {
+): SongAudio
+export function useSongAudio(
+  audioId: string | null,
+  load: LoadAudio,
+  onExpired: () => void,
+): SongAudio | null
+export function useSongAudio(
+  audioId: string | null,
+  load: LoadAudio,
+  onExpired: () => void,
+): SongAudio | null {
   const [version, setVersion] = useState(0)
   const [result, setResult] = useState<{
     request: Request
@@ -59,17 +70,19 @@ export function useSongAudio(
   const loadAudio = useEffectEvent(load)
   const reportExpired = useEffectEvent(onExpired)
   const current =
-    result?.request.songId === songId && result.request.version === version
+    result?.request.audioId === audioId && result.request.version === version
       ? result.state
       : LOADING
 
   useEffect(() => {
+    if (audioId === null) return
+    const id = audioId
     const controller = new AbortController()
     const { signal } = controller
-    const request = { songId, version }
+    const request = { audioId: id, version }
 
     async function run(): Promise<SongAudioState> {
-      const blob = await loadAudio(songId, signal)
+      const blob = await loadAudio(id, signal)
       signal.throwIfAborted()
       const buffer = await decodeSongAudio(blob)
       signal.throwIfAborted()
@@ -96,8 +109,9 @@ export function useSongAudio(
       },
     )
     return () => controller.abort()
-  }, [songId, version])
+  }, [audioId, version])
 
+  if (audioId === null) return null
   return {
     state: current,
     retrying: version > 0 && current.status === 'loading',

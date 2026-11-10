@@ -71,12 +71,17 @@ interface TestControls {
   probeCalls(): string[]
   // Song audio requests and whether the screen has cancelled each one.
   audioCalls(): Array<{ songId: string; aborted: boolean }>
-  // audio-error serves playable audio from here on.
+  // Separated guitar requests and whether the screen has cancelled each one.
+  separatedCalls(): Array<{ taskId: string; aborted: boolean }>
+  // audio-error and separated-error serve playable audio from here on.
   healAudio(): void
   // The state of every playback output opened so far.
   audioContexts(): AudioContextState[]
   // Every sound source started so far, oldest first.
   audioSources(): Array<{ loop: boolean; loopStart: number; loopEnd: number }>
+  // Seconds of audio each of those sources plays from, so tests can tell the
+  // separated guitar from the whole song.
+  sourceDurations(): number[]
   // The latest output's volume; null before the first play.
   outputGain(): number | null
   // React commits anywhere in the page since it loaded.
@@ -338,6 +343,29 @@ function songAudio(songId: string, signal: AbortSignal): Promise<Blob> {
       )
 }
 
+// The separated guitar is synthesized for the section alone. audio-error and
+// separated-error serve bytes no browser decodes; pending-separated never
+// answers.
+const separatedCalls: Array<{ taskId: string; signal: AbortSignal }> = []
+let separatedBroken = scenario === 'separated-error'
+
+function separatedAudio(taskId: string, signal: AbortSignal): Promise<Blob> {
+  separatedCalls.push({ taskId, signal })
+  if (scenario === 'pending-separated') return new Promise(() => {})
+  if (audioBroken || separatedBroken)
+    return Promise.resolve(new Blob(['not audio'], { type: 'audio/wav' }))
+  const task = findTask(taskId)
+  return task?.hasSeparatedAudio
+    ? createDemoSongAudio(
+        `${taskId}-guitar`,
+        task.rangeEndSeconds - task.rangeStartSeconds,
+        signal,
+      )
+    : Promise.reject(
+        new WorkspaceRepositoryError('audio-unavailable', 'Unavailable'),
+      )
+}
+
 // Records each playback output, its sources and its volume, so tests can
 // check what really plays.
 const audioContexts: AudioContext[] = []
@@ -452,6 +480,7 @@ const repository: WorkspaceRepository = {
     return Promise.resolve(revisedTask(taskId, input))
   },
   loadSongAudio: songAudio,
+  loadSeparatedAudio: separatedAudio,
 }
 
 const secondRepository: WorkspaceRepository = {
@@ -486,6 +515,10 @@ const secondRepository: WorkspaceRepository = {
       new WorkspaceRepositoryError('task-unavailable', 'Unavailable'),
     ),
   loadSongAudio: () =>
+    Promise.reject(
+      new WorkspaceRepositoryError('audio-unavailable', 'Unavailable'),
+    ),
+  loadSeparatedAudio: () =>
     Promise.reject(
       new WorkspaceRepositoryError('audio-unavailable', 'Unavailable'),
     ),
@@ -587,8 +620,14 @@ window.workspaceTest = {
       songId,
       aborted: signal.aborted,
     })),
+  separatedCalls: () =>
+    separatedCalls.map(({ taskId, signal }) => ({
+      taskId,
+      aborted: signal.aborted,
+    })),
   healAudio() {
     audioBroken = false
+    separatedBroken = false
   },
   audioContexts: () => audioContexts.map((context) => context.state),
   audioSources: () =>
@@ -597,6 +636,8 @@ window.workspaceTest = {
       loopStart,
       loopEnd,
     })),
+  sourceDurations: () =>
+    audioSources.map((source) => source.buffer?.duration ?? 0),
   outputGain: () => audioGains.at(-1)?.gain.value ?? null,
   commits: () => commits,
 }

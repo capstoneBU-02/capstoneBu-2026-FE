@@ -684,6 +684,72 @@ test('cancelling one audio request leaves the shared demo to the others', async 
   assert.equal((await kept).type, 'audio/wav')
 })
 
+const wavSeconds = async (blob) => {
+  const view = new DataView(await blob.arrayBuffer())
+  return view.getUint32(40, true) / 2 / view.getUint32(24, true)
+}
+
+test('the separated guitar covers only the section and is kept for the session', async () => {
+  const repository = createMockWorkspaceRepository()
+  const guitar = await repository.loadSeparatedAudio('task-solo', signal())
+  assert.equal(guitar.type, 'audio/wav')
+  // 솔로 runs from 02:31.0 to 02:52.4.
+  const seconds = await wavSeconds(guitar)
+  assert.ok(Math.abs(seconds - 21.4) < 0.001, `got ${seconds}s`)
+  assert.equal(
+    await repository.loadSeparatedAudio('task-solo', signal()),
+    guitar,
+  )
+  // A failed tab keeps its separated guitar (JOB-04).
+  assert.equal(
+    (await repository.loadSeparatedAudio('task-intro', signal())).type,
+    'audio/wav',
+  )
+})
+
+test('a task without separated guitar has none to load', async () => {
+  const { clock, repository } = clockedRepository()
+  // 코러스 2 found no guitar.
+  await assert.rejects(repository.loadSeparatedAudio('task-chorus', signal()), {
+    code: 'audio-unavailable',
+  })
+  await assert.rejects(
+    repository.loadSeparatedAudio('task-missing', signal()),
+    {
+      code: 'audio-unavailable',
+    },
+  )
+  const task = await repository.createTask(section(), signal())
+  await assert.rejects(repository.loadSeparatedAudio(task.id, signal()), {
+    code: 'audio-unavailable',
+  })
+  // Once separation is done on the session clock, the guitar is there.
+  clock.now = 600
+  const seconds = await wavSeconds(
+    await repository.loadSeparatedAudio(task.id, signal()),
+  )
+  assert.ok(
+    Math.abs(seconds - (task.rangeEndSeconds - task.rangeStartSeconds)) < 0.001,
+  )
+})
+
+test('separated audio honours cancellation and expiry', async () => {
+  const controller = new AbortController()
+  const loading = createMockWorkspaceRepository().loadSeparatedAudio(
+    'task-solo',
+    controller.signal,
+  )
+  controller.abort()
+  await assert.rejects(loading, { name: 'AbortError' })
+  await assert.rejects(
+    createMockWorkspaceRepository('expired').loadSeparatedAudio(
+      'task-solo',
+      signal(),
+    ),
+    { code: 'expired' },
+  )
+})
+
 test('only supported demo query scenarios are enabled', () => {
   assert.equal(readDemoScenario('?demo=empty'), 'empty')
   assert.equal(readDemoScenario('?demo=unknown'), 'default')
