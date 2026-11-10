@@ -175,11 +175,14 @@ test('refreshing stops when the user leaves and a late answer changes nothing', 
   await expect(
     main(page).getByRole('heading', { name: '작업을 여는 중이에요' }),
   ).toBeVisible()
+  // Every call so far opens the task, so any later one is a refresh. Counting
+  // after the answer would miss a refresh sent while the screen was busy.
+  const opening = await taskCalls(page)
+  expect(opening).toBeGreaterThan(0)
   await page.evaluate(() => window.workspaceTest.resolveTask('task-solo'))
   await expect(progress(page)).toHaveAttribute('aria-valuenow', '64')
   // The next refresh is sent and left waiting.
-  const calls = await taskCalls(page)
-  await expect.poll(() => taskCalls(page)).toBeGreaterThan(calls)
+  await expect.poll(() => taskCalls(page)).toBeGreaterThan(opening)
   await updateOnServer(page, 'task-solo', { progressPercent: 90 })
 
   await sidebar(page).getByRole('button', { name: '내 작업' }).click()

@@ -40,6 +40,12 @@
   flex-direction: column;
 }
 
+/* Keeps the player at the bottom of a short page. */
+.content {
+  min-width: 0;
+  flex: 1 0 auto;
+}
+
 .header {
   border-bottom: 1px solid var(--border-default);
   padding: 22px 28px 20px;

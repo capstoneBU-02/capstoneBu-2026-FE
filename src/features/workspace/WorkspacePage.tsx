@@ -478,6 +478,13 @@ export function WorkspacePage({
             result={taskDetail}
             onRetry={retryWith(taskDetail.retry)}
             onReturnHome={goHome}
+            audioSource={{
+              loadSongAudio: (songId, signal) =>
+                repository.loadSongAudio(songId, signal),
+              loadSeparatedAudio: (taskId, signal) =>
+                repository.loadSeparatedAudio(taskId, signal),
+              onExpired: workspace.markExpired,
+            }}
           />
         )}
         {loadState === 'empty' && view.name === 'home' && (

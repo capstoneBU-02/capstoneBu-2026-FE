@@ -121,6 +121,28 @@
   margin-left: auto;
 }
 
+/* Which track plays; switching tracks comes with #19. */
+.source {
+  flex-shrink: 0;
+  margin: 0 auto;
+  border-radius: var(--radius-m);
+  padding: 6px 14px;
+  background: var(--console-raised);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .mode {
   margin-right: 4px;
   color: var(--console-muted);
@@ -189,6 +211,25 @@
 @container (max-width: 680px) {
   .mode {
     display: none;
+  }
+}
+
+/* The track name needs the room of the mode text, then more. The track rows
+   still show which one plays. */
+@container (max-width: 720px) {
+  .row:has(.source) .mode {
+    display: none;
+  }
+}
+
+@container (max-width: 640px) {
+  .source {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    padding: 0;
+    clip-path: inset(50%);
   }
 }
 
