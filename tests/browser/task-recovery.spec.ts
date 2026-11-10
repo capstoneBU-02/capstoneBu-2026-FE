@@ -202,6 +202,28 @@ test('a stop in progress cannot be sent twice and a failure keeps the dialog', a
   await expect(stopNotice(page)).toHaveText('솔로 작업을 멈췄어요.')
 })
 
+// The browser closes the dialog at once but says so in a later task, which
+// a quick failure can beat.
+test('a failure that beats the browser closing the dialog still shows', async ({
+  page,
+}) => {
+  await openTaskFromHome(page, /^솔로/, '솔로', 'pending-cancel')
+  await stopButton(page).click()
+  const dialog = stopDialog(page, '솔로')
+  await dialog.getByRole('button', { name: '멈추기' }).click()
+  await expect(dialog.getByRole('status')).toHaveText('멈추는 중…')
+
+  await page.evaluate(() => {
+    document.querySelector<HTMLDialogElement>('dialog[open]')!.close()
+    window.workspaceTest.failCancel('cancel-task-failed')
+  })
+  await expect(dialog.getByRole('alert')).toHaveText(STOP_FAILED)
+  await expect(dialog.getByRole('button', { name: '취소' })).toBeFocused()
+  await dialog.getByRole('button', { name: '취소' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(stopButton(page)).toBeFocused()
+})
+
 test('a stop that ends after the user left only updates the list', async ({
   page,
 }) => {
