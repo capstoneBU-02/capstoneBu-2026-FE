@@ -106,3 +106,70 @@ export const mockTasks: readonly WorkspaceTask[] = [
 export const mockRetriesUsed: Readonly<Record<string, number>> = {
   'task-intro': 1,
 }
+
+// ?demo=task-states adds the states #17 shows that the default list lacks: a
+// task waiting its turn, a tab failure with no retries left and a failed
+// separation with one left.
+export const mockTaskStates: readonly WorkspaceTask[] = [
+  ...mockTasks,
+  {
+    id: 'task-bridge',
+    sectionName: '브리지',
+    songId: 'song-neon-harbor',
+    part: 'lead',
+    tuningId: 'e-standard',
+    partLabel: '리드 기타',
+    tuningLabel: 'E 표준 6현',
+    rangeStartSeconds: 198,
+    rangeEndSeconds: 216.5,
+    processingStatus: 'queued',
+    failureKind: null,
+    progressPercent: null,
+    hasSeparatedAudio: false,
+    comparisonCount: 0,
+    copyStatus: 'unreviewed',
+    updatedAtLabel: '방금',
+  },
+  {
+    id: 'task-outro',
+    sectionName: '아웃트로',
+    songId: 'song-paper-moon',
+    part: 'lead',
+    tuningId: 'e-standard',
+    partLabel: '리드 기타',
+    tuningLabel: 'E 표준 6현',
+    rangeStartSeconds: 78,
+    rangeEndSeconds: 96,
+    processingStatus: 'failed',
+    failureKind: 'transcription',
+    progressPercent: null,
+    hasSeparatedAudio: true,
+    comparisonCount: 0,
+    copyStatus: 'unreviewed',
+    updatedAtLabel: '어제',
+  },
+  {
+    id: 'task-verse-2',
+    sectionName: '벌스 2',
+    songId: 'song-late-train',
+    part: 'rhythm',
+    tuningId: 'e-standard',
+    partLabel: '리듬 기타',
+    tuningLabel: 'E 표준 6현',
+    rangeStartSeconds: 40,
+    rangeEndSeconds: 62,
+    processingStatus: 'failed',
+    failureKind: 'transcription',
+    progressPercent: null,
+    hasSeparatedAudio: false,
+    comparisonCount: 0,
+    copyStatus: 'unreviewed',
+    updatedAtLabel: '어제',
+  },
+]
+
+export const mockTaskStatesRetriesUsed: Readonly<Record<string, number>> = {
+  ...mockRetriesUsed,
+  'task-outro': 3,
+  'task-verse-2': 2,
+}

@@ -8,9 +8,14 @@ import {
 } from '../add-song/mediaDuration.ts'
 import { UPLOAD_POLICY } from '../add-song/uploadPolicy.ts'
 import { EditSectionScreen } from '../edit-section/EditSectionScreen.tsx'
-import { canReviseSection } from '../edit-section/sectionEdit.ts'
+import {
+  canReviseSection,
+  otherFileSectionForm,
+  sectionEditKind,
+} from '../edit-section/sectionEdit.ts'
 import { NewSectionScreen } from '../new-section/NewSectionScreen.tsx'
 import { ReplaceFileDialog } from '../new-section/ReplaceFileDialog.tsx'
+import type { SectionForm } from '../new-section/sectionForm.ts'
 import { useSectionDrafts } from '../new-section/useSectionDrafts.ts'
 import { ConsentDialog } from './components/ConsentDialog.tsx'
 import { EmptyWorkspace } from './components/EmptyWorkspace.tsx'
@@ -24,7 +29,7 @@ import { TaskTable } from './components/TaskTable.tsx'
 import { TaskBreadcrumb, TaskPanel } from './components/TaskWorkspace.tsx'
 import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx'
 import { isTaskInProgress } from './format.ts'
-import type { SongInputKind } from './model.ts'
+import type { SongInputKind, WorkspaceTask } from './model.ts'
 import type { WorkspaceRepository } from './repository.ts'
 import { useTaskDetail } from './useTaskDetail.ts'
 import { useTaskRecovery } from './useTaskRecovery.ts'
@@ -63,9 +68,12 @@ const TASK_REFRESH_MS = 3_000
 interface AddSongRequest {
   readonly workspaceId: string
   readonly files: readonly File[]
+  readonly title?: string
   // Set when 파일 바꾸기 adds a replacement for this song's draft.
   readonly replacesSongId?: string
   readonly inputKind?: SongInputKind
+  // The new song's first draft, set by 다른 파일 올리기.
+  readonly draft?: SectionForm
 }
 
 interface ReplaceFileRequest {
@@ -246,11 +254,28 @@ export function WorkspacePage({
     setAddSong({
       workspaceId: replaceFile.workspaceId,
       files: [],
+      title: '파일 바꾸기',
       replacesSongId: replaceFile.songId,
       inputKind: songs.find((song) => song.id === replaceFile.songId)
         ?.inputKind,
     })
     setReplaceFile(null)
+  }
+  // A song without guitar leaves its task in the list. The new song starts
+  // with the section's name and tuning; its kind is the dialog's default,
+  // so a separated guitar file can be chosen there.
+  function uploadOtherFile(
+    task: WorkspaceTask,
+    returnFocus: HTMLElement | null,
+  ) {
+    if (!workspaceId || !workspaceReady) return
+    addSongReturnFocusRef.current = returnFocus
+    setAddSong({
+      workspaceId,
+      files: [],
+      title: '다른 파일 올리기',
+      draft: otherFileSectionForm(task),
+    })
   }
   function focusContent() {
     mainContentRef.current?.focus({ preventScroll: true })
@@ -299,10 +324,9 @@ export function WorkspacePage({
   )
   const newSection = workspaceReady ? newSectionSong : null
   const detail = workspaceReady ? taskDetail.detail : null
-  const editSection =
-    view.name === 'edit-section' && detail && canReviseSection(detail.task)
-      ? detail
-      : null
+  const editKind =
+    view.name === 'edit-section' && detail ? sectionEditKind(detail.task) : null
+  const editSection = editKind ? detail : null
   const shownTask = view.name === 'task' ? detail?.task : undefined
   // The dialog stays while its request runs, even if the task finishes.
   const stoppable = Boolean(
@@ -512,7 +536,7 @@ export function WorkspacePage({
               <div className={styles.centeredState}>
                 <TaskUnavailablePanel
                   title="구간을 바꿀 수 없어요"
-                  description="타브가 완성된 작업만 구간을 바꿀 수 있어요."
+                  description="타브가 완성된 작업과 기타를 찾지 못한 작업만 구간을 바꿀 수 있어요."
                   actionLabel="작업으로 돌아가기"
                   onReturnToWorkspace={() => leaveEdit(task.id)}
                 />
@@ -520,10 +544,11 @@ export function WorkspacePage({
             )}
           />
         )}
-        {editSection && (
+        {editSection && editKind && (
           <EditSectionScreen
             key={editSection.task.id}
             task={editSection.task}
+            kind={editKind}
             song={editSection.song}
             songTasks={tasks.filter(
               (task) => task.songId === editSection.song.id,
@@ -553,6 +578,8 @@ export function WorkspacePage({
             recovery={{
               retry: recovery.retry,
               contact: (returnFocus) => openSupport('contact', returnFocus),
+              redefine: (taskId) => go({ name: 'edit-section', taskId }),
+              uploadOther: uploadOtherFile,
             }}
           />
         )}
@@ -644,7 +671,7 @@ export function WorkspacePage({
       )}
       {addSong && addSong.workspaceId === workspaceId && workspaceReady && (
         <AddSongDialog
-          title={addSong.replacesSongId ? '파일 바꾸기' : undefined}
+          title={addSong.title}
           probeDuration={probeDuration}
           initialFiles={addSong.files}
           initialInputKind={addSong.inputKind}
@@ -653,6 +680,7 @@ export function WorkspacePage({
             // The draft follows the new file; its range and part start over.
             if (addSong.replacesSongId)
               drafts.replaceFile(addSong.replacesSongId, song.id)
+            if (addSong.draft) drafts.seed(song.id, addSong.draft)
             setAddSong(null)
             go({ name: 'new-section', songId: song.id })
           }}

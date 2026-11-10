@@ -11,7 +11,10 @@ import { SECTION_POLICY } from '../../src/features/new-section/sectionPolicy.ts'
 import { WorkspacePage } from '../../src/features/workspace/WorkspacePage.tsx'
 import { isTaskInProgress } from '../../src/features/workspace/format.ts'
 import { mockRetriesUsed } from '../../src/features/workspace/mockFixtures.ts'
-import { mockRetryOf } from '../../src/features/workspace/mockServer.ts'
+import {
+  keptResult,
+  mockRetryOf,
+} from '../../src/features/workspace/mockServer.ts'
 import { createMockWorkspaceRepository } from '../../src/features/workspace/mockRepository.ts'
 import { taskStages } from '../../src/features/workspace/processing.ts'
 import type {
@@ -301,21 +304,17 @@ const pendingRevises: Array<{
   reject: (error: Error) => void
 }> = []
 
+// A finished tab is kept (D10); a section without guitar had none. The new
+// section is a new stem, so its retries start over.
 function revisedTask(taskId: string, input: ReviseTaskInput): WorkspaceTask {
   const task = findTask(taskId)!
-  keptResults.set(taskId, [
-    {
-      id: `kept-${taskId}-${(keptResults.get(taskId)?.length ?? 0) + 1}`,
-      sectionName: task.sectionName,
-      partLabel: task.partLabel,
-      tuningLabel: task.tuningLabel,
-      rangeStartSeconds: task.rangeStartSeconds,
-      rangeEndSeconds: task.rangeEndSeconds,
-      comparisonCount: task.comparisonCount,
-      copyStatus: task.copyStatus,
-    },
-    ...(keptResults.get(taskId) ?? []),
-  ])
+  const kept = keptResults.get(taskId) ?? []
+  if (task.processingStatus === 'completed')
+    keptResults.set(taskId, [
+      keptResult(task, `kept-${taskId}-${kept.length + 1}`),
+      ...kept,
+    ])
+  retriesUsed.delete(taskId)
   const revised: WorkspaceTask = {
     ...task,
     sectionName: input.sectionName,

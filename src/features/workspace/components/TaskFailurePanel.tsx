@@ -1,7 +1,12 @@
 import { useId, useState } from 'react'
 import { Button } from '../../../shared/ui/Button.tsx'
 import { Icon } from '../../../shared/ui/Icon.tsx'
-import type { SongInputKind, TaskDetail, TaskStageId } from '../model.ts'
+import type {
+  SongInputKind,
+  TaskDetail,
+  TaskStageId,
+  WorkspaceTask,
+} from '../model.ts'
 import { failedStage } from '../processing.ts'
 import pageStyles from '../WorkspacePage.module.css'
 import styles from './TaskFailurePanel.module.css'
@@ -12,6 +17,13 @@ export interface TaskRecoveryActions {
     taskId: string,
   ) => Promise<'retried' | 'failed' | 'cancelled'>
   readonly contact: (returnFocus: HTMLElement | null) => void
+  // A song without guitar cannot be sent again (SEPARATION_NO_GUITAR); the
+  // section moves, or another file starts a new one.
+  readonly redefine: (taskId: string) => void
+  readonly uploadOther: (
+    task: WorkspaceTask,
+    returnFocus: HTMLElement | null,
+  ) => void
 }
 
 // JOB-04: what the failure leaves to listen to.
@@ -95,6 +107,43 @@ export function TaskFailurePanel({
             {detail.retry?.left}회 남음
           </span>
         )}
+      </div>
+    </section>
+  )
+}
+
+// The body of a task whose song had no guitar to separate (Figma 84:3389).
+// Nothing is kept to listen to but the song, and a retry would find the same.
+export function NoGuitarPanel({
+  detail,
+  redefine,
+  uploadOther,
+}: { detail: TaskDetail } & Pick<
+  TaskRecoveryActions,
+  'redefine' | 'uploadOther'
+>) {
+  const headingId = useId()
+  const { task } = detail
+  return (
+    <section className={styles.panel} aria-labelledby={headingId}>
+      <h2 id={headingId} className={styles.title}>
+        <Icon name="alertTriangle" />
+        기타 소리를 거의 찾지 못했어요
+      </h2>
+      <p className={styles.advice}>
+        고른 구간에서 기타가 작게 들리거나 다른 악기와 겹쳐 있으면 그럴 수
+        있어요. 기타가 잘 들리는 구간을 다시 골라 보세요.
+      </p>
+      <div className={styles.actions}>
+        <Button variant="primary" compact onClick={() => redefine(task.id)}>
+          구간 다시 정하기
+        </Button>
+        <Button
+          compact
+          onClick={(event) => uploadOther(task, event.currentTarget)}
+        >
+          다른 파일 올리기
+        </Button>
       </div>
     </section>
   )

@@ -446,17 +446,6 @@ test('used-up retries offer 문의하기 instead', async ({ page }) => {
   await expect(contact).toBeFocused()
 })
 
-test('a song without guitar has no 다시 시도 yet', async ({ page }) => {
-  await page.goto('/tests/browser/harness.html?view=task&task=task-chorus')
-  await expect(title(page)).toHaveText('코러스 2')
-  await expect(
-    main(page).getByRole('button', { name: '다시 시도' }),
-  ).toHaveCount(0)
-  await expect(
-    main(page).getByRole('heading', { name: '작업 화면 준비 중' }),
-  ).toBeVisible()
-})
-
 test('a retry in progress cannot be sent twice; a failure shows the new count', async ({
   page,
 }) => {
