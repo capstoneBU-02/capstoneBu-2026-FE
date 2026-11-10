@@ -39,8 +39,6 @@ import {
   type WorkspaceRepository,
 } from './repository.ts'
 
-// 다시 시도 after a failure, not counting the first run (JOB-05, D12).
-
 interface MockWorkspaceOptions {
   readonly workspace?: WorkspaceInfo
   // Without explicit songs, only the fixture songs referenced by tasks remain.
