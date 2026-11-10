@@ -31,6 +31,9 @@ export interface WorkspaceRepository {
   // The song's audio file, decoded in the browser for the waveform and
   // playback. The shape of the real delivery (bytes or a URL) is still open.
   loadSongAudio(songId: string, signal: AbortSignal): Promise<Blob>
+  // The guitar separated from the task's section: as long as the section,
+  // with 0 s at the section start. Fails while the task has none.
+  loadSeparatedAudio(taskId: string, signal: AbortSignal): Promise<Blob>
 }
 
 type RepositoryErrorCode =

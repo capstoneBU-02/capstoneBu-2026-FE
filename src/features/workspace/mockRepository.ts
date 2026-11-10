@@ -13,6 +13,8 @@ import {
   isPolicySectionName,
 } from '../new-section/sectionForm.ts'
 import { SECTION_POLICY } from '../new-section/sectionPolicy.ts'
+import { createMockAudio } from './mockAudio.ts'
+import { mockSongs, mockTasks } from './mockFixtures.ts'
 import type {
   ConsentChoice,
   DemoScenario,
@@ -23,7 +25,6 @@ import type {
   WorkspaceSong,
   WorkspaceTask,
 } from './model.ts'
-import { createDemoSongAudio } from './demoSongAudio.ts'
 import {
   DEMO_PROCESSING_TIMING,
   progressedTask,
@@ -36,121 +37,6 @@ import {
   WorkspaceRepositoryError,
   type WorkspaceRepository,
 } from './repository.ts'
-
-const mockSongs: readonly WorkspaceSong[] = [
-  {
-    id: 'song-neon-harbor',
-    name: 'neon_harbor_live',
-    fileName: 'neon_harbor_live.mp3',
-    inputKind: 'original',
-    durationSeconds: 252,
-  },
-  {
-    id: 'song-paper-moon',
-    name: 'paper_moon_gtr_stem',
-    fileName: 'paper_moon_gtr_stem.mp3',
-    inputKind: 'separated-guitar',
-    durationSeconds: 96,
-  },
-  {
-    id: 'song-late-train',
-    name: 'late_train_cover',
-    fileName: 'late_train_cover.mp4',
-    inputKind: 'original',
-    durationSeconds: 238,
-  },
-]
-
-const mockTasks: readonly WorkspaceTask[] = [
-  {
-    id: 'task-verse',
-    sectionName: '벌스 1',
-    songId: 'song-neon-harbor',
-    part: 'rhythm',
-    tuningId: 'e-standard',
-    partLabel: '리듬 기타',
-    tuningLabel: 'E 표준 6현',
-    rangeStartSeconds: 42.1,
-    rangeEndSeconds: 65.8,
-    processingStatus: 'completed',
-    failureKind: null,
-    progressPercent: null,
-    hasSeparatedAudio: true,
-    comparisonCount: 2,
-    copyStatus: 'confirmed',
-    updatedAtLabel: '오늘 21:40',
-  },
-  {
-    id: 'task-solo',
-    sectionName: '솔로',
-    songId: 'song-neon-harbor',
-    part: 'lead',
-    tuningId: 'e-standard',
-    partLabel: '리드 기타',
-    tuningLabel: 'E 표준 6현',
-    rangeStartSeconds: 151,
-    rangeEndSeconds: 172.4,
-    processingStatus: 'processing',
-    failureKind: null,
-    progressPercent: 64,
-    hasSeparatedAudio: true,
-    comparisonCount: 0,
-    copyStatus: 'unreviewed',
-    updatedAtLabel: '방금',
-  },
-  {
-    id: 'task-intro',
-    sectionName: '인트로',
-    songId: 'song-paper-moon',
-    part: 'lead',
-    tuningId: 'e-standard',
-    partLabel: '리드 기타',
-    tuningLabel: 'E 표준 6현',
-    rangeStartSeconds: 0,
-    rangeEndSeconds: 18.2,
-    processingStatus: 'failed',
-    failureKind: 'transcription',
-    progressPercent: null,
-    hasSeparatedAudio: true,
-    comparisonCount: 0,
-    copyStatus: 'needs-review',
-    updatedAtLabel: '어제',
-  },
-  {
-    id: 'task-chorus',
-    sectionName: '코러스 2',
-    songId: 'song-late-train',
-    part: 'rhythm',
-    tuningId: 'e-standard',
-    partLabel: '리듬 기타',
-    tuningLabel: 'E 표준 6현',
-    rangeStartSeconds: 190,
-    rangeEndSeconds: 211,
-    processingStatus: 'failed',
-    failureKind: 'no-guitar',
-    progressPercent: null,
-    hasSeparatedAudio: false,
-    comparisonCount: 0,
-    copyStatus: 'needs-review',
-    updatedAtLabel: '10월 25일',
-  },
-]
-
-// Lets one caller stop waiting on shared work without cancelling it.
-function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const abort = () =>
-      reject(new DOMException('요청이 취소되었습니다.', 'AbortError'))
-    if (signal.aborted) {
-      abort()
-      return
-    }
-    signal.addEventListener('abort', abort, { once: true })
-    work
-      .then(resolve, reject)
-      .finally(() => signal.removeEventListener('abort', abort))
-  })
-}
 
 function waitForMockRequest(milliseconds: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -243,10 +129,7 @@ export function createMockWorkspaceRepository(
   ).map((song) => ({ ...song }))
   let shouldFailNextLoad = scenario === 'error'
   let shouldFailNextTaskLoad = scenario === 'error'
-  // Added files live only in this session's memory for later playback (#16).
-  const songFiles = new Map<string, File>()
-  // Synthesized once per session, like a file the server keeps.
-  const demoAudio = new Map<string, Promise<Blob>>()
+  const audio = createMockAudio()
   // Results kept by 구간 수정, newest first, per task id (D10).
   const previousResults = new Map<string, readonly PreviousTaskResult[]>()
   // Created and changed tasks, in the order they were queued.
@@ -374,7 +257,7 @@ export function createMockWorkspaceRepository(
         durationSeconds: input.durationSeconds,
       }
       songs.push(song)
-      songFiles.set(song.id, input.file)
+      audio.keepFile(song.id, input.file)
       return { ...song }
     },
     async createTask(input, signal) {
@@ -465,27 +348,16 @@ export function createMockWorkspaceRepository(
     async loadSongAudio(songId, signal) {
       await waitForMockRequest(200, signal)
       throwIfExpired()
-      const file = songFiles.get(songId)
-      if (file) return file
       const song = songs.find((candidate) => candidate.id === songId)
-      if (!song) {
-        throw new WorkspaceRepositoryError(
-          'audio-unavailable',
-          '음원을 불러오지 못했어요.',
-        )
-      }
-      let audio = demoAudio.get(songId)
-      if (!audio) {
-        // Shared by every request for the song, so no caller cancels it.
-        audio = createDemoSongAudio(
-          song.id,
-          song.durationSeconds,
-          new AbortController().signal,
-        )
-        demoAudio.set(songId, audio)
-        audio.catch(() => demoAudio.delete(songId))
-      }
-      return untilAborted(audio, signal)
+      return audio.song(song, signal)
+    },
+    async loadSeparatedAudio(taskId, signal) {
+      await waitForMockRequest(200, signal)
+      throwIfExpired()
+      const task = currentTasks().tasks.find(
+        (candidate) => candidate.id === taskId,
+      )
+      return audio.separated(task, signal)
     },
   }
 }

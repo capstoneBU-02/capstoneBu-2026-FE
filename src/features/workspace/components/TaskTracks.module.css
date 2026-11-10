@@ -1,0 +1,96 @@
+.tracks {
+  --label-width: 104px;
+  border-bottom: 1px solid var(--border-default);
+  padding: 16px 28px 12px;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  --wave-bar: var(--border-strong);
+  display: grid;
+  min-width: 0;
+  grid-template-columns: var(--label-width) minmax(0, 1fr);
+  align-items: center;
+}
+
+.row[data-playing='true'] {
+  --wave-bar: var(--ink-secondary);
+}
+
+/* The divider runs under the waveforms only, not the labels. */
+.list .row + .row {
+  background: linear-gradient(var(--border-default), var(--border-default))
+    var(--label-width) 0 / calc(100% - var(--label-width)) 1px no-repeat;
+}
+
+.ruler {
+  grid-column: 2;
+}
+
+.label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding-right: 12px;
+  color: var(--ink-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+  /* 분리 기타 and its dot overflow into the right padding at 390px rather
+     than break inside the word. */
+  white-space: nowrap;
+}
+
+.row[data-playing='true'] .label {
+  color: var(--ink-primary);
+  font-weight: 700;
+}
+
+/* Separation found almost no guitar; the body says what to do. */
+.alertDot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background-color: var(--accent-default);
+}
+
+.lane {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  height: 56px;
+  align-items: center;
+  gap: 12px;
+  margin: 3px 0;
+}
+
+.lane:focus {
+  outline: none;
+}
+
+.note {
+  margin: 0;
+  color: var(--ink-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+@media (max-width: 1100px) {
+  .tracks {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+}
+
+@media (max-width: 700px) {
+  .tracks {
+    --label-width: 72px;
+    padding: 12px 16px 8px;
+  }
+}
