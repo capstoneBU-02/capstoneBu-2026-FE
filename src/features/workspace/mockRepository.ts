@@ -8,17 +8,12 @@ import {
   canReviseSection,
   changesSectionResult,
 } from '../edit-section/sectionEdit.ts'
-import {
-  checkSectionRange,
-  isPolicySectionName,
-} from '../new-section/sectionForm.ts'
-import { SECTION_POLICY } from '../new-section/sectionPolicy.ts'
+import { isTaskInProgress } from './format.ts'
 import { createMockAudio } from './mockAudio.ts'
-import { mockSongs, mockTasks } from './mockFixtures.ts'
+import { mockRetriesUsed, mockSongs, mockTasks } from './mockFixtures.ts'
 import type {
   ConsentChoice,
   DemoScenario,
-  NewTaskInput,
   PreviousTaskResult,
   SavedConsentChoice,
   WorkspaceInfo,
@@ -32,68 +27,19 @@ import {
   type ProcessingRun,
   type ProcessingTiming,
 } from './mockProcessing.ts'
+import {
+  keptResult,
+  mockRetryOf,
+  newTaskLabels,
+  waitForMockRequest,
+} from './mockServer.ts'
 import { taskStages } from './processing.ts'
 import {
   WorkspaceRepositoryError,
   type WorkspaceRepository,
 } from './repository.ts'
 
-function waitForMockRequest(milliseconds: number, signal: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException('요청이 취소되었습니다.', 'AbortError'))
-      return
-    }
-
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', abort)
-      resolve()
-    }, milliseconds)
-
-    function abort() {
-      clearTimeout(timer)
-      signal.removeEventListener('abort', abort)
-      reject(new DOMException('요청이 취소되었습니다.', 'AbortError'))
-    }
-
-    signal.addEventListener('abort', abort, { once: true })
-  })
-}
-
-// A server would refuse what the screen should never have sent.
-function newTaskLabels(
-  input: NewTaskInput,
-  song: WorkspaceSong | undefined,
-): { partLabel: string; tuningLabel: string } | null {
-  const part = SECTION_POLICY.parts.find((option) => option.id === input.part)
-  const tuning = SECTION_POLICY.tunings.find(
-    (option) => option.id === input.tuningId,
-  )
-  const valid =
-    song !== undefined &&
-    part !== undefined &&
-    tuning !== undefined &&
-    isPolicySectionName(input.sectionName) &&
-    checkSectionRange(
-      input.rangeStartSeconds,
-      input.rangeEndSeconds,
-      song.durationSeconds,
-    )
-  return valid ? { partLabel: part.label, tuningLabel: tuning.label } : null
-}
-
-function keptResult(task: WorkspaceTask, id: string): PreviousTaskResult {
-  return {
-    id,
-    sectionName: task.sectionName,
-    partLabel: task.partLabel,
-    tuningLabel: task.tuningLabel,
-    rangeStartSeconds: task.rangeStartSeconds,
-    rangeEndSeconds: task.rangeEndSeconds,
-    comparisonCount: task.comparisonCount,
-    copyStatus: task.copyStatus,
-  }
-}
+// 다시 시도 after a failure, not counting the first run (JOB-05, D12).
 
 interface MockWorkspaceOptions {
   readonly workspace?: WorkspaceInfo
@@ -101,6 +47,8 @@ interface MockWorkspaceOptions {
   readonly songs?: readonly WorkspaceSong[]
   readonly tasks?: readonly WorkspaceTask[]
   readonly consentChoice?: ConsentChoice
+  // Retries each failed task has used; the fixture counts by default.
+  readonly retriesUsed?: Readonly<Record<string, number>>
   readonly onConsentSaved?: (choice: SavedConsentChoice) => void
   // The session clock and the pace of queued tasks; tests pass their own.
   readonly now?: () => number
@@ -134,6 +82,11 @@ export function createMockWorkspaceRepository(
   const previousResults = new Map<string, readonly PreviousTaskResult[]>()
   // Created and changed tasks, in the order they were queued.
   const runs: ProcessingRun[] = []
+  const retriesUsed = new Map(
+    Object.entries(
+      options.retriesUsed ?? (options.tasks ? {} : mockRetriesUsed),
+    ),
+  )
   const now = options.now ?? Date.now
   const timing = options.processingTiming ?? DEMO_PROCESSING_TIMING
   let addedSongCount = 0
@@ -145,8 +98,27 @@ export function createMockWorkspaceRepository(
     runs.push({
       taskId: task.id,
       enqueuedAt: now(),
-      skipsSeparation: song?.inputKind === 'separated-guitar',
+      // A retry starts from the stage that failed (JOB-04).
+      skipsSeparation:
+        song?.inputKind === 'separated-guitar' || task.hasSeparatedAudio,
     })
+  }
+
+  // AI_WORKER_* failures can be sent again; a song without guitar cannot.
+  function retryOf(task: WorkspaceTask) {
+    return mockRetryOf(task, retriesUsed.get(task.id) ?? 0)
+  }
+
+  // The task as it stands now, with its place in the list.
+  function findCurrent(taskId: string) {
+    const index = tasks.findIndex((candidate) => candidate.id === taskId)
+    if (index < 0) {
+      throw new WorkspaceRepositoryError(
+        'task-unavailable',
+        '작업을 찾을 수 없어요.',
+      )
+    }
+    return { index, task: currentTasks().tasks[index] }
   }
 
   // Every read sees the tasks as they stand on the session clock.
@@ -232,6 +204,7 @@ export function createMockWorkspaceRepository(
         })),
         stages: taskStages(task, song.inputKind),
         queueAhead: state?.status === 'queued' ? state.ahead : null,
+        retry: retryOf(task),
       }
     },
     async addSong(input, signal) {
@@ -297,14 +270,7 @@ export function createMockWorkspaceRepository(
     async reviseTask(taskId, input, signal) {
       await waitForMockRequest(300, signal)
       throwIfExpired()
-      const index = tasks.findIndex((candidate) => candidate.id === taskId)
-      if (index < 0) {
-        throw new WorkspaceRepositoryError(
-          'task-unavailable',
-          '작업을 찾을 수 없어요.',
-        )
-      }
-      const task = currentTasks().tasks[index]
+      const { index, task } = findCurrent(taskId)
       const song = songs.find((candidate) => candidate.id === task.songId)
       const labels = newTaskLabels({ ...input, songId: task.songId }, song)
       if (
@@ -344,6 +310,51 @@ export function createMockWorkspaceRepository(
       tasks.splice(index, 1, revised)
       enqueue(revised)
       return { ...revised }
+    },
+    async cancelTask(taskId, signal) {
+      await waitForMockRequest(300, signal)
+      throwIfExpired()
+      const { index, task } = findCurrent(taskId)
+      // STEM_NOT_CANCELABLE: it finished or failed before the request.
+      if (!isTaskInProgress(task)) {
+        throw new WorkspaceRepositoryError(
+          'cancel-task-failed',
+          '작업을 멈추지 못했어요.',
+        )
+      }
+      // The task, its separated guitar and its kept results go; the song
+      // stays. Its run frees the worker for the ones behind it.
+      tasks.splice(index, 1)
+      previousResults.delete(taskId)
+      retriesUsed.delete(taskId)
+      const runIndex = runs.findLastIndex((run) => run.taskId === taskId)
+      if (runIndex >= 0)
+        runs.splice(runIndex, 1, { ...runs[runIndex], canceledAt: now() })
+    },
+    async retryTask(taskId, signal) {
+      await waitForMockRequest(300, signal)
+      throwIfExpired()
+      const { index, task } = findCurrent(taskId)
+      const retry = retryOf(task)
+      // STEM_NOT_RETRYABLE, RETRY_LIMIT_EXCEEDED or STEM_IN_PROGRESS.
+      if (!retry || retry.left === 0) {
+        throw new WorkspaceRepositoryError(
+          'retry-task-failed',
+          '다시 시도하지 못했어요.',
+        )
+      }
+
+      retriesUsed.set(taskId, retry.limit - retry.left + 1)
+      const retried: WorkspaceTask = {
+        ...task,
+        processingStatus: 'queued',
+        failureKind: null,
+        progressPercent: null,
+        updatedAtLabel: '방금',
+      }
+      tasks.splice(index, 1, retried)
+      enqueue(retried)
+      return { ...retried }
     },
     async loadSongAudio(songId, signal) {
       await waitForMockRequest(200, signal)

@@ -269,34 +269,6 @@
   background: var(--surface-canvas);
 }
 
-.confirmDialog {
-  width: min(400px, calc(100vw - 32px));
-  padding: 24px;
-  word-break: keep-all;
-  overflow-wrap: anywhere;
-}
-
-.confirmDialog h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 24px;
-}
-
-.confirmDialog p {
-  margin: 8px 0 0;
-  color: var(--ink-secondary);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.confirmActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 20px;
-}
-
 @media (max-width: 1100px) {
   .form {
     padding-right: 24px;
@@ -326,9 +298,5 @@
 
   .nameControls .select {
     flex: 1;
-  }
-
-  .confirmDialog {
-    padding: 20px 16px;
   }
 }

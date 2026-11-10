@@ -28,6 +28,12 @@ export interface WorkspaceRepository {
     input: ReviseTaskInput,
     signal: AbortSignal,
   ): Promise<WorkspaceTask>
+  // 멈추기: a queued or processing task stops, leaves the list and loses
+  // its separated guitar; the song stays. Fails once the task has finished.
+  cancelTask(taskId: string, signal: AbortSignal): Promise<void>
+  // 다시 시도: a failed task goes back to the queue and starts from the stage
+  // that failed, keeping the separated guitar it already has (JOB-04).
+  retryTask(taskId: string, signal: AbortSignal): Promise<WorkspaceTask>
   // The song's audio file, decoded in the browser for the waveform and
   // playback. The shape of the real delivery (bytes or a URL) is still open.
   loadSongAudio(songId: string, signal: AbortSignal): Promise<Blob>
@@ -44,6 +50,8 @@ type RepositoryErrorCode =
   | 'add-song-failed'
   | 'create-task-failed'
   | 'revise-task-failed'
+  | 'cancel-task-failed'
+  | 'retry-task-failed'
   | 'audio-unavailable'
 
 export class WorkspaceRepositoryError extends Error {

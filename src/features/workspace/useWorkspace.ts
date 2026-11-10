@@ -36,6 +36,14 @@ export type ReviseTaskResult =
   | { readonly status: 'revised'; readonly task: WorkspaceTask }
   | { readonly status: 'failed' | 'expired' | 'cancelled' }
 
+export type CancelTaskResult = {
+  readonly status: 'canceled' | 'failed' | 'expired' | 'cancelled'
+}
+
+export type RetryTaskResult =
+  | { readonly status: 'retried'; readonly task: WorkspaceTask }
+  | { readonly status: 'failed' | 'expired' | 'cancelled' }
+
 type RequestOutcome<T> =
   | { readonly status: 'done'; readonly value: T }
   | { readonly status: 'failed' | 'expired' | 'cancelled' }
@@ -64,6 +72,9 @@ export interface UseWorkspaceResult {
     input: ReviseTaskInput,
     signal: AbortSignal,
   ): Promise<ReviseTaskResult>
+  // 멈추기 takes the task off the list once the repository has stopped it.
+  cancelTask(taskId: string, signal: AbortSignal): Promise<CancelTaskResult>
+  retryTask(taskId: string, signal: AbortSignal): Promise<RetryTaskResult>
   // A task loaded on its own screen updates the same task in the list.
   syncTask(task: WorkspaceTask): void
 }
@@ -84,6 +95,35 @@ const initialConsent: ConsentState = {
   choice: 'undecided',
   status: 'idle',
   errorMessage: null,
+}
+
+function abortAll(slots: readonly RefObject<AbortController | null>[]) {
+  for (const slot of slots) {
+    slot.current?.abort()
+    slot.current = null
+  }
+}
+
+function withTasks(
+  previous: WorkspaceState,
+  change: (tasks: readonly WorkspaceTask[]) => readonly WorkspaceTask[],
+): WorkspaceState {
+  return previous.snapshot
+    ? {
+        ...previous,
+        snapshot: {
+          ...previous.snapshot,
+          tasks: change(previous.snapshot.tasks),
+        },
+      }
+    : previous
+}
+
+// The task keeps its place; the list and sidebar show its new state.
+function replacedTask(previous: WorkspaceState, changed: WorkspaceTask) {
+  return withTasks(previous, (tasks) =>
+    tasks.map((task) => (task.id === changed.id ? changed : task)),
+  )
 }
 
 function sameTask(a: WorkspaceTask, b: WorkspaceTask) {
@@ -123,6 +163,17 @@ export function useWorkspace(
   const addSongController = useRef<AbortController | null>(null)
   const createTaskController = useRef<AbortController | null>(null)
   const reviseTaskController = useRef<AbortController | null>(null)
+  const cancelTaskController = useRef<AbortController | null>(null)
+  const retryTaskController = useRef<AbortController | null>(null)
+  // A new load or expiry ends every request; their results change nothing.
+  const requestSlots = useRef([
+    consentController,
+    addSongController,
+    createTaskController,
+    reviseTaskController,
+    cancelTaskController,
+    retryTaskController,
+  ])
   // A changed request hides previous workspace data during the render itself.
   const isCurrentRequest =
     state.repository === repository && state.loadVersion === loadVersion
@@ -133,15 +184,8 @@ export function useWorkspace(
   useEffect(() => {
     const controller = new AbortController()
     const currentGeneration = ++generation.current
-
-    consentController.current?.abort()
-    consentController.current = null
-    addSongController.current?.abort()
-    addSongController.current = null
-    createTaskController.current?.abort()
-    createTaskController.current = null
-    reviseTaskController.current?.abort()
-    reviseTaskController.current = null
+    const slots = requestSlots.current
+    abortAll(slots)
 
     repository.loadWorkspace(controller.signal).then(
       (nextSnapshot) => {
@@ -190,10 +234,7 @@ export function useWorkspace(
 
     return () => {
       controller.abort()
-      consentController.current?.abort()
-      addSongController.current?.abort()
-      createTaskController.current?.abort()
-      reviseTaskController.current?.abort()
+      abortAll(slots)
     }
   }, [repository, loadVersion])
 
@@ -376,24 +417,59 @@ export function useWorkspace(
       reviseTaskController,
       signal,
       (requestSignal) => repository.reviseTask(taskId, input, requestSignal),
-      // The task keeps its place; the list and sidebar show its new state.
-      (revised) =>
-        setState((previous) =>
-          previous.snapshot
-            ? {
-                ...previous,
-                snapshot: {
-                  ...previous.snapshot,
-                  tasks: previous.snapshot.tasks.map((task) =>
-                    task.id === revised.id ? revised : task,
-                  ),
-                },
-              }
-            : previous,
-        ),
+      (revised) => setState((previous) => replacedTask(previous, revised)),
     )
     return result.status === 'done'
       ? { status: 'revised', task: result.value }
+      : result
+  }
+
+  async function cancelTask(
+    taskId: string,
+    signal: AbortSignal,
+  ): Promise<CancelTaskResult> {
+    // Another task's stop is still running; this one is refused, not lost.
+    if (cancelTaskController.current) return { status: 'failed' }
+    const result = await tracked(
+      cancelTaskController,
+      signal,
+      // A task already gone, as when another tab stopped it, has stopped.
+      (requestSignal) =>
+        repository.cancelTask(taskId, requestSignal).catch((error) => {
+          if (
+            error instanceof WorkspaceRepositoryError &&
+            error.code === 'task-unavailable'
+          )
+            return
+          throw error
+        }),
+      // The last task leaves the workspace empty, as before the first one.
+      () =>
+        setState((previous) => {
+          const next = withTasks(previous, (tasks) =>
+            tasks.filter((task) => task.id !== taskId),
+          )
+          return next.snapshot?.tasks.length === 0
+            ? { ...next, loadState: 'empty' }
+            : next
+        }),
+    )
+    return result.status === 'done' ? { status: 'canceled' } : result
+  }
+
+  async function retryTask(
+    taskId: string,
+    signal: AbortSignal,
+  ): Promise<RetryTaskResult> {
+    if (retryTaskController.current) return { status: 'failed' }
+    const result = await tracked(
+      retryTaskController,
+      signal,
+      (requestSignal) => repository.retryTask(taskId, requestSignal),
+      (retried) => setState((previous) => replacedTask(previous, retried)),
+    )
+    return result.status === 'done'
+      ? { status: 'retried', task: result.value }
       : result
   }
 
@@ -405,27 +481,12 @@ export function useWorkspace(
       // An unchanged task keeps the list as it is, without a new render.
       if (!previous.snapshot || !listed || sameTask(listed, loaded))
         return previous
-      return {
-        ...previous,
-        snapshot: {
-          ...previous.snapshot,
-          tasks: previous.snapshot.tasks.map((task) =>
-            task.id === loaded.id ? loaded : task,
-          ),
-        },
-      }
+      return replacedTask(previous, loaded)
     })
   }
 
   function markExpired() {
-    consentController.current?.abort()
-    consentController.current = null
-    addSongController.current?.abort()
-    addSongController.current = null
-    createTaskController.current?.abort()
-    createTaskController.current = null
-    reviseTaskController.current?.abort()
-    reviseTaskController.current = null
+    abortAll(requestSlots.current)
     setState(expiredState)
   }
 
@@ -459,6 +520,8 @@ export function useWorkspace(
     addSong,
     createTask,
     reviseTask,
+    cancelTask,
+    retryTask,
     syncTask,
   }
 }

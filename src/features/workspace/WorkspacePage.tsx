@@ -15,6 +15,11 @@ import { useSectionDrafts } from '../new-section/useSectionDrafts.ts'
 import { ConsentDialog } from './components/ConsentDialog.tsx'
 import { EmptyWorkspace } from './components/EmptyWorkspace.tsx'
 import { LoadingState, ProblemState } from './components/StateMessage.tsx'
+import {
+  StopNotice,
+  StopTaskControl,
+  type StopNoticeContent,
+} from './components/StopTask.tsx'
 import { TaskTable } from './components/TaskTable.tsx'
 import { TaskBreadcrumb, TaskPanel } from './components/TaskWorkspace.tsx'
 import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx'
@@ -22,6 +27,7 @@ import { isTaskInProgress } from './format.ts'
 import type { SongInputKind } from './model.ts'
 import type { WorkspaceRepository } from './repository.ts'
 import { useTaskDetail } from './useTaskDetail.ts'
+import { useTaskRecovery } from './useTaskRecovery.ts'
 import type { UseWorkspaceResult } from './useWorkspace.ts'
 import styles from './WorkspacePage.module.css'
 import { SettingsPanel } from '../settings/SettingsPanel.tsx'
@@ -126,6 +132,11 @@ export function WorkspacePage({
     null,
   )
   const mainContentRef = useRef<HTMLElement>(null)
+  // Shown on the list after 멈추기 took the user off the stopped task, or on
+  // a task that finished before it could be stopped.
+  const [stopNotice, setStopNotice] = useState<
+    (StopNoticeContent & { workspaceId: string; viewKey: string }) | null
+  >(null)
   const { songs, tasks, loadState } = workspace
   const workspaceId = workspace.workspace?.id ?? null
   const previousFocusViewKey = useRef(viewKey)
@@ -134,6 +145,24 @@ export function WorkspacePage({
     workspaceId,
     view.name === 'new-section' ? view.songId : null,
   )
+  const recovery = useTaskRecovery({
+    workspace,
+    taskDetail,
+    openTaskId: view.name === 'task' ? view.taskId : null,
+    onStopped: (task) => {
+      if (workspaceId)
+        setStopNotice({
+          workspaceId,
+          viewKey: workspaceViewKey({ name: 'home' }),
+          message: `${task.sectionName} 작업을 멈췄어요.`,
+          icon: 'checkDone',
+        })
+      // The stopped task is gone, so Back does not return to it. Focus moves
+      // to the list once the dialog has closed and the view has changed.
+      leave({ name: 'home' })
+    },
+    onRetried: focusContent,
+  })
 
   // Transfer focus from the removed access/onboarding screen only on entry.
   // Loading, filtering and consent updates must preserve the user's focus.
@@ -166,7 +195,9 @@ export function WorkspacePage({
       setAddSong(null)
     }
     setReplaceFile(null)
+    if (stopNotice?.viewKey !== viewKey) setStopNotice(null)
   }
+  if (stopNotice && stopNotice.workspaceId !== workspaceId) setStopNotice(null)
   if (support && support.workspaceId !== workspaceId) setSupport(null)
   if (addSong && (addSong.workspaceId !== workspaceId || !workspaceReady))
     setAddSong(null)
@@ -273,6 +304,11 @@ export function WorkspacePage({
       ? detail
       : null
   const shownTask = view.name === 'task' ? detail?.task : undefined
+  // The dialog stays while its request runs, even if the task finishes.
+  const stoppable = Boolean(
+    shownTask &&
+    (isTaskInProgress(shownTask) || recovery.stoppingTaskId === shownTask.id),
+  )
   // The section screens render their own bar with their actions.
   const ownTopBar = Boolean(newSection || editSection)
   const consentFeedback = workspaceId &&
@@ -353,9 +389,38 @@ export function WorkspacePage({
                 구간 수정
               </Button>
             )}
+            {shownTask && detail && (
+              <StopTaskControl
+                key={shownTask.id}
+                task={shownTask}
+                stoppable={stoppable}
+                inputKind={detail.song.inputKind}
+                previousResultCount={detail.previousResults.length}
+                stopping={recovery.stoppingTaskId === shownTask.id}
+                onStop={() => recovery.stop(shownTask)}
+                onEnded={() => {
+                  if (workspaceId)
+                    setStopNotice({
+                      workspaceId,
+                      viewKey,
+                      message: `${shownTask.sectionName} 작업이 이미 끝나서 멈출 수 없어요.`,
+                      icon: 'info',
+                    })
+                }}
+                fallbackFocusRef={mainContentRef}
+              />
+            )}
           </header>
         )}
         {!ownTopBar && consentFeedback}
+        <StopNotice
+          notice={
+            stopNotice?.workspaceId === workspaceId &&
+            stopNotice.viewKey === viewKey
+              ? stopNotice
+              : null
+          }
+        />
         {loadState === 'loading' && (
           <LoadingState title="작업을 불러오고 있어요" />
         )}
@@ -484,6 +549,10 @@ export function WorkspacePage({
               loadSeparatedAudio: (taskId, signal) =>
                 repository.loadSeparatedAudio(taskId, signal),
               onExpired: workspace.markExpired,
+            }}
+            recovery={{
+              retry: recovery.retry,
+              contact: (returnFocus) => openSupport('contact', returnFocus),
             }}
           />
         )}

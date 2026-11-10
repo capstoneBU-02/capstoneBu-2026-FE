@@ -15,6 +15,9 @@ export interface UseTaskDetailResult {
   // The last background refresh failed, so the shown state may be old.
   readonly refreshFailed: boolean
   retry(): void
+  // Loads the shown task again at once, keeping it on screen meanwhile, as
+  // after a change made from it. 'failed' keeps the old copy on screen.
+  reload(): Promise<'loaded' | 'failed' | 'cancelled'>
 }
 
 export interface TaskDetailOptions {
@@ -72,6 +75,7 @@ export function useTaskDetail(
   const request: TaskDetailRequest = { repository, taskId, version }
   const [previousRequest, setPreviousRequest] = useState(request)
   const generation = useRef(0)
+  const reloadController = useRef<AbortController | null>(null)
   const reportExpired = useEffectEvent(onExpired)
   const reportLoaded = useEffectEvent((detail: TaskDetail) =>
     onLoaded?.(detail),
@@ -112,7 +116,11 @@ export function useTaskDetail(
       },
     )
 
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      reloadController.current?.abort()
+      reloadController.current = null
+    }
   }, [repository, taskId, version])
 
   // Refreshes stop when the task finishes, the view changes or the tab is
@@ -186,10 +194,47 @@ export function useTaskDetail(
     }
   }, [shouldRefresh, repository, taskId, version, refreshMs])
 
+  async function reload() {
+    if (!isCurrent || taskId === null) return 'cancelled'
+    const settled = request
+    const controller = new AbortController()
+    reloadController.current?.abort()
+    reloadController.current = controller
+    const keep = (next: TaskDetailState) =>
+      setState((previous) =>
+        previous !== null && sameRequest(previous, settled) ? next : previous,
+      )
+    try {
+      const detail = await repository.loadTask(taskId, controller.signal)
+      if (controller.signal.aborted) return 'cancelled'
+      keep(settledState(settled, 'success', detail))
+      onLoaded?.(detail)
+      return 'loaded'
+    } catch (error) {
+      if (controller.signal.aborted) return 'cancelled'
+      const status = failureStatus(error)
+      if (status === 'error') {
+        setState((previous) =>
+          previous !== null && sameRequest(previous, settled)
+            ? { ...previous, refreshFailed: true }
+            : previous,
+        )
+        return 'failed'
+      }
+      keep(settledState(settled, status, null))
+      if (status === 'expired') onExpired()
+      return 'loaded'
+    } finally {
+      if (reloadController.current === controller)
+        reloadController.current = null
+    }
+  }
+
   return {
     status: taskId === null ? 'idle' : isCurrent ? state.status : 'loading',
     detail: isCurrent ? state.detail : null,
     refreshFailed: isCurrent ? state.refreshFailed : false,
     retry: () => setVersion((previous) => previous + 1),
+    reload,
   }
 }

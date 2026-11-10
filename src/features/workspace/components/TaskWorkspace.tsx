@@ -16,6 +16,10 @@ import type { UseTaskDetailResult } from '../useTaskDetail.ts'
 import pageStyles from '../WorkspacePage.module.css'
 import { ProcessingPanel } from './ProcessingPanel.tsx'
 import { LoadingState, ProblemState } from './StateMessage.tsx'
+import {
+  TaskFailurePanel,
+  type TaskRecoveryActions,
+} from './TaskFailurePanel.tsx'
 import { TaskTracks } from './TaskTracks.tsx'
 import { taskStatusIcon } from './taskStatusIcon.ts'
 import styles from './TaskWorkspace.module.css'
@@ -49,17 +53,46 @@ function useStatusAnnouncement({ task, stages }: TaskDetail): string {
   return announced.message
 }
 
+// A failed task that found guitar gets its recovery body; a song without
+// guitar keeps the placeholder until its own body lands.
+function TaskBody({
+  detail,
+  refreshFailed,
+  recovery,
+}: {
+  detail: TaskDetail
+  refreshFailed: boolean
+  recovery: TaskRecoveryActions
+}) {
+  const pendingId = useId()
+  const { task } = detail
+  if (isTaskInProgress(task))
+    return <ProcessingPanel detail={detail} refreshFailed={refreshFailed} />
+  if (task.processingStatus === 'failed' && task.failureKind !== 'no-guitar')
+    return <TaskFailurePanel detail={detail} {...recovery} />
+  return (
+    <section className={styles.pending} aria-labelledby={pendingId}>
+      <h2 id={pendingId}>작업 화면 준비 중</h2>
+      <p>
+        타브와 비교는 다음 단계에서 연결돼요. 내려받기, 녹음, 카피 완료 표시도
+        그때 사용할 수 있어요.
+      </p>
+    </section>
+  )
+}
+
 function TaskWorkspace({
   detail,
   refreshFailed,
   audioSource,
+  recovery,
 }: {
   detail: TaskDetail
   refreshFailed: boolean
   audioSource: TaskAudioSource
+  recovery: TaskRecoveryActions
 }) {
   const { task, song, previousResults } = detail
-  const pendingId = useId()
   const previousId = useId()
   const announcement = useStatusAnnouncement(detail)
   const taskAudio = useTaskAudio(detail, audioSource)
@@ -96,17 +129,11 @@ function TaskWorkspace({
           </p>
         </header>
         <TaskTracks task={task} {...taskAudio} />
-        {isTaskInProgress(task) ? (
-          <ProcessingPanel detail={detail} refreshFailed={refreshFailed} />
-        ) : (
-          <section className={styles.pending} aria-labelledby={pendingId}>
-            <h2 id={pendingId}>작업 화면 준비 중</h2>
-            <p>
-              타브와 비교는 다음 단계에서 연결돼요. 내려받기, 녹음, 카피 완료
-              표시도 그때 사용할 수 있어요.
-            </p>
-          </section>
-        )}
+        <TaskBody
+          detail={detail}
+          refreshFailed={refreshFailed}
+          recovery={recovery}
+        />
         {/* SEG-04: each kept result names the section it was made from. */}
         {previousResults.length > 0 && (
           <section className={styles.previous} aria-labelledby={previousId}>
@@ -147,8 +174,16 @@ type TaskPanelProps = {
   onRetry: () => void
   onReturnHome: () => void
 } & (
-  | { renderDetail: (detail: TaskDetail) => ReactNode; audioSource?: never }
-  | { audioSource: TaskAudioSource; renderDetail?: never }
+  | {
+      renderDetail: (detail: TaskDetail) => ReactNode
+      audioSource?: never
+      recovery?: never
+    }
+  | {
+      audioSource: TaskAudioSource
+      recovery: TaskRecoveryActions
+      renderDetail?: never
+    }
 )
 
 export function TaskPanel({
@@ -157,6 +192,7 @@ export function TaskPanel({
   onReturnHome,
   renderDetail,
   audioSource,
+  recovery,
 }: TaskPanelProps) {
   switch (result.status) {
     case 'success':
@@ -169,6 +205,7 @@ export function TaskPanel({
           detail={result.detail}
           refreshFailed={result.refreshFailed}
           audioSource={audioSource}
+          recovery={recovery}
         />
       )
     case 'unavailable':

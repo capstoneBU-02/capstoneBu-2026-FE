@@ -100,3 +100,9 @@ export const mockTasks: readonly WorkspaceTask[] = [
     updatedAtLabel: '10월 25일',
   },
 ]
+
+// Retries a failed fixture task has used: 인트로 has two of three left, as in
+// Figma 27:398.
+export const mockRetriesUsed: Readonly<Record<string, number>> = {
+  'task-intro': 1,
+}

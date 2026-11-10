@@ -18,7 +18,8 @@ function separationStatus(
   if (inputKind === 'separated-guitar') return 'skipped'
   switch (task.processingStatus) {
     case 'queued':
-      return 'waiting'
+      // A retry keeps the guitar it separated before (JOB-04).
+      return task.hasSeparatedAudio ? 'done' : 'waiting'
     case 'processing':
       return task.hasSeparatedAudio ? 'done' : 'running'
     case 'completed':
@@ -83,6 +84,11 @@ function runningStage(stages: readonly TaskStage[]): TaskStageId | null {
   return stages.find((stage) => stage.status === 'running')?.id ?? null
 }
 
+// The stage a failed task stopped at (TAB-03); null when none failed.
+export function failedStage(stages: readonly TaskStage[]): TaskStageId | null {
+  return stages.find((stage) => stage.status === 'failed')?.id ?? null
+}
+
 // Changes when the status or the running stage changes, not with progress.
 export function processingPhase(
   task: Pick<WorkspaceTask, 'processingStatus'>,
@@ -106,8 +112,10 @@ export function statusAnnouncement(
     case 'completed':
       return '타브를 다 만들었어요.'
     case 'failed':
-      return task.failureKind === 'no-guitar'
-        ? '기타 소리를 거의 찾지 못했어요.'
+      if (task.failureKind === 'no-guitar')
+        return '기타 소리를 거의 찾지 못했어요.'
+      return failedStage(stages) === 'separation'
+        ? '기타를 분리하지 못했어요.'
         : '타브를 만들지 못했어요.'
   }
 }

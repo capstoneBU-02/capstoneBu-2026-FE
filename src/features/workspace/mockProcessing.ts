@@ -13,7 +13,10 @@ export interface ProcessingTiming {
 export interface ProcessingRun {
   readonly taskId: string
   readonly enqueuedAt: number
+  // Separated-guitar input, or a retry that keeps the separated guitar.
   readonly skipsSeparation: boolean
+  // 멈추기 frees the worker at this time; the run then has no state.
+  readonly canceledAt?: number
 }
 
 export type RunState =
@@ -29,6 +32,8 @@ interface Scheduled {
   readonly run: ProcessingRun
   readonly startsAt: number
   readonly endsAt: number
+  // When the worker is free again: the end, or the time the run stopped.
+  readonly freesAt: number
 }
 
 function schedule(
@@ -40,8 +45,12 @@ function schedule(
     const startsAt = Math.max(run.enqueuedAt + timing.queueMs, workerFreeAt)
     const separationMs = run.skipsSeparation ? 0 : timing.separationMs
     const endsAt = startsAt + separationMs + timing.transcriptionMs
-    workerFreeAt = endsAt
-    return { run, startsAt, endsAt }
+    const freesAt =
+      run.canceledAt === undefined ? endsAt : Math.min(run.canceledAt, endsAt)
+    // A run stopped while it waited never held the worker; the ones behind it
+    // move up from the moment it stopped, never back in time.
+    workerFreeAt = Math.max(workerFreeAt, freesAt)
+    return { run, startsAt, endsAt, freesAt }
   })
 }
 
@@ -66,7 +75,7 @@ function stateAt(
 
 // One worker takes runs in the order they were queued. Runs are never
 // removed, so a task queued again keeps the others' timing; its latest run
-// decides its state.
+// decides its state. A stopped run counts for no one.
 export function runStates(
   runs: readonly ProcessingRun[],
   now: number,
@@ -75,9 +84,13 @@ export function runStates(
   const scheduled = schedule(runs, timing)
   const states = new Map<string, RunState>()
   scheduled.forEach((entry, index) => {
+    if (entry.run.canceledAt !== undefined) {
+      states.delete(entry.run.taskId)
+      return
+    }
     const ahead = scheduled
       .slice(0, index)
-      .filter((earlier) => earlier.endsAt > now).length
+      .filter((earlier) => earlier.freesAt > now).length
     states.set(entry.run.taskId, stateAt(entry, ahead, now, timing))
   })
   return states
@@ -91,6 +104,8 @@ export const DEMO_PROCESSING_TIMING: ProcessingTiming = {
 }
 
 // Fixture tasks keep their state; queued tasks move with the session clock.
+// A queued task keeps the separated guitar it was queued with: none for a new
+// section, the earlier one for a retry.
 export function progressedTask(
   task: WorkspaceTask,
   state: RunState | undefined,
@@ -101,7 +116,6 @@ export function progressedTask(
       ...task,
       processingStatus: 'queued',
       progressPercent: null,
-      hasSeparatedAudio: false,
     }
   if (state.status === 'processing')
     return {

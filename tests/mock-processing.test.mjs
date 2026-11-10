@@ -75,3 +75,31 @@ test('a task queued again keeps the timing of the runs around it', () => {
   })
   assert.equal(at(2100).a.status, 'processing')
 })
+
+test('a stopped run frees the worker from the moment it stopped', () => {
+  // a runs from 100 and stops at 300; c stops while it waits.
+  const runs = [
+    { ...run('a', 0), canceledAt: 300 },
+    run('b', 10),
+    { ...run('c', 20), canceledAt: 50 },
+    run('d', 30),
+  ]
+  const at = (now) => Object.fromEntries(runStates(runs, now, timing))
+
+  // A stopped run has no state and counts for no one behind it.
+  assert.deepEqual(at(300), {
+    b: { status: 'processing', separated: false, percent: 0 },
+    d: { status: 'queued', ahead: 1 },
+  })
+  assert.equal(at(1300).b.status, 'completed')
+  assert.equal(at(1300).d.status, 'processing')
+})
+
+test('a retried run that keeps the separated guitar starts at the tab', () => {
+  const runs = [run('a', 0, true)]
+  assert.deepEqual(runStates(runs, 100, timing).get('a'), {
+    status: 'processing',
+    separated: true,
+    percent: 0,
+  })
+})
