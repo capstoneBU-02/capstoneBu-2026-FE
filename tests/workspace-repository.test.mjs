@@ -481,6 +481,152 @@ test('a section change honours cancellation and expiry', async () => {
   )
 })
 
+// A session clock the tests move by hand, with a short processing pace.
+function clockedRepository() {
+  const clock = { now: 0 }
+  const repository = createMockWorkspaceRepository('default', {
+    now: () => clock.now,
+    processingTiming: { queueMs: 100, separationMs: 400, transcriptionMs: 600 },
+  })
+  return { clock, repository }
+}
+
+const stageStatuses = (detail) =>
+  detail.stages.map((stage) => `${stage.id}:${stage.status}`)
+
+test('a created task moves from the queue to a finished tab over time', async () => {
+  const { clock, repository } = clockedRepository()
+  const task = await repository.createTask(section(), signal())
+  const detailAt = async (now) => {
+    clock.now = now
+    return repository.loadTask(task.id, signal())
+  }
+
+  let detail = await detailAt(0)
+  assert.equal(detail.task.processingStatus, 'queued')
+  assert.equal(detail.queueAhead, 0)
+  assert.deepEqual(stageStatuses(detail), [
+    'separation:waiting',
+    'transcription:waiting',
+  ])
+
+  detail = await detailAt(150)
+  assert.equal(detail.task.processingStatus, 'processing')
+  assert.equal(detail.task.progressPercent, 5)
+  assert.equal(detail.task.hasSeparatedAudio, false)
+  assert.equal(detail.queueAhead, null)
+  assert.deepEqual(stageStatuses(detail), [
+    'separation:running',
+    'transcription:waiting',
+  ])
+
+  detail = await detailAt(600)
+  assert.equal(detail.task.progressPercent, 50)
+  assert.equal(detail.task.hasSeparatedAudio, true)
+  assert.deepEqual(stageStatuses(detail), [
+    'separation:done',
+    'transcription:running',
+  ])
+  // The list shows the same state as the task.
+  const listed = (await repository.loadWorkspace(signal())).tasks.find(
+    (item) => item.id === task.id,
+  )
+  assert.deepEqual(listed, detail.task)
+
+  detail = await detailAt(1100)
+  assert.equal(detail.task.processingStatus, 'completed')
+  assert.equal(detail.task.progressPercent, null)
+  assert.equal(detail.task.hasSeparatedAudio, true)
+  assert.deepEqual(stageStatuses(detail), [
+    'separation:done',
+    'transcription:done',
+  ])
+})
+
+test('queued tasks count the tasks ahead; fixture tasks keep their state', async () => {
+  const { clock, repository } = clockedRepository()
+  const first = await repository.createTask(section(), signal())
+  const second = await repository.createTask(
+    section({ sectionName: '솔로' }),
+    signal(),
+  )
+
+  clock.now = 50
+  assert.equal((await repository.loadTask(first.id, signal())).queueAhead, 0)
+  assert.equal((await repository.loadTask(second.id, signal())).queueAhead, 1)
+  clock.now = 200
+  assert.equal((await repository.loadTask(second.id, signal())).queueAhead, 1)
+  clock.now = 1200
+  const started = await repository.loadTask(second.id, signal())
+  assert.equal(started.task.processingStatus, 'processing')
+  assert.equal(started.queueAhead, null)
+
+  // The fixture's running task is not part of the session queue.
+  clock.now = 100_000
+  const solo = await repository.loadTask('task-solo', signal())
+  assert.equal(solo.task.processingStatus, 'processing')
+  assert.equal(solo.task.progressPercent, 64)
+  assert.equal(solo.queueAhead, null)
+  assert.deepEqual(stageStatuses(solo), [
+    'separation:done',
+    'transcription:running',
+  ])
+})
+
+test('separated-guitar input skips separation in the mock too (JOB-02)', async () => {
+  const { clock, repository } = clockedRepository()
+  const task = await repository.createTask(
+    section({ songId: 'song-paper-moon', rangeEndSeconds: 60 }),
+    signal(),
+  )
+
+  clock.now = 100
+  const detail = await repository.loadTask(task.id, signal())
+  assert.equal(detail.task.processingStatus, 'processing')
+  assert.equal(detail.task.hasSeparatedAudio, true)
+  assert.deepEqual(stageStatuses(detail), [
+    'separation:skipped',
+    'transcription:running',
+  ])
+  clock.now = 700
+  assert.equal(
+    (await repository.loadTask(task.id, signal())).task.processingStatus,
+    'completed',
+  )
+})
+
+test('a finished change can be changed again; results stay newest first', async () => {
+  const { clock, repository } = clockedRepository()
+  await repository.reviseTask(
+    'task-verse',
+    revision({ sectionName: '코러스 1' }),
+    signal(),
+  )
+  // Still queued, so a second change is refused even with a new range.
+  await assert.rejects(
+    repository.reviseTask(
+      'task-verse',
+      revision({ sectionName: '브리지', rangeEndSeconds: 58 }),
+      signal(),
+    ),
+    { code: 'revise-task-failed' },
+  )
+
+  clock.now = 1100
+  const revisedAgain = await repository.reviseTask(
+    'task-verse',
+    revision({ sectionName: '브리지', rangeEndSeconds: 58 }),
+    signal(),
+  )
+  assert.equal(revisedAgain.processingStatus, 'queued')
+  const detail = await repository.loadTask('task-verse', signal())
+  assert.equal(detail.task.processingStatus, 'queued')
+  assert.deepEqual(
+    detail.previousResults.map((result) => result.sectionName),
+    ['코러스 1', '벌스 1'],
+  )
+})
+
 test('fixture songs play a synthesized demo as long as the song', async () => {
   const repository = createMockWorkspaceRepository()
   const audio = await repository.loadSongAudio('song-paper-moon', signal())

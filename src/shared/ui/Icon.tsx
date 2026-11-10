@@ -3,6 +3,7 @@ import check from '../../assets/earmark/check.svg'
 import checkDone from '../../assets/earmark/check-done.svg'
 import chevronDown from '../../assets/earmark/chevron-down.svg'
 import chevronRight from '../../assets/earmark/chevron-right.svg'
+import clock from '../../assets/earmark/clock.svg'
 import close from '../../assets/earmark/close.svg'
 import help from '../../assets/earmark/help.svg'
 import info from '../../assets/earmark/info.svg'
@@ -20,14 +21,15 @@ import statusQueued from '../../assets/earmark/status-queued.svg'
 import upload from '../../assets/earmark/upload.svg'
 import styles from './Ui.module.css'
 
-// alertTriangle, checkDone and music follow Lucide shapes in the Figma
-// palette; they are not Figma exports.
+// alertTriangle, checkDone, clock and music follow Lucide shapes in the
+// Figma palette; they are not Figma exports.
 const icons = {
   alertTriangle: [alertTriangle, 16],
   check: [check, 12],
   checkDone: [checkDone, 16],
   chevronDown: [chevronDown, 12],
   chevronRight: [chevronRight, 14],
+  clock: [clock, 12],
   close: [close, 16],
   help: [help, 15],
   info: [info, 14],
@@ -37,6 +39,8 @@ const icons = {
   plus: [plus, 14],
   plusSmall: [plusSmall, 10],
   settings: [settings, 15],
+  // A finished processing stage.
+  stageDone: [checkDone, 12],
   statusDone: [statusDone, 6],
   statusDraft: [statusDraft, 6],
   statusFailed: [statusFailed, 6],

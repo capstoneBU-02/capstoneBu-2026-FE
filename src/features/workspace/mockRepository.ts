@@ -25,6 +25,14 @@ import type {
 } from './model.ts'
 import { createDemoSongAudio } from './demoSongAudio.ts'
 import {
+  DEMO_PROCESSING_TIMING,
+  progressedTask,
+  runStates,
+  type ProcessingRun,
+  type ProcessingTiming,
+} from './mockProcessing.ts'
+import { taskStages } from './processing.ts'
+import {
   WorkspaceRepositoryError,
   type WorkspaceRepository,
 } from './repository.ts'
@@ -208,6 +216,9 @@ interface MockWorkspaceOptions {
   readonly tasks?: readonly WorkspaceTask[]
   readonly consentChoice?: ConsentChoice
   readonly onConsentSaved?: (choice: SavedConsentChoice) => void
+  // The session clock and the pace of queued tasks; tests pass their own.
+  readonly now?: () => number
+  readonly processingTiming?: ProcessingTiming
 }
 
 export function createMockWorkspaceRepository(
@@ -238,9 +249,31 @@ export function createMockWorkspaceRepository(
   const demoAudio = new Map<string, Promise<Blob>>()
   // Results kept by 구간 수정, newest first, per task id (D10).
   const previousResults = new Map<string, readonly PreviousTaskResult[]>()
+  // Created and changed tasks, in the order they were queued.
+  const runs: ProcessingRun[] = []
+  const now = options.now ?? Date.now
+  const timing = options.processingTiming ?? DEMO_PROCESSING_TIMING
   let addedSongCount = 0
   let createdTaskCount = 0
   let keptResultCount = 0
+
+  function enqueue(task: WorkspaceTask) {
+    const song = songs.find((candidate) => candidate.id === task.songId)
+    runs.push({
+      taskId: task.id,
+      enqueuedAt: now(),
+      skipsSeparation: song?.inputKind === 'separated-guitar',
+    })
+  }
+
+  // Every read sees the tasks as they stand on the session clock.
+  function currentTasks() {
+    const states = runStates(runs, now(), timing)
+    return {
+      states,
+      tasks: tasks.map((task) => progressedTask(task, states.get(task.id))),
+    }
+  }
 
   function throwIfExpired() {
     if (scenario === 'expired') {
@@ -267,7 +300,7 @@ export function createMockWorkspaceRepository(
       return {
         workspace: { ...workspace },
         songs: songs.map((song) => ({ ...song })),
-        tasks: tasks.map((task) => ({ ...task })),
+        tasks: currentTasks().tasks,
         consentChoice,
       }
     },
@@ -298,7 +331,8 @@ export function createMockWorkspaceRepository(
         )
       }
 
-      const task = tasks.find((candidate) => candidate.id === taskId)
+      const current = currentTasks()
+      const task = current.tasks.find((candidate) => candidate.id === taskId)
       const song = songs.find((candidate) => candidate.id === task?.songId)
       if (!task || !song) {
         throw new WorkspaceRepositoryError(
@@ -306,12 +340,15 @@ export function createMockWorkspaceRepository(
           '작업을 찾을 수 없어요.',
         )
       }
+      const state = current.states.get(taskId)
       return {
-        task: { ...task },
+        task,
         song: { ...song },
         previousResults: (previousResults.get(taskId) ?? []).map((result) => ({
           ...result,
         })),
+        stages: taskStages(task, song.inputKind),
+        queueAhead: state?.status === 'queued' ? state.ahead : null,
       }
     },
     async addSong(input, signal) {
@@ -371,6 +408,7 @@ export function createMockWorkspaceRepository(
         updatedAtLabel: '방금',
       }
       tasks.push(task)
+      enqueue(task)
       return { ...task }
     },
     async reviseTask(taskId, input, signal) {
@@ -383,7 +421,7 @@ export function createMockWorkspaceRepository(
           '작업을 찾을 수 없어요.',
         )
       }
-      const task = tasks[index]
+      const task = currentTasks().tasks[index]
       const song = songs.find((candidate) => candidate.id === task.songId)
       const labels = newTaskLabels({ ...input, songId: task.songId }, song)
       if (
@@ -421,6 +459,7 @@ export function createMockWorkspaceRepository(
         updatedAtLabel: '방금',
       }
       tasks.splice(index, 1, revised)
+      enqueue(revised)
       return { ...revised }
     },
     async loadSongAudio(songId, signal) {

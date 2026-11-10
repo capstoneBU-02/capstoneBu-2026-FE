@@ -1,14 +1,17 @@
-import { useId, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import { TaskUnavailablePanel } from '../../support/TaskUnavailablePanel.tsx'
 import {
   formatTaskRange,
+  isTaskInProgress,
   songInputLabel,
   taskHeadlineStatus,
 } from '../format.ts'
 import type { TaskDetail } from '../model.ts'
+import { processingPhase, statusAnnouncement } from '../processing.ts'
 import type { UseTaskDetailResult } from '../useTaskDetail.ts'
 import pageStyles from '../WorkspacePage.module.css'
+import { ProcessingPanel } from './ProcessingPanel.tsx'
 import { LoadingState, ProblemState } from './StateMessage.tsx'
 import { taskStatusIcon } from './taskStatusIcon.ts'
 import styles from './TaskWorkspace.module.css'
@@ -32,12 +35,38 @@ export function TaskBreadcrumb({
   )
 }
 
-function TaskWorkspace({ detail }: { detail: TaskDetail }) {
+// What changed since the task opened, read once per change of status or
+// running stage. Progress alone is not read out.
+function useStatusAnnouncement({ task, stages }: TaskDetail): string {
+  const phase = processingPhase(task, stages)
+  const [announced, setAnnounced] = useState({ phase, message: '' })
+  if (announced.phase !== phase)
+    setAnnounced({ phase, message: statusAnnouncement(task, stages) })
+  return announced.message
+}
+
+function TaskWorkspace({
+  detail,
+  refreshFailed,
+}: {
+  detail: TaskDetail
+  refreshFailed: boolean
+}) {
   const { task, song, previousResults } = detail
   const pendingId = useId()
   const previousId = useId()
+  const announcement = useStatusAnnouncement(detail)
   return (
     <div className={styles.workspace}>
+      {/* The processing panel has a status of its own; this one is named so
+          the two are never mixed up. */}
+      <p
+        className={pageStyles.srOnly}
+        role="status"
+        data-announcer="task-status"
+      >
+        {announcement}
+      </p>
       <header className={styles.header}>
         <div className={styles.titleRow}>
           <h1>{task.sectionName}</h1>
@@ -56,13 +85,17 @@ function TaskWorkspace({ detail }: { detail: TaskDetail }) {
           <span className={styles.truncate}>{song.fileName}</span>
         </p>
       </header>
-      <section className={styles.pending} aria-labelledby={pendingId}>
-        <h2 id={pendingId}>작업 화면 준비 중</h2>
-        <p>
-          파형, 타브, 비교는 다음 단계에서 연결돼요. 내려받기, 녹음, 카피 완료
-          표시도 그때 사용할 수 있어요.
-        </p>
-      </section>
+      {isTaskInProgress(task) ? (
+        <ProcessingPanel detail={detail} refreshFailed={refreshFailed} />
+      ) : (
+        <section className={styles.pending} aria-labelledby={pendingId}>
+          <h2 id={pendingId}>작업 화면 준비 중</h2>
+          <p>
+            파형, 타브, 비교는 다음 단계에서 연결돼요. 내려받기, 녹음, 카피 완료
+            표시도 그때 사용할 수 있어요.
+          </p>
+        </section>
+      )}
       {/* SEG-04: each kept result names the section it was made from. */}
       {previousResults.length > 0 && (
         <section className={styles.previous} aria-labelledby={previousId}>
@@ -87,17 +120,13 @@ function TaskWorkspace({ detail }: { detail: TaskDetail }) {
   )
 }
 
-function showTaskWorkspace(detail: TaskDetail) {
-  return <TaskWorkspace detail={detail} />
-}
-
 // The loading, missing and failed states of a task. A loaded task shows as
 // its workspace unless the view renders it another way.
 export function TaskPanel({
   result,
   onRetry,
   onReturnHome,
-  renderDetail = showTaskWorkspace,
+  renderDetail,
 }: {
   result: UseTaskDetailResult
   onRetry: () => void
@@ -106,7 +135,16 @@ export function TaskPanel({
 }) {
   switch (result.status) {
     case 'success':
-      return result.detail && renderDetail(result.detail)
+      if (!result.detail) return null
+      if (renderDetail) return renderDetail(result.detail)
+      // Another task starts with nothing announced.
+      return (
+        <TaskWorkspace
+          key={result.detail.task.id}
+          detail={result.detail}
+          refreshFailed={result.refreshFailed}
+        />
+      )
     case 'unavailable':
       // Missing and inaccessible tasks share one message by design.
       return (

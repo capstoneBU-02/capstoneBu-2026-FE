@@ -303,9 +303,10 @@ test('구간 수정 follows the task as loaded, not the list', async ({ page }) 
   await expect(page).toHaveURL(/view=edit-section&task=task-verse$/)
   await expect(title(page)).toHaveText('구간을 바꿀 수 없어요')
   await expect(form(page)).toHaveCount(0)
+  // Loading the task brings the list up to date as well.
   await expect(
     sidebar(page).getByRole('button', { name: /^벌스 1/ }),
-  ).not.toContainText('대기')
+  ).toContainText('대기')
   expect(await reviseCalls(page)).toEqual([])
 })
 

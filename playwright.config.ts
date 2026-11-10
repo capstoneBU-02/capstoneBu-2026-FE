@@ -5,7 +5,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   timeout: 20_000,
-  globalTimeout: 180_000,
+  // The whole suite; it passed 180 s in CI once it reached 160 tests.
+  globalTimeout: 300_000,
   workers: 2,
   reporter: [['list'], ['html', { open: 'never' }]],
   outputDir: 'test-results',
