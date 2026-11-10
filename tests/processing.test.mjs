@@ -61,6 +61,13 @@ test('failures name the stage that failed (JOB-01, TAB-03)', () => {
   )
 })
 
+test('a retried task waits with the guitar it already separated (JOB-04)', () => {
+  assert.deepEqual(statuses({ ...base, hasSeparatedAudio: true }), [
+    'separation:done',
+    'transcription:waiting',
+  ])
+})
+
 test('separated-guitar input skips separation (JOB-02)', () => {
   assert.deepEqual(statuses(base, 'separated-guitar'), [
     'separation:skipped',
@@ -143,6 +150,15 @@ test('status changes are announced with what happened', () => {
       hasSeparatedAudio: true,
     }),
     '타브를 만들지 못했어요.',
+  )
+  // Without separated guitar the failure was in the separation.
+  assert.equal(
+    announce({
+      ...base,
+      processingStatus: 'failed',
+      failureKind: 'transcription',
+    }),
+    '기타를 분리하지 못했어요.',
   )
   assert.equal(
     announce({

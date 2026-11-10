@@ -91,6 +91,13 @@ export interface TaskStage {
   readonly status: TaskStageStatus
 }
 
+// How many more times a failed task can be sent again. The repository
+// counts them (JOB-05, D12); the screen shows the numbers as they come.
+export interface TaskRetry {
+  readonly left: number
+  readonly limit: number
+}
+
 export interface TaskDetail {
   readonly task: WorkspaceTask
   readonly song: WorkspaceSong
@@ -100,6 +107,9 @@ export interface TaskDetail {
   readonly stages: readonly TaskStage[]
   // Tasks ahead of a queued task; null when not queued or not known.
   readonly queueAhead: number | null
+  // Set only for a failed task that can be sent again, even with no tries
+  // left; null when its failure cannot be retried or the task did not fail.
+  readonly retry: TaskRetry | null
 }
 
 export interface WorkspaceSnapshot {

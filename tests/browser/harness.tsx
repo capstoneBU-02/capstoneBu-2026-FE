@@ -9,6 +9,9 @@ import { isPolicySectionName } from '../../src/features/new-section/sectionForm.
 import { createDemoSongAudio } from '../../src/features/workspace/demoSongAudio.ts'
 import { SECTION_POLICY } from '../../src/features/new-section/sectionPolicy.ts'
 import { WorkspacePage } from '../../src/features/workspace/WorkspacePage.tsx'
+import { isTaskInProgress } from '../../src/features/workspace/format.ts'
+import { mockRetriesUsed } from '../../src/features/workspace/mockFixtures.ts'
+import { mockRetryOf } from '../../src/features/workspace/mockServer.ts'
 import { createMockWorkspaceRepository } from '../../src/features/workspace/mockRepository.ts'
 import { taskStages } from '../../src/features/workspace/processing.ts'
 import type {
@@ -58,6 +61,16 @@ interface TestControls {
   resolveRevise(): void
   failRevise(code: 'revise-task-failed' | 'expired'): void
   reviseCalls(): Array<{ taskId: string; input: ReviseTaskInput }>
+  // pending-cancel keeps cancelTask requests open until settled here.
+  resolveCancel(): void
+  failCancel(code: 'cancel-task-failed' | 'task-unavailable' | 'expired'): void
+  cancelCalls(): string[]
+  // pending-retry keeps retryTask requests open until settled here.
+  resolveRetry(): void
+  failRetry(code: 'retry-task-failed' | 'expired'): void
+  retryCalls(): string[]
+  // Sets how many retries the server counts as used for a task.
+  setRetriesUsed(taskId: string, used: number): void
   // Queues a task on the server only, as another tab's change would. The
   // loaded list keeps showing its old state.
   queueTaskOnServer(taskId: string): void
@@ -140,16 +153,25 @@ const revisedTasks = new Map<string, WorkspaceTask>()
 const keptResults = new Map<string, PreviousTaskResult[]>()
 // Tasks ahead of a queued task, as the server reports them.
 const queueAhead = new Map<string, number | null>()
+// Tasks removed by 멈추기, and the retries the server counts per task.
+const canceledTasks = new Set<string>()
+const retriesUsed = new Map<string, number>(Object.entries(mockRetriesUsed))
 let nextTaskFailure: 'load-failed' | 'task-unavailable' | 'expired' | null =
   null
 
 function findTask(taskId: string): WorkspaceTask | undefined {
+  if (canceledTasks.has(taskId)) return undefined
   return (
     revisedTasks.get(taskId) ??
     [...snapshot.tasks, ...sessionTasks].find(
       (candidate) => candidate.id === taskId,
     )
   )
+}
+
+// The mock's own policy, so the screen is tested against the same numbers.
+function retryOf(task: WorkspaceTask) {
+  return mockRetryOf(task, retriesUsed.get(task.id) ?? 0)
 }
 
 function taskDetail(taskId: string): TaskDetail | null {
@@ -167,6 +189,7 @@ function taskDetail(taskId: string): TaskDetail | null {
           task.processingStatus === 'queued'
             ? (queueAhead.get(taskId) ?? null)
             : null,
+        retry: retryOf(task),
       }
     : null
 }
@@ -311,6 +334,53 @@ function revisedTask(taskId: string, input: ReviseTaskInput): WorkspaceTask {
   return revised
 }
 
+const cancelCalls: string[] = []
+const pendingCancels: Array<{
+  taskId: string
+  resolve: () => void
+  reject: (error: Error) => void
+}> = []
+
+function canceledTask(taskId: string) {
+  const task = findTask(taskId)
+  if (!task || !isTaskInProgress(task))
+    throw new WorkspaceRepositoryError('cancel-task-failed', 'Not running')
+  canceledTasks.add(taskId)
+}
+
+const retryCalls: string[] = []
+const pendingRetries: Array<{
+  taskId: string
+  resolve: (task: WorkspaceTask) => void
+  reject: (error: Error) => void
+}> = []
+
+function retriedTask(taskId: string): WorkspaceTask {
+  const task = findTask(taskId)
+  const retry = task && retryOf(task)
+  if (!task || !retry || retry.left === 0)
+    throw new WorkspaceRepositoryError('retry-task-failed', 'Cannot retry')
+  retriesUsed.set(taskId, (retriesUsed.get(taskId) ?? 0) + 1)
+  const retried: WorkspaceTask = {
+    ...task,
+    processingStatus: 'queued',
+    failureKind: null,
+    progressPercent: null,
+    updatedAtLabel: '방금',
+  }
+  revisedTasks.set(taskId, retried)
+  return retried
+}
+
+// Runs a settle step as a promise, so a refused request rejects.
+function settled<T>(step: () => T): Promise<T> {
+  try {
+    return Promise.resolve(step())
+  } catch (error) {
+    return Promise.reject(error)
+  }
+}
+
 // Fixture songs play the mock's synthesized demo; added songs play their file.
 // audio-error serves bytes no browser decodes; pending-audio never answers;
 // short-audio decodes two seconds shorter than the song's listed length.
@@ -403,7 +473,11 @@ const repository: WorkspaceRepository = {
     if (scenario === 'pending-load') {
       return new Promise((resolve) => pendingLoads.push(resolve))
     }
-    return Promise.resolve(snapshot)
+    // A stopped task is gone from the list the next time it loads.
+    return Promise.resolve({
+      ...snapshot,
+      tasks: snapshot.tasks.filter((task) => !canceledTasks.has(task.id)),
+    })
   },
   saveConsent(choice) {
     saveCalls += 1
@@ -479,8 +553,33 @@ const repository: WorkspaceRepository = {
     }
     return Promise.resolve(revisedTask(taskId, input))
   },
+  cancelTask(taskId) {
+    cancelCalls.push(taskId)
+    if (scenario === 'pending-cancel') {
+      return new Promise((resolve, reject) =>
+        pendingCancels.push({ taskId, resolve, reject }),
+      )
+    }
+    return settled(() => canceledTask(taskId))
+  },
+  retryTask(taskId) {
+    retryCalls.push(taskId)
+    if (scenario === 'pending-retry') {
+      return new Promise((resolve, reject) =>
+        pendingRetries.push({ taskId, resolve, reject }),
+      )
+    }
+    return settled(() => retriedTask(taskId))
+  },
   loadSongAudio: songAudio,
   loadSeparatedAudio: separatedAudio,
+}
+
+// The second workspace loads and saves consent; every other request fails.
+function unavailable(
+  code: ConstructorParameters<typeof WorkspaceRepositoryError>[0],
+) {
+  return () => Promise.reject(new WorkspaceRepositoryError(code, 'Unavailable'))
 }
 
 const secondRepository: WorkspaceRepository = {
@@ -498,30 +597,14 @@ const secondRepository: WorkspaceRepository = {
     })
   },
   saveConsent: (choice) => Promise.resolve(choice),
-  loadTask: () =>
-    Promise.reject(
-      new WorkspaceRepositoryError('task-unavailable', 'Unavailable'),
-    ),
-  addSong: () =>
-    Promise.reject(
-      new WorkspaceRepositoryError('add-song-failed', 'Unavailable'),
-    ),
-  createTask: () =>
-    Promise.reject(
-      new WorkspaceRepositoryError('create-task-failed', 'Unavailable'),
-    ),
-  reviseTask: () =>
-    Promise.reject(
-      new WorkspaceRepositoryError('task-unavailable', 'Unavailable'),
-    ),
-  loadSongAudio: () =>
-    Promise.reject(
-      new WorkspaceRepositoryError('audio-unavailable', 'Unavailable'),
-    ),
-  loadSeparatedAudio: () =>
-    Promise.reject(
-      new WorkspaceRepositoryError('audio-unavailable', 'Unavailable'),
-    ),
+  loadTask: unavailable('task-unavailable'),
+  addSong: unavailable('add-song-failed'),
+  createTask: unavailable('create-task-failed'),
+  reviseTask: unavailable('task-unavailable'),
+  cancelTask: unavailable('cancel-task-failed'),
+  retryTask: unavailable('retry-task-failed'),
+  loadSongAudio: unavailable('audio-unavailable'),
+  loadSeparatedAudio: unavailable('audio-unavailable'),
 }
 
 window.workspaceTest = {
@@ -599,6 +682,35 @@ window.workspaceTest = {
   },
   reviseCalls: () =>
     reviseCalls.map(({ taskId, input }) => ({ taskId, input: { ...input } })),
+  resolveCancel() {
+    pendingCancels.splice(0).forEach(({ taskId, resolve, reject }) => {
+      settled(() => canceledTask(taskId)).then(resolve, reject)
+    })
+  },
+  failCancel(code) {
+    pendingCancels
+      .splice(0)
+      .forEach(({ reject }) =>
+        reject(new WorkspaceRepositoryError(code, 'Cancel failed')),
+      )
+  },
+  cancelCalls: () => [...cancelCalls],
+  resolveRetry() {
+    pendingRetries.splice(0).forEach(({ taskId, resolve, reject }) => {
+      settled(() => retriedTask(taskId)).then(resolve, reject)
+    })
+  },
+  failRetry(code) {
+    pendingRetries
+      .splice(0)
+      .forEach(({ reject }) =>
+        reject(new WorkspaceRepositoryError(code, 'Retry failed')),
+      )
+  },
+  retryCalls: () => [...retryCalls],
+  setRetriesUsed(taskId, used) {
+    retriesUsed.set(taskId, used)
+  },
   queueTaskOnServer(taskId) {
     const task = findTask(taskId)
     if (task) revisedTasks.set(taskId, { ...task, processingStatus: 'queued' })

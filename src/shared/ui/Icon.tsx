@@ -12,17 +12,20 @@ import more from '../../assets/earmark/more.svg'
 import music from '../../assets/earmark/music.svg'
 import plus from '../../assets/earmark/plus.svg'
 import plusSmall from '../../assets/earmark/plus-small.svg'
+import refresh from '../../assets/earmark/refresh.svg'
 import settings from '../../assets/earmark/settings.svg'
 import statusDone from '../../assets/earmark/status-done.svg'
 import statusDraft from '../../assets/earmark/status-draft.svg'
 import statusFailed from '../../assets/earmark/status-failed.svg'
 import statusProcessing from '../../assets/earmark/status-processing.svg'
 import statusQueued from '../../assets/earmark/status-queued.svg'
+import stop from '../../assets/earmark/stop.svg'
 import upload from '../../assets/earmark/upload.svg'
 import styles from './Ui.module.css'
 
-// alertTriangle, checkDone, clock and music follow Lucide shapes in the
-// Figma palette; they are not Figma exports.
+// alertTriangle, checkDone, clock, music, refresh and stop follow Lucide
+// shapes in the Figma palette; they are not Figma exports. refresh is white
+// for the primary button.
 const icons = {
   alertTriangle: [alertTriangle, 16],
   check: [check, 12],
@@ -38,6 +41,7 @@ const icons = {
   music: [music, 16],
   plus: [plus, 14],
   plusSmall: [plusSmall, 10],
+  refresh: [refresh, 14],
   settings: [settings, 15],
   // A finished processing stage.
   stageDone: [checkDone, 12],
@@ -46,6 +50,7 @@ const icons = {
   statusFailed: [statusFailed, 6],
   statusProcessing: [statusProcessing, 6],
   statusQueued: [statusQueued, 6],
+  stop: [stop, 12],
   upload: [upload, 20],
 } as const
 
