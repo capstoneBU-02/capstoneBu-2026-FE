@@ -16,9 +16,10 @@ import '../../src/index.css'
 // requests, and media.ts fakes duration reads and serves audio. Loading
 // media.ts also replaces window.AudioContext before anything renders.
 
-// refresh=<ms> turns on refreshing an open task; other tests count requests.
+// refresh=<ms> turns on refreshing the open task and the list; other tests
+// count requests or keep the list as it first loaded.
 const refresh = new URLSearchParams(window.location.search).get('refresh')
-const taskRefreshMs = refresh === null ? null : Number(refresh)
+const refreshMs = refresh === null ? null : Number(refresh)
 
 let commits = 0
 
@@ -50,7 +51,7 @@ export function Harness() {
       workspace={workspace}
       repository={activeRepository}
       probeDuration={scenario === 'real-probe' ? undefined : fakeProbe}
-      taskRefreshMs={taskRefreshMs}
+      refreshMs={refreshMs}
     />
   )
 }

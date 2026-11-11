@@ -406,7 +406,7 @@ test('a second Enter while sending does not send again', async ({ page }) => {
   expect(await reviseCalls(page)).toHaveLength(1)
 })
 
-test('a change saved after the user left does not pull them back', async ({
+test('a change saved after the user left shows in the list without pulling them back', async ({
   page,
 }) => {
   await openEdit(page, 'pending-revise')
@@ -418,20 +418,40 @@ test('a change saved after the user left does not pull them back', async ({
   await expect(main(page)).toBeFocused()
 
   await page.evaluate(() => window.workspaceTest.resolveRevise())
-  // Let the settled request reach the page before checking nothing moved.
-  await page.evaluate(
-    () =>
-      new Promise((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(resolve)),
-      ),
-  )
+  // Leaving did not cancel the request: the server's answer reaches the list.
+  await expect(
+    sidebar(page).getByRole('button', { name: /^벌스 1/ }),
+  ).toContainText('대기')
   await expect(page).toHaveURL('/tests/browser/harness.html')
   await expect(title(page)).toHaveText('최근 작업')
   await expect(main(page)).toBeFocused()
-  // The cancelled request does not change the list either.
-  await expect(
-    sidebar(page).getByRole('button', { name: /^벌스 1/ }),
-  ).not.toContainText('대기')
+
+  // The task screen shows the same state as the list.
+  await sidebar(page)
+    .getByRole('button', { name: /^벌스 1/ })
+    .click()
+  await expect(title(page)).toHaveText('벌스 1')
+  await expect(main(page).getByText('대기', { exact: true })).toBeVisible()
+  await expect(editButton(page)).toHaveCount(0)
+})
+
+test('구간 수정 sent before leaving refuses another until it answers', async ({
+  page,
+}) => {
+  await openEdit(page, 'pending-revise')
+  await setEnd(page, '01:00.0')
+  await pressSubmit(page)
+  await expect(submitStatus(page)).toHaveText(SUBMITTING)
+  await sidebar(page).getByRole('button', { name: '내 작업' }).click()
+  await expect(title(page)).toHaveText('최근 작업')
+
+  await sidebarTask(page, '벌스 1').click()
+  await expect(title(page)).toHaveText('벌스 1')
+  await editButton(page).click()
+  await setEnd(page, '01:01.0')
+  await pressSubmit(page)
+  await expect(form(page).getByRole('alert')).toHaveText(FAILED)
+  expect(await reviseCalls(page)).toHaveLength(1)
 })
 
 for (const width of [390, 320]) {

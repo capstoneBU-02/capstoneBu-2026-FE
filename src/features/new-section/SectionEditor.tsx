@@ -130,7 +130,8 @@ export function SectionEditor({
         ? { key: `failed-${failures}`, message: text.failed }
         : null
 
-  // Leaving the screen cancels an in-flight request.
+  // Leaving the screen ends the wait for an in-flight request: 새 구간
+  // cancels it, and 구간 수정 leaves its result to the list.
   useEffect(() => {
     const lifetime = new AbortController()
     lifetimeRef.current = lifetime
@@ -179,8 +180,10 @@ export function SectionEditor({
         : null
     setSubmitting(true)
     const result = await onSubmit(check.request, lifetime.signal)
-    // Leaving first cancels the request, so a saved result is always the
-    // user's: open it even if its new state already replaced this screen.
+    // A screen left before the answer gets 'cancelled' (새 구간 cancels its
+    // request; 구간 수정 leaves its result to the list), so a saved result
+    // is always the user's: open it even if its new state already replaced
+    // this screen.
     if (result.status === 'saved') {
       onSaved(result.task)
       return

@@ -9,6 +9,14 @@ import type {
 // provides its part; harness.tsx puts them together.
 export interface TestControls {
   releaseLoads(): void
+  // Workspace list requests: the first load, 다시 시도 and every refresh.
+  listCalls(): number
+  // The next list request fails once with this code.
+  failNextListLoad(code: 'load-failed' | 'expired'): void
+  // The next list request waits for releaseListLoad and then answers with
+  // the list as the server had it when asked, missing changes made since.
+  holdNextListLoad(): void
+  releaseListLoad(): void
   resolveSave(): void
   rejectSave(): void
   switchWorkspace(): void
@@ -47,8 +55,10 @@ export interface TestControls {
   retryCalls(): string[]
   // Sets how many retries the server counts as used for a task.
   setRetriesUsed(taskId: string, used: number): void
+  // Adds a task on the server only, as 새 구간 in another tab would.
+  createTaskOnServer(input: NewTaskInput): void
   // Queues a task on the server only, as another tab's change would. The
-  // loaded list keeps showing its old state.
+  // loaded list keeps showing its old state until it loads again.
   queueTaskOnServer(taskId: string): void
   // Moves a task on the server only, as its processing would; the screen
   // sees it on its next request.
