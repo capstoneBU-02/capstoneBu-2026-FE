@@ -31,6 +31,7 @@ import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx'
 import { isTaskInProgress } from './format.ts'
 import type { SongInputKind, WorkspaceTask } from './model.ts'
 import type { WorkspaceRepository } from './repository.ts'
+import { useListRefresh } from './useListRefresh.ts'
 import { useTaskDetail } from './useTaskDetail.ts'
 import { useTaskRecovery } from './useTaskRecovery.ts'
 import type { UseWorkspaceResult } from './useWorkspace.ts'
@@ -63,7 +64,7 @@ const defaultDurationProbe = createMediaDurationProbe(
   UPLOAD_POLICY.metadataTimeoutMs,
 )
 // Set for the mock's pace; to be revisited with the server's status contract.
-const TASK_REFRESH_MS = 3_000
+const REFRESH_MS = 3_000
 
 interface AddSongRequest {
   readonly workspaceId: string
@@ -92,7 +93,7 @@ export function WorkspacePage({
   onLeave,
   focusOnEntry = false,
   probeDuration = defaultDurationProbe,
-  taskRefreshMs = TASK_REFRESH_MS,
+  refreshMs = REFRESH_MS,
 }: {
   workspace: UseWorkspaceResult
   repository: WorkspaceRepository
@@ -100,9 +101,9 @@ export function WorkspacePage({
   onLeave?: () => void
   focusOnEntry?: boolean
   probeDuration?: MediaDurationProbe
-  // How often an open queued or processing task is loaded again; null
-  // keeps the first load only.
-  taskRefreshMs?: number | null
+  // How often the open task and the list are loaded again while a task is
+  // queued or processing; null keeps the first loads only.
+  refreshMs?: number | null
 }) {
   const [filter, setFilter] = useState<Filter>('all')
   const { view, navigate, leave } = useWorkspaceNavigation()
@@ -120,9 +121,14 @@ export function WorkspacePage({
     {
       onExpired: workspace.markExpired,
       onLoaded: ({ task }) => workspace.syncTask(task),
-      refreshMs: view.name === 'task' ? taskRefreshMs : null,
+      refreshMs: view.name === 'task' ? refreshMs : null,
+      listedTask:
+        view.name === 'task'
+          ? (workspace.tasks.find((task) => task.id === view.taskId) ?? null)
+          : null,
     },
   )
+  useListRefresh(workspace, refreshMs)
   const [previousViewKey, setPreviousViewKey] = useState(viewKey)
   // Set when a created task opens: a dialog the user opened while it was
   // being created stays open over the task instead of closing.

@@ -36,6 +36,10 @@ import {
 // same way.
 
 const pendingLoads: Array<(snapshot: WorkspaceSnapshot) => void> = []
+let listCalls = 0
+let nextListFailure: 'load-failed' | 'expired' | null = null
+let holdNextList = false
+const heldLists: Array<() => void> = []
 let saveCalls = 0
 let pendingSave:
   | {
@@ -117,6 +121,17 @@ function settled<T>(step: () => T): Promise<T> {
 
 export const repository: WorkspaceRepository = {
   loadWorkspace() {
+    listCalls += 1
+    if (nextListFailure) {
+      const code = nextListFailure
+      nextListFailure = null
+      return Promise.reject(new WorkspaceRepositoryError(code, 'List failed'))
+    }
+    if (holdNextList) {
+      holdNextList = false
+      const answer = listedSnapshot()
+      return new Promise((resolve) => heldLists.push(() => resolve(answer)))
+    }
     if (scenario === 'pending-load') {
       return new Promise((resolve) => pendingLoads.push(resolve))
     }
@@ -254,7 +269,17 @@ export const secondRepository: WorkspaceRepository = {
 // create, revise, cancel and retry steps settle every request in their queue.
 export const requestControls = {
   releaseLoads() {
-    pendingLoads.splice(0).forEach((resolve) => resolve(snapshot))
+    pendingLoads.splice(0).forEach((resolve) => resolve(listedSnapshot()))
+  },
+  listCalls: () => listCalls,
+  failNextListLoad(code) {
+    nextListFailure = code
+  },
+  holdNextListLoad() {
+    holdNextList = true
+  },
+  releaseListLoad() {
+    heldLists.splice(0).forEach((release) => release())
   },
   resolveSave() {
     pendingSave?.resolve(pendingSave.choice)

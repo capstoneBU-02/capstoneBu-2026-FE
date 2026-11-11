@@ -74,11 +74,17 @@ export function sessionFile(songId: string): File | undefined {
   return sessionFiles.get(songId)
 }
 
-// A stopped task is gone from the list the next time it loads.
+// The list as the server has it now, for the first load and every refresh:
+// stopped tasks are gone, and what this or another tab changed or added is
+// in.
 export function listedSnapshot(): WorkspaceSnapshot {
   return {
     ...snapshot,
-    tasks: snapshot.tasks.filter((task) => !canceledTasks.has(task.id)),
+    songs: [...snapshot.songs, ...sessionSongs],
+    tasks: [...snapshot.tasks, ...sessionTasks].flatMap((task) => {
+      const current = findTask(task.id)
+      return current ? [current] : []
+    }),
   }
 }
 
@@ -214,6 +220,9 @@ export function retriedTask(taskId: string): WorkspaceTask {
 export const serverControls = {
   setRetriesUsed(taskId, used) {
     retriesUsed.set(taskId, used)
+  },
+  createTaskOnServer(input) {
+    createdTask(input)
   },
   queueTaskOnServer(taskId) {
     const task = findTask(taskId)

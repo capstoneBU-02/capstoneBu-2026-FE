@@ -12,6 +12,12 @@ import type {
   WorkspaceTask,
 } from './model.ts'
 import {
+  mergeRefreshedList,
+  sameFields,
+  upserted,
+  type ListChanges,
+} from './listMerge.ts'
+import {
   WorkspaceRepositoryError,
   type WorkspaceRepository,
 } from './repository.ts'
@@ -44,6 +50,8 @@ export type RetryTaskResult =
   | { readonly status: 'retried'; readonly task: WorkspaceTask }
   | { readonly status: 'failed' | 'expired' | 'cancelled' }
 
+export type ListRefreshResult = 'loaded' | 'failed' | 'expired' | 'cancelled'
+
 type RequestOutcome<T> =
   | { readonly status: 'done'; readonly value: T }
   | { readonly status: 'failed' | 'expired' | 'cancelled' }
@@ -67,6 +75,9 @@ export interface UseWorkspaceResult {
     input: NewTaskInput,
     signal: AbortSignal,
   ): Promise<CreateTaskResult>
+  // Leaving does not cancel 구간 수정: the server acts on it anyway, so the
+  // list takes its result. The caller's signal only ends its wait, with
+  // 'cancelled'. One sent earlier and still running refuses this one.
   reviseTask(
     taskId: string,
     input: ReviseTaskInput,
@@ -77,6 +88,9 @@ export interface UseWorkspaceResult {
   retryTask(taskId: string, signal: AbortSignal): Promise<RetryTaskResult>
   // A task loaded on its own screen updates the same task in the list.
   syncTask(task: WorkspaceTask): void
+  // Loads the list again behind the shown one, which stays on screen
+  // meanwhile and after a failure. One runs at a time.
+  refreshList(signal: AbortSignal): Promise<ListRefreshResult>
 }
 
 interface WorkspaceState {
@@ -126,12 +140,22 @@ function replacedTask(previous: WorkspaceState, changed: WorkspaceTask) {
   )
 }
 
-function sameTask(a: WorkspaceTask, b: WorkspaceTask) {
-  const keys = Object.keys(a) as (keyof WorkspaceTask)[]
-  return (
-    keys.length === Object.keys(b).length &&
-    keys.every((key) => a[key] === b[key])
-  )
+// A refreshed list that turns up the first task, or loses the last one,
+// moves the workspace between its listed and empty states.
+function refreshedState(
+  previous: WorkspaceState,
+  loaded: WorkspaceSnapshot,
+  changed: ListChanges,
+): WorkspaceState {
+  if (!previous.snapshot) return previous
+  const snapshot = mergeRefreshedList(previous.snapshot, loaded, changed)
+  return snapshot === previous.snapshot
+    ? previous
+    : {
+        ...previous,
+        snapshot,
+        loadState: snapshot.tasks.length === 0 ? 'empty' : 'success',
+      }
 }
 
 // Expiry hides every piece of workspace data, whichever request found it.
@@ -165,6 +189,7 @@ export function useWorkspace(
   const reviseTaskController = useRef<AbortController | null>(null)
   const cancelTaskController = useRef<AbortController | null>(null)
   const retryTaskController = useRef<AbortController | null>(null)
+  const listRefreshController = useRef<AbortController | null>(null)
   // A new load or expiry ends every request; their results change nothing.
   const requestSlots = useRef([
     consentController,
@@ -173,7 +198,14 @@ export function useWorkspace(
     reviseTaskController,
     cancelTaskController,
     retryTaskController,
+    listRefreshController,
   ])
+  // What this tab changes while a list refresh is on its way; null when
+  // none is. The refreshed list may predate those changes.
+  const refreshChanges = useRef<{
+    tasks: Set<string>
+    songs: Set<string>
+  } | null>(null)
   // A changed request hides previous workspace data during the render itself.
   const isCurrentRequest =
     state.repository === repository && state.loadVersion === loadVersion
@@ -362,18 +394,20 @@ export function useWorkspace(
       addSongController,
       signal,
       (requestSignal) => repository.addSong(input, requestSignal),
-      (song) =>
+      (song) => {
+        refreshChanges.current?.songs.add(song.id)
         setState((previous) =>
           previous.snapshot
             ? {
                 ...previous,
                 snapshot: {
                   ...previous.snapshot,
-                  songs: [...previous.snapshot.songs, song],
+                  songs: upserted(previous.snapshot.songs, song),
                 },
               }
             : previous,
-        ),
+        )
+      },
     )
     return result.status === 'done'
       ? { status: 'added', song: result.value }
@@ -389,7 +423,8 @@ export function useWorkspace(
       signal,
       (requestSignal) => repository.createTask(input, requestSignal),
       // The first task turns an empty workspace into a listed one.
-      (task) =>
+      (task) => {
+        refreshChanges.current?.tasks.add(task.id)
         setState((previous) =>
           previous.snapshot
             ? {
@@ -397,11 +432,12 @@ export function useWorkspace(
                 loadState: 'success',
                 snapshot: {
                   ...previous.snapshot,
-                  tasks: [...previous.snapshot.tasks, task],
+                  tasks: upserted(previous.snapshot.tasks, task),
                 },
               }
             : previous,
-        ),
+        )
+      },
     )
     return result.status === 'done'
       ? { status: 'created', task: result.value }
@@ -413,12 +449,18 @@ export function useWorkspace(
     input: ReviseTaskInput,
     signal: AbortSignal,
   ): Promise<ReviseTaskResult> {
+    if (signal.aborted) return { status: 'cancelled' }
+    if (reviseTaskController.current) return { status: 'failed' }
     const result = await tracked(
       reviseTaskController,
-      signal,
+      new AbortController().signal,
       (requestSignal) => repository.reviseTask(taskId, input, requestSignal),
-      (revised) => setState((previous) => replacedTask(previous, revised)),
+      (revised) => {
+        refreshChanges.current?.tasks.add(revised.id)
+        setState((previous) => replacedTask(previous, revised))
+      },
     )
+    if (signal.aborted) return { status: 'cancelled' }
     return result.status === 'done'
       ? { status: 'revised', task: result.value }
       : result
@@ -444,7 +486,8 @@ export function useWorkspace(
           throw error
         }),
       // The last task leaves the workspace empty, as before the first one.
-      () =>
+      () => {
+        refreshChanges.current?.tasks.add(taskId)
         setState((previous) => {
           const next = withTasks(previous, (tasks) =>
             tasks.filter((task) => task.id !== taskId),
@@ -452,7 +495,8 @@ export function useWorkspace(
           return next.snapshot?.tasks.length === 0
             ? { ...next, loadState: 'empty' }
             : next
-        }),
+        })
+      },
     )
     return result.status === 'done' ? { status: 'canceled' } : result
   }
@@ -466,7 +510,10 @@ export function useWorkspace(
       retryTaskController,
       signal,
       (requestSignal) => repository.retryTask(taskId, requestSignal),
-      (retried) => setState((previous) => replacedTask(previous, retried)),
+      (retried) => {
+        refreshChanges.current?.tasks.add(retried.id)
+        setState((previous) => replacedTask(previous, retried))
+      },
     )
     return result.status === 'done'
       ? { status: 'retried', task: result.value }
@@ -474,15 +521,32 @@ export function useWorkspace(
   }
 
   function syncTask(loaded: WorkspaceTask) {
+    refreshChanges.current?.tasks.add(loaded.id)
     setState((previous) => {
       const listed = previous.snapshot?.tasks.find(
         (task) => task.id === loaded.id,
       )
       // An unchanged task keeps the list as it is, without a new render.
-      if (!previous.snapshot || !listed || sameTask(listed, loaded))
+      if (!previous.snapshot || !listed || sameFields(listed, loaded))
         return previous
       return replacedTask(previous, loaded)
     })
+  }
+
+  async function refreshList(signal: AbortSignal): Promise<ListRefreshResult> {
+    const changes = { tasks: new Set<string>(), songs: new Set<string>() }
+    const result = await tracked(
+      listRefreshController,
+      signal,
+      (requestSignal) => {
+        refreshChanges.current = changes
+        return repository.loadWorkspace(requestSignal)
+      },
+      (loaded) =>
+        setState((previous) => refreshedState(previous, loaded, changes)),
+    )
+    if (refreshChanges.current === changes) refreshChanges.current = null
+    return result.status === 'done' ? 'loaded' : result.status
   }
 
   function markExpired() {
@@ -523,5 +587,6 @@ export function useWorkspace(
     cancelTask,
     retryTask,
     syncTask,
+    refreshList,
   }
 }

@@ -189,9 +189,19 @@ test('refreshing stops when the user leaves and a late answer changes nothing', 
   await expect(
     main(page).getByRole('heading', { name: '최근 작업' }),
   ).toBeVisible()
-  await page.evaluate(() => window.workspaceTest.resolveTask('task-solo'))
-  await expect(sidebarTask(page, /^솔로/)).toContainText('64%')
   await expectNoMoreCalls(page)
+
+  // The list loads the server's 90% on its own (#28). A hidden tab stops
+  // that, so a late answer bringing 95% would be the only way it changes.
+  await expect(sidebarTask(page, /^솔로/)).toContainText('90%')
+  await setHidden(page, true)
+  await updateOnServer(page, 'task-solo', { progressPercent: 95 })
+  await page.evaluate(() => window.workspaceTest.resolveTask('task-solo'))
+  await page.waitForTimeout(600)
+  await expect(sidebarTask(page, /^솔로/)).toContainText('90%')
+  await expect(
+    main(page).getByRole('heading', { name: '최근 작업' }),
+  ).toBeVisible()
 })
 
 test('opening another task stops the first one refreshing', async ({

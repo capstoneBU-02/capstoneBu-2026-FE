@@ -1,6 +1,8 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { isTaskInProgress } from './format.ts'
-import type { TaskDetail } from './model.ts'
+import { sameFields } from './listMerge.ts'
+import type { TaskDetail, WorkspaceTask } from './model.ts'
+import { startRefreshLoop, type RefreshStep } from './refreshLoop.ts'
 import {
   WorkspaceRepositoryError,
   type WorkspaceRepository,
@@ -28,12 +30,21 @@ export interface TaskDetailOptions {
   // While the task is queued or processing, it is loaded again after this
   // long. null keeps the first load only.
   readonly refreshMs?: number | null
+  // The list's copy of the task. The list can learn of a change first, as
+  // from a 구간 수정 sent before leaving or from another tab; a copy that
+  // differs from the shown one loads the task again.
+  readonly listedTask?: WorkspaceTask | null
 }
 
 interface TaskDetailRequest {
   readonly repository: WorkspaceRepository
   readonly taskId: string | null
   readonly version: number
+}
+
+// A request for a task, as background loads of the shown task make.
+interface SettledRequest extends TaskDetailRequest {
+  readonly taskId: string
 }
 
 interface TaskDetailState extends TaskDetailRequest {
@@ -68,7 +79,12 @@ function settledState(
 export function useTaskDetail(
   repository: WorkspaceRepository,
   taskId: string | null,
-  { onExpired, onLoaded, refreshMs = null }: TaskDetailOptions,
+  {
+    onExpired,
+    onLoaded,
+    refreshMs = null,
+    listedTask = null,
+  }: TaskDetailOptions,
 ): UseTaskDetailResult {
   const [version, setVersion] = useState(0)
   const [state, setState] = useState<TaskDetailState | null>(null)
@@ -93,6 +109,15 @@ export function useTaskDetail(
     isCurrent &&
     state.detail !== null &&
     isTaskInProgress(state.detail.task)
+  // A refreshing task catches up on its own, so only a settled one loads
+  // again when the list's copy differs.
+  const behindList =
+    !shouldRefresh &&
+    isCurrent &&
+    state.detail !== null &&
+    listedTask !== null &&
+    listedTask.id === state.detail.task.id &&
+    !sameFields(listedTask, state.detail.task)
 
   useEffect(() => {
     if (taskId === null) return
@@ -123,76 +148,66 @@ export function useTaskDetail(
     }
   }, [repository, taskId, version])
 
+  // A background load of the shown task. A failure keeps the task on screen
+  // and marks it; one in a row keeps the same state, so nothing re-renders.
+  const settleBackground = useEffectEvent(
+    (
+      settled: SettledRequest,
+      signal: AbortSignal,
+      outcome: { readonly detail: TaskDetail } | { readonly error: unknown },
+    ): RefreshStep => {
+      if (signal.aborted) return 'stop'
+      if ('detail' in outcome) {
+        setState(settledState(settled, 'success', outcome.detail))
+        reportLoaded(outcome.detail)
+        // A finished task ends the refresh effect.
+        return 'continue'
+      }
+      const status = failureStatus(outcome.error)
+      if (status === 'error') {
+        setState((previous) =>
+          previous !== null &&
+          sameRequest(previous, settled) &&
+          !previous.refreshFailed
+            ? { ...previous, refreshFailed: true }
+            : previous,
+        )
+        return 'continue'
+      }
+      setState(settledState(settled, status, null))
+      if (status === 'expired') reportExpired()
+      return 'stop'
+    },
+  )
+
   // Refreshes stop when the task finishes, the view changes or the tab is
   // hidden; a hidden tab catches up as soon as it is shown again.
   useEffect(() => {
     if (!shouldRefresh || taskId === null || refreshMs === null) return
-    const id = taskId
-    const delay = refreshMs
     const settled = { repository, taskId, version }
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let controller: AbortController | null = null
-    let stopped = false
-    const isThisRequest = (
-      other: TaskDetailState | null,
-    ): other is TaskDetailState => other !== null && sameRequest(other, settled)
-
-    function scheduleNext() {
-      if (!stopped && !document.hidden) timer = setTimeout(refresh, delay)
-    }
-    function pause() {
-      clearTimeout(timer)
-      timer = undefined
-      controller?.abort()
-      controller = null
-    }
-    function refresh() {
-      timer = undefined
-      const current = new AbortController()
-      controller = current
-      const isLate = () => stopped || current.signal.aborted
-      repository.loadTask(id, current.signal).then(
-        (detail) => {
-          if (isLate()) return
-          controller = null
-          setState(settledState(settled, 'success', detail))
-          reportLoaded(detail)
-          // A finished task ends this effect, which clears the timer.
-          scheduleNext()
-        },
-        (error: unknown) => {
-          if (isLate()) return
-          controller = null
-          const status = failureStatus(error)
-          if (status === 'error') {
-            // Keep the task on screen and try again on the next turn. A
-            // failure in a row keeps the same state, so nothing re-renders.
-            setState((previous) =>
-              isThisRequest(previous) && !previous.refreshFailed
-                ? { ...previous, refreshFailed: true }
-                : previous,
-            )
-            scheduleNext()
-            return
-          }
-          setState(settledState(settled, status, null))
-          if (status === 'expired') reportExpired()
-        },
-      )
-    }
-    function followVisibility() {
-      if (document.hidden) pause()
-      else if (timer === undefined && controller === null) refresh()
-    }
-
-    document.addEventListener('visibilitychange', followVisibility)
-    scheduleNext()
-    return () => {
-      stopped = true
-      pause()
-      document.removeEventListener('visibilitychange', followVisibility)
-    }
+    return startRefreshLoop({
+      delayMs: refreshMs,
+      run: (signal) =>
+        repository.loadTask(taskId, signal).then(
+          (detail) => settleBackground(settled, signal, { detail }),
+          (error: unknown) => settleBackground(settled, signal, { error }),
+        ),
+    }).stop
   }, [shouldRefresh, repository, taskId, version, refreshMs])
+
+  // Once loaded, the task matches the list again, which ends this. A failed
+  // load keeps it behind without trying again until the list changes.
+  useEffect(() => {
+    if (!behindList || taskId === null) return
+    const settled = { repository, taskId, version }
+    const controller = new AbortController()
+    void repository.loadTask(taskId, controller.signal).then(
+      (detail) => settleBackground(settled, controller.signal, { detail }),
+      (error: unknown) =>
+        settleBackground(settled, controller.signal, { error }),
+    )
+    return () => controller.abort()
+  }, [behindList, repository, taskId, version, listedTask])
 
   async function reload() {
     if (!isCurrent || taskId === null) return 'cancelled'
