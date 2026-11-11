@@ -183,6 +183,9 @@ export function useWorkspace(
     consent: initialConsent,
   })
   const generation = useRef(0)
+  // The load the screen asked for last. Expiry applies to it even before it
+  // answers, so 다시 시도 still on its way cannot hide the expiry.
+  const latestLoad = useRef({ repository, loadVersion })
   const consentController = useRef<AbortController | null>(null)
   const addSongController = useRef<AbortController | null>(null)
   const createTaskController = useRef<AbortController | null>(null)
@@ -217,6 +220,7 @@ export function useWorkspace(
     const controller = new AbortController()
     const currentGeneration = ++generation.current
     const slots = requestSlots.current
+    latestLoad.current = { repository, loadVersion }
     abortAll(slots)
 
     repository.loadWorkspace(controller.signal).then(
@@ -357,7 +361,12 @@ export function useWorkspace(
 
     const controller = new AbortController()
     const currentGeneration = generation.current
-    const cancel = () => controller.abort()
+    // A cancelled request frees its slot at once, as a real fetch rejects at
+    // once; its late answer changes nothing.
+    const cancel = () => {
+      controller.abort()
+      if (slot.current === controller) slot.current = null
+    }
     slot.current = controller
     signal.addEventListener('abort', cancel, { once: true })
     const isStale = () =>
@@ -549,9 +558,13 @@ export function useWorkspace(
     return result.status === 'done' ? 'loaded' : result.status
   }
 
+  // A workspace load still on its way, as 다시 시도 starts, cannot replace
+  // the expiry once it answers.
   function markExpired() {
+    generation.current += 1
     abortAll(requestSlots.current)
-    setState(expiredState)
+    const load = latestLoad.current
+    setState((previous) => ({ ...expiredState(previous), ...load }))
   }
 
   function clearConsentError() {

@@ -79,6 +79,11 @@ test('hint and messages derive from the policy so a limit changes in one place',
     songFileMessage({ status: 'unreadable' }),
     '이 파일은 재생할 수 없어요. 손상되지 않은 파일인지 확인하고 다시 올려 주세요.',
   )
+  // A slow read is not a broken file.
+  assert.equal(
+    songFileMessage({ status: 'timed-out' }),
+    '파일 길이를 확인하는 데 시간이 너무 오래 걸렸어요. 다시 확인하거나 다른 파일을 올려 주세요.',
+  )
   assert.equal(songFileMessage({ status: 'checking' }), null)
   assert.equal(songFileMessage({ status: 'valid', durationSeconds: 10 }), null)
 

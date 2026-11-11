@@ -186,16 +186,32 @@ export function WorkspacePage({
     previousFocusViewKey.current = viewKey
   }, [focusOnEntry, viewKey])
 
-  // Sessions live in memory, so a file dropped outside a drop area must not
-  // make the browser open it and leave the app.
+  // Expiry removes the screen the user was on, as 새 구간 after Enter in a
+  // disabled field; focus left on the page moves to the content.
   useEffect(() => {
+    if (loadState !== 'expired') return
+    const active = document.activeElement
+    if (active === null || active === document.body)
+      mainContentRef.current?.focus({ preventScroll: true })
+  }, [loadState])
+
+  // Sessions live in memory, so a file dropped outside a drop area must not
+  // make the browser open it and leave the app. A drop area answers its own
+  // drags; anywhere else the cursor shows that the file is not taken.
+  useEffect(() => {
+    const refuseDrag = (event: DragEvent) => {
+      if (!hasDraggedFiles(event)) return
+      if (!event.defaultPrevented && event.dataTransfer)
+        event.dataTransfer.dropEffect = 'none'
+      event.preventDefault()
+    }
     const keepPage = (event: DragEvent) => {
       if (hasDraggedFiles(event)) event.preventDefault()
     }
-    window.addEventListener('dragover', keepPage)
+    window.addEventListener('dragover', refuseDrag)
     window.addEventListener('drop', keepPage)
     return () => {
-      window.removeEventListener('dragover', keepPage)
+      window.removeEventListener('dragover', refuseDrag)
       window.removeEventListener('drop', keepPage)
     }
   }, [])
@@ -296,6 +312,11 @@ export function WorkspacePage({
       retry()
       focusContent()
     }
+  }
+  // The open task may have failed with the list, so it loads again too.
+  function retryWorkspace() {
+    workspace.retryLoad()
+    taskDetail.retry()
   }
   const goHome = () => go({ name: 'home' })
   const openTask = (taskId: string) => go({ name: 'task', taskId })
@@ -472,7 +493,7 @@ export function WorkspacePage({
             onAction={
               loadState === 'expired' && onReenter
                 ? onReenter
-                : retryWith(workspace.retryLoad)
+                : retryWith(retryWorkspace)
             }
           />
         )}

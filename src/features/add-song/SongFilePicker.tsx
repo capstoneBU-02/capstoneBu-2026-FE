@@ -15,6 +15,8 @@ type Props = {
   disabled: boolean
   describedBy?: string
   onChoose: (files: readonly File[]) => void
+  // Offered after a length check that took too long.
+  onRecheck: () => void
 }
 
 function hasFiles(event: DragEvent) {
@@ -30,6 +32,7 @@ function fileMeta(file: File, check: SongFileCheck): string {
     case 'too-long':
       return `${formatClockDuration(check.durationSeconds)} · ${size}`
     case 'unreadable':
+    case 'timed-out':
       return `길이 알 수 없음 · ${size}`
     case 'invalid-format':
       // A disallowed format is never decoded, so only the size is known.
@@ -51,6 +54,7 @@ export function SongFilePicker({
   disabled,
   describedBy,
   onChoose,
+  onRecheck,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const replaceRef = useRef<HTMLButtonElement>(null)
@@ -131,6 +135,21 @@ export function SongFilePicker({
               {fileMeta(file, check)}
             </span>
           </span>
+          {check.status === 'timed-out' && (
+            <button
+              type="button"
+              className={styles.replace}
+              onClick={() => {
+                // The button goes once checking starts; focus stays on the card.
+                replaceRef.current?.focus()
+                onRecheck()
+              }}
+              disabled={disabled}
+              aria-describedby={describedBy}
+            >
+              다시 확인
+            </button>
+          )}
           <button
             ref={replaceRef}
             type="button"

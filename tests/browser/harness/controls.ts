@@ -41,6 +41,8 @@ export interface TestControls {
   resolveCreate(): void
   failCreate(code: 'create-task-failed' | 'expired'): void
   createCalls(): NewTaskInput[]
+  // Whether the screen has cancelled each create request, oldest first.
+  createCancelled(): boolean[]
   // pending-revise keeps reviseTask requests open until settled here.
   resolveRevise(): void
   failRevise(code: 'revise-task-failed' | 'expired'): void
@@ -65,6 +67,8 @@ export interface TestControls {
   updateTaskOnServer(taskId: string, change: ServerTaskChange): void
   // slow.mp3 duration reads stay pending until resolved here.
   resolveProbe(seconds: number): void
+  // Ends the pending slow.mp3 reads as the real probe's timeout would.
+  timeOutProbe(): void
   probeCalls(): string[]
   // Song audio requests and whether the screen has cancelled each one.
   audioCalls(): Array<{ songId: string; aborted: boolean }>

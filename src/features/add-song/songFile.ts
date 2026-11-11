@@ -6,6 +6,8 @@ export type SongFileCheck =
   | { readonly status: 'too-long'; readonly durationSeconds: number }
   | { readonly status: 'invalid-format' }
   | { readonly status: 'unreadable' }
+  // The length took too long to read; the same file can be checked again.
+  | { readonly status: 'timed-out' }
 
 // Browsers report no MIME, or a generic one, for some local files. Such files
 // pass on their extension and are judged by whether they play.
@@ -78,6 +80,8 @@ export function songFileMessage(
       return `${durationLimitLabel(policy.maxDurationSeconds)} 이하 파일만 올릴 수 있어요. 필요한 부분만 잘라서 올려 주세요.`
     case 'unreadable':
       return '이 파일은 재생할 수 없어요. 손상되지 않은 파일인지 확인하고 다시 올려 주세요.'
+    case 'timed-out':
+      return '파일 길이를 확인하는 데 시간이 너무 오래 걸렸어요. 다시 확인하거나 다른 파일을 올려 주세요.'
     default:
       return null
   }

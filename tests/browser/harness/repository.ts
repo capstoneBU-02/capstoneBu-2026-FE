@@ -33,7 +33,7 @@ import {
 // stale-response protection. Consent saves always wait for a test to settle
 // them. pending-load, pending-task, pending-add, pending-create,
 // pending-revise, pending-cancel and pending-retry hold their requests the
-// same way.
+// same way. list-error fails every list request that is not held.
 
 const pendingLoads: Array<(snapshot: WorkspaceSnapshot) => void> = []
 let listCalls = 0
@@ -82,6 +82,7 @@ const pendingAdds: Array<{
 }> = []
 
 const createCalls: NewTaskInput[] = []
+const createSignals: AbortSignal[] = []
 const pendingCreates: Array<{
   input: NewTaskInput
   resolve: (task: WorkspaceTask) => void
@@ -132,6 +133,10 @@ export const repository: WorkspaceRepository = {
       const answer = listedSnapshot()
       return new Promise((resolve) => heldLists.push(() => resolve(answer)))
     }
+    if (scenario === 'list-error')
+      return Promise.reject(
+        new WorkspaceRepositoryError('load-failed', 'List failed'),
+      )
     if (scenario === 'pending-load') {
       return new Promise((resolve) => pendingLoads.push(resolve))
     }
@@ -180,8 +185,9 @@ export const repository: WorkspaceRepository = {
     }
     return Promise.resolve(addedSong(input))
   },
-  createTask(input) {
+  createTask(input, signal) {
     createCalls.push({ ...input })
+    createSignals.push(signal)
     // Like the mock repository, refuse names the screen cannot compose.
     if (!isPolicySectionName(input.sectionName))
       return Promise.reject(
@@ -335,6 +341,7 @@ export const requestControls = {
       )
   },
   createCalls: () => createCalls.map((call) => ({ ...call })),
+  createCancelled: () => createSignals.map((signal) => signal.aborted),
   resolveRevise() {
     pendingRevises
       .splice(0)

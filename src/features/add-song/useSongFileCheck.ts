@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { MediaDurationProbe } from './mediaDuration.ts'
+import { MediaDurationError, type MediaDurationProbe } from './mediaDuration.ts'
 import {
   checkSongDuration,
   isAllowedSongFile,
@@ -8,16 +8,25 @@ import {
 
 interface CheckedFile {
   readonly file: File
+  readonly round: number
   readonly check: SongFileCheck
 }
 
+export interface SongFileCheckResult {
+  readonly check: SongFileCheck | null
+  // Reads the same file's length again, as after a timeout.
+  recheck(): void
+}
+
 // A disallowed format is rejected without touching the media stack. Otherwise
-// the duration is read once per File object; replacing or dropping the file
-// aborts the read, and a late result for an earlier file is never shown.
+// the duration is read once per File object, or again on recheck; replacing
+// or dropping the file aborts the read, and a late result for an earlier
+// file or round is never shown.
 export function useSongFileCheck(
   file: File | null,
   probe: MediaDurationProbe,
-): SongFileCheck | null {
+): SongFileCheckResult {
+  const [round, setRound] = useState(0)
   const [checked, setChecked] = useState<CheckedFile | null>(null)
 
   useEffect(() => {
@@ -26,17 +35,31 @@ export function useSongFileCheck(
     probe(file, controller.signal).then(
       (seconds) => {
         if (!controller.signal.aborted)
-          setChecked({ file, check: checkSongDuration(seconds) })
+          setChecked({ file, round, check: checkSongDuration(seconds) })
       },
-      () => {
-        if (!controller.signal.aborted)
-          setChecked({ file, check: { status: 'unreadable' } })
+      (error: unknown) => {
+        if (controller.signal.aborted) return
+        const timedOut =
+          error instanceof MediaDurationError && error.reason === 'timeout'
+        setChecked({
+          file,
+          round,
+          check: { status: timedOut ? 'timed-out' : 'unreadable' },
+        })
       },
     )
     return () => controller.abort()
-  }, [file, probe])
+  }, [file, probe, round])
 
-  if (!file) return null
-  if (!isAllowedSongFile(file)) return { status: 'invalid-format' }
-  return checked?.file === file ? checked.check : { status: 'checking' }
+  const recheck = () => setRound((current) => current + 1)
+  if (!file) return { check: null, recheck }
+  if (!isAllowedSongFile(file))
+    return { check: { status: 'invalid-format' }, recheck }
+  return {
+    check:
+      checked?.file === file && checked.round === round
+        ? checked.check
+        : { status: 'checking' },
+    recheck,
+  }
 }

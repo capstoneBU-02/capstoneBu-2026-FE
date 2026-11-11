@@ -315,3 +315,11 @@ test('the repository check applies the same range rule to seconds', () => {
   assert.equal(checkSectionRange(-1, 5, 252.4), false)
   assert.equal(checkSectionRange(Number.NaN, 5, 252.4), false)
 })
+
+test('the repository check refuses times between tenths', () => {
+  // The screen sends whole tenths; a server would not round others in.
+  assert.equal(checkSectionRange(0, 30.04, 252.4), false)
+  assert.equal(checkSectionRange(10.05, 20, 252.4), false)
+  assert.equal(checkSectionRange(0.3, 0.7, 252.4), true)
+  assert.equal(checkSectionRange(3 / 10, 271 / 10, 252.4), true)
+})

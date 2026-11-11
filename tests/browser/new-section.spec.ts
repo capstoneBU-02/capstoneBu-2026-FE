@@ -285,13 +285,63 @@ test('an expired session while creating ends the workspace', async ({
   page,
 }) => {
   await openNewSection(page, 'pending-create')
-  await fillRange(page, '00:42.1', '01:05.8')
-  await pressSubmit(page)
+  await startInput(page).fill('00:42.1')
+  await endInput(page).fill('01:05.8')
+  // Enter from the field: the request disables it, so focus has left it.
+  await endInput(page).press('Enter')
+  await expect(submitStatus(page)).toHaveText('작업을 만들고 있어요.')
   await page.evaluate(() => window.workspaceTest.failCreate('expired'))
   await expect(
     main(page).getByRole('heading', { name: '작업 공간을 열 수 없어요' }),
   ).toBeVisible()
   await expect(form(page)).toHaveCount(0)
+  await expect(main(page)).toBeFocused()
+})
+
+test('leaving while creating cancels the request and its late answer opens nothing', async ({
+  page,
+}) => {
+  await openNewSection(page, 'pending-create')
+  await fillRange(page, '00:42.1', '01:05.8')
+  await pressSubmit(page)
+  await expect(submitStatus(page)).toHaveText('작업을 만들고 있어요.')
+  await sidebar(page).getByRole('button', { name: '내 작업' }).click()
+  await expect(
+    main(page).getByRole('heading', { name: '최근 작업' }),
+  ).toBeVisible()
+  expect(
+    await page.evaluate(() => window.workspaceTest.createCancelled()),
+  ).toEqual([true])
+
+  await page.evaluate(() => window.workspaceTest.resolveCreate())
+  await page.waitForTimeout(300)
+  await expect(page).not.toHaveURL(/view=task/)
+  await expect(
+    main(page).getByRole('heading', { name: '최근 작업' }),
+  ).toBeVisible()
+})
+
+test('a new section on another song goes out while the one left is still unanswered', async ({
+  page,
+}) => {
+  await openNewSection(page, 'pending-create')
+  await fillRange(page, '00:42.1', '01:05.8')
+  await pressSubmit(page)
+  await expect(submitStatus(page)).toHaveText('작업을 만들고 있어요.')
+  await sidebar(page)
+    .getByRole('button', { name: 'paper_moon_gtr_stem에 구간 추가' })
+    .click()
+  await expect(main(page).getByText('paper_moon_gtr_stem.mp3')).toBeVisible()
+
+  await fillRange(page, '00:10.0', '00:20.0')
+  await pressSubmit(page)
+  await expect(submitStatus(page)).toHaveText('작업을 만들고 있어요.')
+  expect(await createCalls(page)).toHaveLength(2)
+  await page.evaluate(() => window.workspaceTest.resolveCreate())
+  await expect(page).toHaveURL(/view=task&task=task-created-\d+$/)
+  await expect(
+    main(page).getByRole('navigation', { name: '작업 위치' }),
+  ).toContainText('paper_moon_gtr_stem')
 })
 
 test('a draft stays listed while away, and 취소 discards it', async ({
