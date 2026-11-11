@@ -278,7 +278,13 @@ export function checkSectionForm(
   return { errors, shown, lengthTenths, request }
 }
 
-// The mock repository checks a request again, as a server would.
+// Seconds the screen sends, as a whole number of tenths divided by 10.
+function isWholeTenth(seconds: number): boolean {
+  return Math.abs(seconds * 10 - secondsToTenths(seconds)) < 1e-6
+}
+
+// The mock repository checks a request again, as a server would. A time
+// between tenths is refused instead of rounded.
 export function checkSectionRange(
   startSeconds: number,
   endSeconds: number,
@@ -287,6 +293,7 @@ export function checkSectionRange(
 ): boolean {
   if (![startSeconds, endSeconds, songDurationSeconds].every(Number.isFinite))
     return false
+  if (!isWholeTenth(startSeconds) || !isWholeTenth(endSeconds)) return false
   const start = secondsToTenths(startSeconds)
   const end = secondsToTenths(endSeconds)
   return (

@@ -72,7 +72,7 @@ export function AddSongDialog({
   const [submitError, setSubmitError] = useState<string | null>(null)
   // Each pick gets a fresh alert so a repeated message is announced again.
   const [attempt, setAttempt] = useState(0)
-  const check = useSongFileCheck(file, probeDuration)
+  const { check, recheck } = useSongFileCheck(file, probeDuration)
   const titleId = useId()
   const guideId = useId()
   const errorId = useId()
@@ -164,8 +164,13 @@ export function AddSongDialog({
         event.preventDefault()
         dismiss()
       }}
-      // A file dropped outside the drop area must not navigate the page away.
-      onDragOver={(event) => event.preventDefault()}
+      // A file dropped outside the drop area must not navigate the page away,
+      // and the cursor there shows that it is not taken.
+      onDragOver={(event) => {
+        if (event.isDefaultPrevented()) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'none'
+      }}
       onDrop={(event) => event.preventDefault()}
       onPointerDown={(event) => {
         pointerStartedOutside.current =
@@ -230,6 +235,7 @@ export function AddSongDialog({
           disabled={submitting}
           describedBy={error ? errorId : undefined}
           onChoose={choose}
+          onRecheck={recheck}
         />
         {error && (
           <p

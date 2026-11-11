@@ -141,7 +141,7 @@ test('task detail returns copies of the task and its song', async () => {
   assert.notEqual(again.song.name, 'changed')
 })
 
-test('unknown tasks and other sessions share one unavailable error', async () => {
+test('a task the workspace does not hold fails as unavailable', async () => {
   const repository = createMockWorkspaceRepository('default', {
     tasks: [],
   })

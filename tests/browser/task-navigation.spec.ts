@@ -366,3 +366,59 @@ test('retrying a failed workspace load keeps focus in the content area', async (
   await expect(main(page)).toBeFocused()
   await expect(page.getByRole('heading', { name: '최근 작업' })).toBeVisible()
 })
+
+test('retrying a failed workspace load also loads the task in the address again', async ({
+  page,
+}) => {
+  // The demo fails the first list and the first task request.
+  await page.goto('/?demo=error&view=task&task=task-verse')
+  await main(page).getByRole('button', { name: '다시 시도' }).click()
+  await expect(title(page)).toHaveText('벌스 1')
+  await expect(main(page).getByText('작업을 열지 못했어요')).toHaveCount(0)
+})
+
+test('expiry while 다시 시도 loads the list again shows the expiry and keeps it', async ({
+  page,
+}) => {
+  await page.goto(
+    '/tests/browser/harness.html?scenario=list-error&view=task&task=task-solo',
+  )
+  const retry = main(page).getByRole('button', { name: '다시 시도' })
+  await expect(retry).toBeVisible()
+  await page.evaluate(() => {
+    window.workspaceTest.holdNextListLoad()
+    window.workspaceTest.failNextTaskLoad('expired')
+  })
+  await retry.click()
+  const expired = main(page).getByRole('heading', {
+    name: '작업 공간을 열 수 없어요',
+  })
+  await expect(expired).toBeVisible()
+
+  await page.evaluate(() => window.workspaceTest.releaseListLoad())
+  await page.waitForTimeout(300)
+  await expect(expired).toBeVisible()
+  await expect(sidebarTask(page, /^솔로/)).toHaveCount(0)
+})
+
+test('expiry ends a workspace load still on its way', async ({ page }) => {
+  // The list waits while the open task keeps refreshing on its own.
+  await page.goto(
+    '/tests/browser/harness.html?scenario=pending-load&refresh=150&view=task&task=task-solo',
+  )
+  await expect(
+    main(page)
+      .getByRole('status')
+      .filter({ hasText: '작업을 불러오고 있어요' }),
+  ).toBeVisible()
+  await page.evaluate(() => window.workspaceTest.failNextTaskLoad('expired'))
+  const expired = main(page).getByRole('heading', {
+    name: '작업 공간을 열 수 없어요',
+  })
+  await expect(expired).toBeVisible()
+
+  await page.evaluate(() => window.workspaceTest.releaseLoads())
+  await page.waitForTimeout(300)
+  await expect(expired).toBeVisible()
+  await expect(sidebarTask(page, /^솔로/)).toHaveCount(0)
+})

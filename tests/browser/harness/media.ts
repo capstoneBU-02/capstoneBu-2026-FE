@@ -18,14 +18,19 @@ const PROBE_OUTCOMES: Record<string, number | 'error' | 'pending'> = {
   'slow.mp3': 'pending',
 }
 const probeCalls: string[] = []
-const pendingProbes: Array<(seconds: number) => void> = []
+const pendingProbes: Array<{
+  resolve: (seconds: number) => void
+  reject: (error: Error) => void
+}> = []
 // Ignores AbortSignal so late results exercise stale-result protection.
 export const fakeProbe: MediaDurationProbe = (file) => {
   const name = file instanceof File ? file.name : ''
   probeCalls.push(name)
   const outcome = PROBE_OUTCOMES[name]
   if (outcome === 'pending')
-    return new Promise((resolve) => pendingProbes.push(resolve))
+    return new Promise((resolve, reject) =>
+      pendingProbes.push({ resolve, reject }),
+    )
   if (typeof outcome === 'number') return Promise.resolve(outcome)
   return Promise.reject(new MediaDurationError('unreadable'))
 }
@@ -113,7 +118,12 @@ window.AudioContext = class RecordedAudioContext extends NativeAudioContext {
 
 export const mediaControls = {
   resolveProbe(seconds) {
-    pendingProbes.splice(0).forEach((resolve) => resolve(seconds))
+    pendingProbes.splice(0).forEach(({ resolve }) => resolve(seconds))
+  },
+  timeOutProbe() {
+    pendingProbes
+      .splice(0)
+      .forEach(({ reject }) => reject(new MediaDurationError('timeout')))
   },
   probeCalls: () => [...probeCalls],
   audioCalls: () =>

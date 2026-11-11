@@ -35,6 +35,8 @@ const TOO_LONG_MESSAGE =
   '5분 이하 파일만 올릴 수 있어요. 필요한 부분만 잘라서 올려 주세요.'
 const UNREADABLE_MESSAGE =
   '이 파일은 재생할 수 없어요. 손상되지 않은 파일인지 확인하고 다시 올려 주세요.'
+const TIMEOUT_MESSAGE =
+  '파일 길이를 확인하는 데 시간이 너무 오래 걸렸어요. 다시 확인하거나 다른 파일을 올려 주세요.'
 
 // 1.5KB of zeros; the harness probe decides each file's length by name.
 function audio(name: string, mimeType: string) {
@@ -198,6 +200,38 @@ test('a replaced file never shows a late length result', async ({ page }) => {
   await expect(dialog(page).getByText('04:12 · 1.5KB')).toBeVisible()
   await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
   await expect(dialog(page).getByText('01:40', { exact: false })).toHaveCount(0)
+})
+
+test('a length check that takes too long can be checked again', async ({
+  page,
+}) => {
+  await openFromSidebar(page)
+  await choose(page, audio('slow.mp3', 'audio/mpeg'))
+  await expect(status(page)).toHaveText('파일을 확인하고 있어요.')
+  await page.evaluate(() => window.workspaceTest.timeOutProbe())
+  await expect(alertText(page)).toHaveText(TIMEOUT_MESSAGE)
+  await expect(dialog(page).getByText('길이 알 수 없음 · 1.5KB')).toBeVisible()
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'true')
+
+  const calls = await page.evaluate(
+    () => window.workspaceTest.probeCalls().length,
+  )
+  const recheck = dialog(page).getByRole('button', { name: '다시 확인' })
+  await expect(recheck).toHaveAccessibleDescription(TIMEOUT_MESSAGE)
+  await recheck.click()
+  await expect(status(page)).toHaveText('파일을 확인하고 있어요.')
+  await expect(alertText(page)).toHaveCount(0)
+  // The button goes with the message; focus stays on the file card.
+  await expect(
+    dialog(page).getByRole('button', { name: '파일 바꾸기' }),
+  ).toBeFocused()
+  expect(
+    await page.evaluate(() => window.workspaceTest.probeCalls().length),
+  ).toBeGreaterThan(calls)
+
+  await page.evaluate(() => window.workspaceTest.resolveProbe(100))
+  await expect(dialog(page).getByText('01:40 · 1.5KB')).toBeVisible()
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
 })
 
 test('pressing Escape again while adding keeps the dialog and the add', async ({
@@ -453,6 +487,51 @@ test('a file dropped outside a drop area does not open in the browser', async ({
     }),
   )
   expect(prevented).toEqual([true, true])
+})
+
+test('a file dragged where nothing takes it shows that it cannot be dropped', async ({
+  page,
+}) => {
+  await openHarness(page)
+  await expect(page.locator('tbody tr')).toHaveCount(4)
+  // The drag offers a copy; each place over the page answers what it does.
+  // Chrome keeps no dropEffect on a made-up drag, so the test records it.
+  const answers = (selectors: string[]) =>
+    page.evaluate(
+      (list) =>
+        list.map((selector) => {
+          const dataTransfer = new DataTransfer()
+          dataTransfer.items.add(new File(['x'], 'stray.mp3'))
+          let effect = 'copy'
+          Object.defineProperty(dataTransfer, 'dropEffect', {
+            get: () => effect,
+            set: (value: string) => {
+              effect = value
+            },
+          })
+          const event = new DragEvent('dragover', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+          })
+          document.querySelector(selector)!.dispatchEvent(event)
+          return [event.defaultPrevented, effect]
+        }),
+      selectors,
+    )
+  expect(await answers(['tbody', 'aside'])).toEqual([
+    [true, 'none'],
+    [true, 'none'],
+  ])
+
+  await addButton(page).click()
+  await expect(dialog(page)).toBeVisible()
+  expect(
+    await answers(['dialog [class*="dropzone"]', 'dialog [class*="guide"]']),
+  ).toEqual([
+    [true, 'copy'],
+    [true, 'none'],
+  ])
 })
 
 test('the real media probe reads an MP3, rejects a corrupt file and revokes its object URLs', async ({
