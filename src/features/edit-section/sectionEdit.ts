@@ -1,6 +1,7 @@
 import {
   createSectionForm,
   parseSectionName,
+  sectionFormReducer,
   type SectionForm,
 } from '../new-section/sectionForm.ts'
 import {
@@ -14,30 +15,71 @@ import {
 import type { ReviseTaskInput, WorkspaceTask } from '../workspace/model.ts'
 
 // 구간 수정 replaces a finished result. A queued or running task has none
-// yet, and a failed one is recovered through #17's 구간 다시 정하기.
+// yet; a failed one is sent again, or moved when no guitar was found.
 export function canReviseSection(
   task: Pick<WorkspaceTask, 'processingStatus'>,
 ): boolean {
   return task.processingStatus === 'completed'
 }
 
-// The tab is made from the range, part and tuning; a new name alone keeps it.
+// The same editor changes a finished section (구간 수정) and moves one where
+// separation found no guitar (구간 다시 정하기). A tab failure is sent again
+// as it is, and a queued or running task has nothing to change yet.
+export type SectionEditKind = 'revise' | 'redefine'
+
+export function sectionEditKind(
+  task: Pick<WorkspaceTask, 'processingStatus' | 'failureKind'>,
+): SectionEditKind | null {
+  if (canReviseSection(task)) return 'revise'
+  return task.processingStatus === 'failed' && task.failureKind === 'no-guitar'
+    ? 'redefine'
+    : null
+}
+
+type SectionValues = Pick<
+  WorkspaceTask,
+  'part' | 'tuningId' | 'rangeStartSeconds' | 'rangeEndSeconds'
+>
+
 // Times compare in tenths, the precision of the inputs.
-export function changesSectionResult(
-  task: Pick<
-    WorkspaceTask,
-    'part' | 'tuningId' | 'rangeStartSeconds' | 'rangeEndSeconds'
-  >,
+function changesSectionRange(
+  task: SectionValues,
   input: ReviseTaskInput,
 ): boolean {
   return (
     secondsToTenths(task.rangeStartSeconds) !==
       secondsToTenths(input.rangeStartSeconds) ||
     secondsToTenths(task.rangeEndSeconds) !==
-      secondsToTenths(input.rangeEndSeconds) ||
+      secondsToTenths(input.rangeEndSeconds)
+  )
+}
+
+// The tab is made from the range, part and tuning; a new name alone keeps it.
+export function changesSectionResult(
+  task: SectionValues,
+  input: ReviseTaskInput,
+): boolean {
+  return (
+    changesSectionRange(task, input) ||
     task.part !== input.part ||
     task.tuningId !== input.tuningId
   )
+}
+
+// Separation listens to the range alone, so the same range would find no
+// guitar again whatever the part or tuning.
+export function canSendSectionEdit(
+  task: SectionValues & Pick<WorkspaceTask, 'processingStatus' | 'failureKind'>,
+  input: ReviseTaskInput,
+): boolean {
+  switch (sectionEditKind(task)) {
+    case 'revise':
+      return changesSectionResult(task, input)
+    case 'redefine':
+      return changesSectionRange(task, input)
+    case null:
+      return false
+  }
 }
 
 // The form opens with the task's values, untouched so no error shows yet.
@@ -62,4 +104,11 @@ export function sectionFormFromTask(
       ? task.tuningId
       : fresh.tuningId,
   }
+}
+
+// 다른 파일 올리기 starts a new section on the new file. The name and tuning
+// still fit; the range and part were chosen for the old file, as when a file
+// is replaced.
+export function otherFileSectionForm(task: WorkspaceTask): SectionForm {
+  return sectionFormReducer(sectionFormFromTask(task), { type: 'replace-file' })
 }

@@ -17,7 +17,7 @@ import { useSongFileCheck } from './useSongFileCheck.ts'
 import styles from './AddSongDialog.module.css'
 
 type Props = {
-  // 파일 바꾸기 reuses this dialog to add the replacement as a new song.
+  // 파일 바꾸기 and 다른 파일 올리기 reuse this dialog to add a new song.
   title?: string
   probeDuration: MediaDurationProbe
   // Files dropped on an entry point before the dialog opened.

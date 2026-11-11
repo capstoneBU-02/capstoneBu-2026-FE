@@ -27,7 +27,8 @@ export function readAppMode(search: string): AppMode {
     demo === 'empty' ||
     demo === 'error' ||
     demo === 'expired' ||
-    demo === 'consent-error'
+    demo === 'consent-error' ||
+    demo === 'task-states'
   ) {
     return { kind: 'workspace', scenario: readDemoScenario(search) }
   }
@@ -54,6 +55,7 @@ export function readDemoScenario(search: string): DemoScenario {
     case 'error':
     case 'expired':
     case 'consent-error':
+    case 'task-states':
       return scenario
     default:
       return 'default'

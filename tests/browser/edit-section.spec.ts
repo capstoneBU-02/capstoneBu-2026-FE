@@ -139,7 +139,9 @@ test('only a finished task offers 구간 수정', async ({ page }) => {
   )
   await expect(title(page)).toHaveText('구간을 바꿀 수 없어요')
   await expect(
-    main(page).getByText('타브가 완성된 작업만 구간을 바꿀 수 있어요.'),
+    main(page).getByText(
+      '타브가 완성된 작업과 기타를 찾지 못한 작업만 구간을 바꿀 수 있어요.',
+    ),
   ).toBeVisible()
   await expect(form(page)).toHaveCount(0)
   // Opened from its URL, the closed editor's entry turns into the task.

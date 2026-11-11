@@ -8,7 +8,10 @@ import {
 } from '../src/features/new-section/sectionForm.ts'
 import {
   canReviseSection,
+  canSendSectionEdit,
   changesSectionResult,
+  otherFileSectionForm,
+  sectionEditKind,
   sectionFormFromTask,
 } from '../src/features/edit-section/sectionEdit.ts'
 
@@ -32,6 +35,7 @@ const verse = {
 }
 
 const song = { songDurationSeconds: 252, existingNames: ['솔로'] }
+const verseRange = { rangeStartSeconds: 42.1, rangeEndSeconds: 65.8 }
 
 test('a policy section name splits into its name and number', () => {
   assert.deepEqual(parseSectionName('벌스 1'), {
@@ -136,6 +140,84 @@ test('only a finished task offers a section change', () => {
       processingStatus,
     )
   }
+})
+
+// The song in 코러스 2's range had no guitar (SEPARATION_NO_GUITAR).
+const noGuitar = {
+  ...verse,
+  id: 'task-chorus',
+  sectionName: '코러스 2',
+  tuningId: 'drop-d',
+  rangeStartSeconds: 190,
+  rangeEndSeconds: 211,
+  processingStatus: 'failed',
+  failureKind: 'no-guitar',
+  hasSeparatedAudio: false,
+}
+
+test('a section without guitar is moved, a finished one changed', () => {
+  assert.equal(sectionEditKind(verse), 'revise')
+  assert.equal(sectionEditKind(noGuitar), 'redefine')
+  // A tab failure is sent again; a queued or running task has no result yet.
+  for (const task of [
+    { ...verse, processingStatus: 'failed', failureKind: 'transcription' },
+    { ...verse, processingStatus: 'queued' },
+    { ...verse, processingStatus: 'processing' },
+  ])
+    assert.equal(sectionEditKind(task), null, JSON.stringify(task))
+  // The top bar's 구간 수정 stays for a finished task alone.
+  assert.equal(canReviseSection(noGuitar), false)
+})
+
+test('a section without guitar has to move its range to be sent', () => {
+  const same = {
+    sectionName: '코러스 2',
+    part: 'rhythm',
+    tuningId: 'drop-d',
+    rangeStartSeconds: 190,
+    rangeEndSeconds: 211,
+  }
+  // The same range finds no guitar again, whatever the part or tuning.
+  for (const change of [{}, { part: 'lead' }, { tuningId: 'e-standard' }])
+    assert.equal(
+      canSendSectionEdit(noGuitar, { ...same, ...change }),
+      false,
+      JSON.stringify(change),
+    )
+  for (const change of [
+    { rangeStartSeconds: 185.5 },
+    { rangeEndSeconds: 205 },
+    { rangeEndSeconds: 205, part: 'lead' },
+  ])
+    assert.equal(
+      canSendSectionEdit(noGuitar, { ...same, ...change }),
+      true,
+      JSON.stringify(change),
+    )
+  // A finished task keeps the rule of 구간 수정.
+  const verseSame = { ...same, ...verseRange, tuningId: 'e-standard' }
+  assert.equal(canSendSectionEdit(verse, verseSame), false)
+  assert.equal(canSendSectionEdit(verse, { ...verseSame, part: 'lead' }), true)
+  // Nothing else can be sent at all.
+  assert.equal(
+    canSendSectionEdit(
+      { ...verse, processingStatus: 'failed', failureKind: 'transcription' },
+      { ...verseSame, rangeEndSeconds: 60 },
+    ),
+    false,
+  )
+})
+
+test('another file starts a new section with the name and tuning kept', () => {
+  const form = otherFileSectionForm(noGuitar)
+  assert.equal(form.baseName, '코러스')
+  assert.equal(form.number, '2')
+  assert.equal(form.tuningId, 'drop-d')
+  // The range and part were chosen for the old file.
+  assert.equal(form.start, '')
+  assert.equal(form.end, '')
+  assert.equal(form.part, SECTION_POLICY.parts[0].id)
+  assert.equal(form.attempted, false)
 })
 
 test('a part or tuning the policy no longer lists falls back to its first', () => {

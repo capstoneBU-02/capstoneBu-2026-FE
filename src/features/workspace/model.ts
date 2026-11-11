@@ -1,5 +1,5 @@
 export type DemoScenario =
-  'default' | 'empty' | 'error' | 'expired' | 'consent-error'
+  'default' | 'empty' | 'error' | 'expired' | 'consent-error' | 'task-states'
 
 export type ConsentChoice = 'undecided' | 'accepted' | 'declined'
 export type SavedConsentChoice = Exclude<ConsentChoice, 'undecided'>

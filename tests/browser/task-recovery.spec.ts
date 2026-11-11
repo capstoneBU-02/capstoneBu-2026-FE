@@ -202,6 +202,28 @@ test('a stop in progress cannot be sent twice and a failure keeps the dialog', a
   await expect(stopNotice(page)).toHaveText('솔로 작업을 멈췄어요.')
 })
 
+// The browser closes the dialog at once but says so in a later task, which
+// a quick failure can beat.
+test('a failure that beats the browser closing the dialog still shows', async ({
+  page,
+}) => {
+  await openTaskFromHome(page, /^솔로/, '솔로', 'pending-cancel')
+  await stopButton(page).click()
+  const dialog = stopDialog(page, '솔로')
+  await dialog.getByRole('button', { name: '멈추기' }).click()
+  await expect(dialog.getByRole('status')).toHaveText('멈추는 중…')
+
+  await page.evaluate(() => {
+    document.querySelector<HTMLDialogElement>('dialog[open]')!.close()
+    window.workspaceTest.failCancel('cancel-task-failed')
+  })
+  await expect(dialog.getByRole('alert')).toHaveText(STOP_FAILED)
+  await expect(dialog.getByRole('button', { name: '취소' })).toBeFocused()
+  await dialog.getByRole('button', { name: '취소' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(stopButton(page)).toBeFocused()
+})
+
 test('a stop that ends after the user left only updates the list', async ({
   page,
 }) => {
@@ -444,17 +466,6 @@ test('used-up retries offer 문의하기 instead', async ({ page }) => {
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
   await expect(contact).toBeFocused()
-})
-
-test('a song without guitar has no 다시 시도 yet', async ({ page }) => {
-  await page.goto('/tests/browser/harness.html?view=task&task=task-chorus')
-  await expect(title(page)).toHaveText('코러스 2')
-  await expect(
-    main(page).getByRole('button', { name: '다시 시도' }),
-  ).toHaveCount(0)
-  await expect(
-    main(page).getByRole('heading', { name: '작업 화면 준비 중' }),
-  ).toBeVisible()
 })
 
 test('a retry in progress cannot be sent twice; a failure shows the new count', async ({

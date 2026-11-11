@@ -2,9 +2,14 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createMockWorkspaceRepository } from '../src/features/workspace/mockRepository.ts'
 import { readDemoScenario } from '../src/app/demoConfig.ts'
+import {
+  clockedRepository,
+  revision,
+  section,
+  signal,
+  stageStatuses,
+} from './fixtures/workspace.mjs'
 import { SECTION_POLICY } from '../src/features/new-section/sectionPolicy.ts'
-
-const signal = () => new AbortController().signal
 
 test('cancelled load preserves the failure for the next request and allows retry', async () => {
   const repository = createMockWorkspaceRepository('error')
@@ -248,16 +253,6 @@ test('the mock refuses a song the upload policy rejects, like a server would', a
   assert.equal((await repository.loadWorkspace(signal())).songs.length, 0)
 })
 
-const section = (overrides = {}) => ({
-  songId: 'song-neon-harbor',
-  sectionName: '벌스 2',
-  part: 'lead',
-  tuningId: SECTION_POLICY.tunings[0].id,
-  rangeStartSeconds: 42.1,
-  rangeEndSeconds: 65.8,
-  ...overrides,
-})
-
 test('a created task waits in the queue and opens like any other task', async () => {
   const repository = createMockWorkspaceRepository()
   const task = await repository.createTask(section(), signal())
@@ -347,15 +342,6 @@ test('creating a task honours cancellation and expiry', async () => {
     createMockWorkspaceRepository('expired').createTask(section(), signal()),
     { code: 'expired' },
   )
-})
-
-const revision = (overrides = {}) => ({
-  sectionName: '벌스 1',
-  part: 'rhythm',
-  tuningId: 'e-standard',
-  rangeStartSeconds: 42.1,
-  rangeEndSeconds: 60,
-  ...overrides,
 })
 
 test('a section change queues the task again and keeps the old result', async () => {
@@ -480,19 +466,6 @@ test('a section change honours cancellation and expiry', async () => {
     { code: 'expired' },
   )
 })
-
-// A session clock the tests move by hand, with a short processing pace.
-function clockedRepository() {
-  const clock = { now: 0 }
-  const repository = createMockWorkspaceRepository('default', {
-    now: () => clock.now,
-    processingTiming: { queueMs: 100, separationMs: 400, transcriptionMs: 600 },
-  })
-  return { clock, repository }
-}
-
-const stageStatuses = (detail) =>
-  detail.stages.map((stage) => `${stage.id}:${stage.status}`)
 
 test('a created task moves from the queue to a finished tab over time', async () => {
   const { clock, repository } = clockedRepository()
@@ -625,189 +598,6 @@ test('a finished change can be changed again; results stay newest first', async 
     detail.previousResults.map((result) => result.sectionName),
     ['코러스 1', '벌스 1'],
   )
-})
-
-// A failed tab on original input that kept its separated guitar.
-const failedTab = {
-  id: 'task-failed-tab',
-  songId: 'song-neon-harbor',
-  sectionName: '브리지',
-  part: 'lead',
-  partLabel: '리드 기타',
-  tuningId: SECTION_POLICY.tunings[0].id,
-  tuningLabel: SECTION_POLICY.tunings[0].label,
-  rangeStartSeconds: 10,
-  rangeEndSeconds: 30,
-  processingStatus: 'failed',
-  failureKind: 'transcription',
-  progressPercent: null,
-  hasSeparatedAudio: true,
-  comparisonCount: 0,
-  copyStatus: 'unreviewed',
-  updatedAtLabel: '1시간 전',
-}
-
-test('a failed task reports the retries the server has left (JOB-05)', async () => {
-  const repository = createMockWorkspaceRepository()
-  const retryOf = async (taskId) =>
-    (await repository.loadTask(taskId, signal())).retry
-
-  assert.deepEqual(await retryOf('task-intro'), { left: 2, limit: 3 })
-  // A song without guitar cannot be sent again; other states have nothing
-  // to retry.
-  assert.equal(await retryOf('task-chorus'), null)
-  assert.equal(await retryOf('task-verse'), null)
-  assert.equal(await retryOf('task-solo'), null)
-
-  const exhausted = createMockWorkspaceRepository('default', {
-    tasks: [failedTab],
-    retriesUsed: { [failedTab.id]: 3 },
-  })
-  assert.deepEqual((await exhausted.loadTask(failedTab.id, signal())).retry, {
-    left: 0,
-    limit: 3,
-  })
-  await assert.rejects(exhausted.retryTask(failedTab.id, signal()), {
-    code: 'retry-task-failed',
-  })
-})
-
-test('a retry queues the task again and starts from the failed stage (JOB-04)', async () => {
-  const clock = { now: 0 }
-  const repository = createMockWorkspaceRepository('default', {
-    tasks: [failedTab],
-    now: () => clock.now,
-    processingTiming: { queueMs: 100, separationMs: 400, transcriptionMs: 600 },
-  })
-  assert.deepEqual((await repository.loadTask(failedTab.id, signal())).retry, {
-    left: 3,
-    limit: 3,
-  })
-
-  const retried = await repository.retryTask(failedTab.id, signal())
-  assert.equal(retried.processingStatus, 'queued')
-  assert.equal(retried.failureKind, null)
-  assert.equal(retried.hasSeparatedAudio, true)
-
-  let detail = await repository.loadTask(failedTab.id, signal())
-  assert.equal(detail.retry, null)
-  assert.deepEqual(stageStatuses(detail), [
-    'separation:done',
-    'transcription:waiting',
-  ])
-  // A running task cannot be sent again.
-  await assert.rejects(repository.retryTask(failedTab.id, signal()), {
-    code: 'retry-task-failed',
-  })
-
-  clock.now = 100
-  detail = await repository.loadTask(failedTab.id, signal())
-  assert.equal(detail.task.processingStatus, 'processing')
-  assert.equal(detail.task.hasSeparatedAudio, true)
-  assert.deepEqual(stageStatuses(detail), [
-    'separation:done',
-    'transcription:running',
-  ])
-  clock.now = 700
-  detail = await repository.loadTask(failedTab.id, signal())
-  assert.equal(detail.task.processingStatus, 'completed')
-})
-
-test('a song without guitar and a finished task cannot be retried', async () => {
-  const repository = createMockWorkspaceRepository()
-
-  for (const taskId of ['task-chorus', 'task-verse'])
-    await assert.rejects(repository.retryTask(taskId, signal()), {
-      code: 'retry-task-failed',
-    })
-  await assert.rejects(repository.retryTask('task-unknown', signal()), {
-    code: 'task-unavailable',
-  })
-  assert.equal(
-    (await repository.loadTask('task-chorus', signal())).task.processingStatus,
-    'failed',
-  )
-})
-
-test('멈추기 removes the running task and frees the worker for the next', async () => {
-  const { clock, repository } = clockedRepository()
-  const first = await repository.createTask(section(), signal())
-  const second = await repository.createTask(
-    section({ sectionName: '솔로' }),
-    signal(),
-  )
-  const third = await repository.createTask(
-    section({ sectionName: '아웃트로' }),
-    signal(),
-  )
-
-  // first runs from 100; third stops while it waits.
-  clock.now = 50
-  await repository.cancelTask(third.id, signal())
-  clock.now = 200
-  await repository.cancelTask(first.id, signal())
-
-  await assert.rejects(repository.loadTask(first.id, signal()), {
-    code: 'task-unavailable',
-  })
-  const listed = (await repository.loadWorkspace(signal())).tasks.map(
-    (task) => task.id,
-  )
-  assert.ok(!listed.includes(first.id))
-  assert.ok(!listed.includes(third.id))
-  assert.ok(listed.includes(second.id))
-  // The song stays for a new section.
-  assert.ok(
-    (await repository.loadWorkspace(signal())).songs.some(
-      (song) => song.id === 'song-neon-harbor',
-    ),
-  )
-  const next = await repository.loadTask(second.id, signal())
-  assert.equal(next.task.processingStatus, 'processing')
-  assert.equal(next.queueAhead, null)
-})
-
-test('멈추기 refuses a task that is no longer running', async () => {
-  const repository = createMockWorkspaceRepository()
-
-  for (const taskId of ['task-verse', 'task-intro'])
-    await assert.rejects(repository.cancelTask(taskId, signal()), {
-      code: 'cancel-task-failed',
-    })
-  await assert.rejects(repository.cancelTask('task-unknown', signal()), {
-    code: 'task-unavailable',
-  })
-  assert.equal((await repository.loadWorkspace(signal())).tasks.length, 4)
-  // The fixture's running task can be stopped.
-  await repository.cancelTask('task-solo', signal())
-  assert.equal((await repository.loadWorkspace(signal())).tasks.length, 3)
-})
-
-test('멈추기 and 다시 시도 honour cancellation and expiry', async () => {
-  const repository = createMockWorkspaceRepository()
-  const controller = new AbortController()
-  const stopping = repository.cancelTask('task-solo', controller.signal)
-  const retrying = repository.retryTask('task-intro', controller.signal)
-  controller.abort()
-
-  await assert.rejects(stopping, { name: 'AbortError' })
-  await assert.rejects(retrying, { name: 'AbortError' })
-  assert.equal(
-    (await repository.loadTask('task-solo', signal())).task.processingStatus,
-    'processing',
-  )
-  assert.deepEqual((await repository.loadTask('task-intro', signal())).retry, {
-    left: 2,
-    limit: 3,
-  })
-
-  const expired = createMockWorkspaceRepository('expired')
-  await assert.rejects(expired.cancelTask('task-solo', signal()), {
-    code: 'expired',
-  })
-  await assert.rejects(expired.retryTask('task-intro', signal()), {
-    code: 'expired',
-  })
 })
 
 test('fixture songs play a synthesized demo as long as the song', async () => {

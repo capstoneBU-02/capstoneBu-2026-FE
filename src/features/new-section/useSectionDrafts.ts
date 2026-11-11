@@ -15,6 +15,8 @@ export interface SectionDrafts {
   discard(songId: string): void
   // A replaced file moves the draft to the new song and clears its range.
   replaceFile(fromSongId: string, toSongId: string): void
+  // A new song starts from a form made elsewhere, such as 다른 파일 올리기.
+  seed(songId: string, form: SectionForm): void
 }
 
 interface DraftState {
@@ -129,6 +131,9 @@ export function useSectionDrafts(
           replaced,
         )
       })
+    },
+    seed(songId, form) {
+      update((current) => withDraft(current, songId, form))
     },
   }
 }

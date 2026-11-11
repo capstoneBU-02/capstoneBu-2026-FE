@@ -17,6 +17,7 @@ import pageStyles from '../WorkspacePage.module.css'
 import { ProcessingPanel } from './ProcessingPanel.tsx'
 import { LoadingState, ProblemState } from './StateMessage.tsx'
 import {
+  NoGuitarPanel,
   TaskFailurePanel,
   type TaskRecoveryActions,
 } from './TaskFailurePanel.tsx'
@@ -53,8 +54,8 @@ function useStatusAnnouncement({ task, stages }: TaskDetail): string {
   return announced.message
 }
 
-// A failed task that found guitar gets its recovery body; a song without
-// guitar keeps the placeholder until its own body lands.
+// A failed task gets the recovery its failure allows. A finished task keeps
+// the placeholder until its tab and comparison land.
 function TaskBody({
   detail,
   refreshFailed,
@@ -68,8 +69,12 @@ function TaskBody({
   const { task } = detail
   if (isTaskInProgress(task))
     return <ProcessingPanel detail={detail} refreshFailed={refreshFailed} />
-  if (task.processingStatus === 'failed' && task.failureKind !== 'no-guitar')
-    return <TaskFailurePanel detail={detail} {...recovery} />
+  if (task.processingStatus === 'failed')
+    return task.failureKind === 'no-guitar' ? (
+      <NoGuitarPanel detail={detail} {...recovery} />
+    ) : (
+      <TaskFailurePanel detail={detail} {...recovery} />
+    )
   return (
     <section className={styles.pending} aria-labelledby={pendingId}>
       <h2 id={pendingId}>작업 화면 준비 중</h2>

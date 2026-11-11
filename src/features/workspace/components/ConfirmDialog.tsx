@@ -1,4 +1,12 @@
-import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { Button } from '../../../shared/ui/Button.tsx'
 import { isOutside, restoreFocus } from '../../../shared/ui/dialogFocus.ts'
 import pageStyles from '../WorkspacePage.module.css'
@@ -12,8 +20,8 @@ type Props = {
   onClose: () => void
   // While the confirmed request runs, the dialog stays open: Esc, the
   // backdrop and both buttons do nothing, and busyLabel replaces the label.
-  // A browser may still close it on a repeated Esc, so a caller reopens it
-  // when the request fails.
+  // A browser may still close it on a repeated Esc; the dialog then waits
+  // for the request, opens again if it ends in an error, and closes if not.
   busy?: boolean
   busyLabel?: string
   error?: string | null
@@ -43,6 +51,25 @@ export function ConfirmDialog({
   const close = () => {
     if (!busy) onClose()
   }
+  const waited = useRef(false)
+  const settleWait = useEffectEvent(() => {
+    const dialog = dialogRef.current
+    if (!dialog || dialog.open) return
+    if (!error) return onClose()
+    dialog.showModal()
+    cancelRef.current?.focus({ preventScroll: true })
+  })
+
+  // In the commit that ends the wait, so a late close from the browser
+  // finds the dialog open again.
+  useLayoutEffect(() => {
+    if (busy) {
+      waited.current = true
+    } else if (waited.current) {
+      waited.current = false
+      settleWait()
+    }
+  }, [busy])
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -64,8 +91,10 @@ export function ConfirmDialog({
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
       onClose={(event) => {
-        // Ignore a queued close from StrictMode cleanup after showModal reruns.
-        if (!event.currentTarget.open) onClose()
+        // Ignore a queued close from StrictMode cleanup after showModal
+        // reruns. One the browser makes during a wait can arrive after the
+        // request ended; the end of the wait decides instead.
+        if (!event.currentTarget.open && !busy) onClose()
       }}
       onCancel={(event) => {
         if (event.target !== event.currentTarget) return

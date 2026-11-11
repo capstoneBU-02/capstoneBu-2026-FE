@@ -5,12 +5,18 @@ import {
   songNameFromFileName,
 } from '../add-song/songFile.ts'
 import {
-  canReviseSection,
-  changesSectionResult,
+  canSendSectionEdit,
+  sectionEditKind,
 } from '../edit-section/sectionEdit.ts'
 import { isTaskInProgress } from './format.ts'
 import { createMockAudio } from './mockAudio.ts'
-import { mockRetriesUsed, mockSongs, mockTasks } from './mockFixtures.ts'
+import {
+  mockRetriesUsed,
+  mockSongs,
+  mockTasks,
+  mockTaskStates,
+  mockTaskStatesRetriesUsed,
+} from './mockFixtures.ts'
 import type {
   ConsentChoice,
   DemoScenario,
@@ -53,6 +59,17 @@ interface MockWorkspaceOptions {
   readonly processingTiming?: ProcessingTiming
 }
 
+function fixtureTasks(scenario: DemoScenario): readonly WorkspaceTask[] {
+  if (scenario === 'empty') return []
+  return scenario === 'task-states' ? mockTaskStates : mockTasks
+}
+
+function fixtureRetries(scenario: DemoScenario) {
+  return scenario === 'task-states'
+    ? mockTaskStatesRetriesUsed
+    : mockRetriesUsed
+}
+
 export function createMockWorkspaceRepository(
   scenario: DemoScenario = 'default',
   options: MockWorkspaceOptions = {},
@@ -66,9 +83,9 @@ export function createMockWorkspaceRepository(
       testerCode: DEMO_DISPLAY_CONFIG.testerCode,
     }),
   }
-  const tasks = (options.tasks ?? (scenario === 'empty' ? [] : mockTasks)).map(
-    (task) => ({ ...task }),
-  )
+  const tasks = (options.tasks ?? fixtureTasks(scenario)).map((task) => ({
+    ...task,
+  }))
   const songs = (
     options.songs ??
     mockSongs.filter((song) => tasks.some((task) => task.songId === song.id))
@@ -82,7 +99,7 @@ export function createMockWorkspaceRepository(
   const runs: ProcessingRun[] = []
   const retriesUsed = new Map(
     Object.entries(
-      options.retriesUsed ?? (options.tasks ? {} : mockRetriesUsed),
+      options.retriesUsed ?? (options.tasks ? {} : fixtureRetries(scenario)),
     ),
   )
   const now = options.now ?? Date.now
@@ -271,22 +288,24 @@ export function createMockWorkspaceRepository(
       const { index, task } = findCurrent(taskId)
       const song = songs.find((candidate) => candidate.id === task.songId)
       const labels = newTaskLabels({ ...input, songId: task.songId }, song)
-      if (
-        !labels ||
-        !canReviseSection(task) ||
-        !changesSectionResult(task, input)
-      ) {
+      const kind = sectionEditKind(task)
+      if (!labels || !kind || !canSendSectionEdit(task, input)) {
         throw new WorkspaceRepositoryError(
           'revise-task-failed',
           '타브를 다시 만들지 못했어요.',
         )
       }
 
-      keptResultCount += 1
-      previousResults.set(taskId, [
-        keptResult(task, `result-kept-${keptResultCount}`),
-        ...(previousResults.get(taskId) ?? []),
-      ])
+      // A section without guitar had no tab to keep.
+      if (kind === 'revise') {
+        keptResultCount += 1
+        previousResults.set(taskId, [
+          keptResult(task, `result-kept-${keptResultCount}`),
+          ...(previousResults.get(taskId) ?? []),
+        ])
+      }
+      // A new section is a new stem, so its retries start over.
+      retriesUsed.delete(taskId)
       // The new section starts like a created task; its tab, comparisons and
       // copy status went with the previous result.
       const revised: WorkspaceTask = {

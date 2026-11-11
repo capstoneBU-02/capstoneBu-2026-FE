@@ -101,8 +101,8 @@ export function StopTaskControl({
             setFailed(false)
             if ((await onStop()) !== 'failed') return
             setFailed(true)
-            // The browser may have closed the waiting dialog on a repeated
-            // Esc; the failure still needs saying.
+            // In case the wait ended in a render of its own and the dialog
+            // closed before the failure came back.
             setOpen(true)
           }}
           onClose={() => setOpen(false)}
