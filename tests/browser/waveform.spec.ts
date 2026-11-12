@@ -51,6 +51,11 @@ function seconds(text: string) {
   return Number(minutes) * 60 + Number(rest)
 }
 
+function tenths(text: string) {
+  const [minutes, rest] = text.split(':')
+  return Number(minutes) * 600 + Math.round(Number(rest) * 10)
+}
+
 async function inputSeconds(page: Page) {
   return {
     start: seconds(await startInput(page).inputValue()),
@@ -61,12 +66,12 @@ async function inputSeconds(page: Page) {
 // The sliders and the inputs must always describe the same range.
 async function expectInSync(page: Page) {
   await expect(startHandle(page)).toHaveAttribute(
-    'aria-valuetext',
-    await startInput(page).inputValue(),
+    'aria-valuenow',
+    String(tenths(await startInput(page).inputValue()) / 10),
   )
   await expect(endHandle(page)).toHaveAttribute(
-    'aria-valuetext',
-    await endInput(page).inputValue(),
+    'aria-valuenow',
+    String(tenths(await endInput(page).inputValue()) / 10),
   )
 }
 
@@ -138,6 +143,8 @@ test('the waveform shows the song, its sections and the typed range', async ({
   await fillRange(page, '00:42.1', '01:05.8')
   await expectInSync(page)
   await expect(startHandle(page)).toHaveAttribute('aria-valuenow', '42.1')
+  await expect(startHandle(page)).toHaveAttribute('aria-valuetext', '42.1초')
+  await expect(endHandle(page)).toHaveAttribute('aria-valuetext', '1분 5.8초')
   await expect(startHandle(page)).toHaveAttribute('aria-valuemin', '0')
   await expect(startHandle(page)).toHaveAttribute('aria-valuemax', '65.7')
   await expect(endHandle(page)).toHaveAttribute('aria-valuemin', '42.2')
@@ -210,9 +217,7 @@ test('dragging on the overview selects, resizes and moves the range', async ({
   expect(await inputSeconds(page)).toEqual(before)
 })
 
-test('a handle moves from where it was grabbed, even on a short range', async ({
-  page,
-}) => {
+test('a handle moves from where it was grabbed', async ({ page }) => {
   await openNewSection(page)
   await waitForWaveform(page)
   const at = (time: number) => trackPoint(overview(page), time / SONG_SECONDS)
@@ -228,18 +233,60 @@ test('a handle moves from where it was grabbed, even on a short range', async ({
     { start: 42.1 + secondsPerPixel, end: 65.8 },
     0.15,
   )
+})
 
-  // A 1 s range is about 4 px wide, so its handles overlap. A press next to
-  // the start line still takes the start.
+test('a short range moves from inside and resizes from just outside', async ({
+  page,
+}) => {
+  await openNewSection(page)
+  await waitForWaveform(page)
+  const at = (time: number) => trackPoint(overview(page), time / SONG_SECONDS)
+  const secondsPerPixel =
+    SONG_SECONDS / (await overview(page).boundingBox())!.width
+
+  // A 1 s range is a few px wide, inside both handles' reach. A press on it
+  // moves it whole.
+  await fillRange(page, '01:40.0', '01:41.0')
+  const middle = await at(100.5)
+  await drag(page, middle, { x: middle.x + 30, y: middle.y })
+  const moved = await expectRangeNear(page, {
+    start: 100 + 30 * secondsPerPixel,
+    end: 101 + 30 * secondsPerPixel,
+  })
+  expect(moved.end - moved.start).toBeCloseTo(1, 5)
+  await expectInSync(page)
+
+  // Its handles are taken from outside: a press next to the start line takes
+  // the start, though the end handle reaches over it too.
   await fillRange(page, '01:40.0', '01:41.0')
   const start = await at(100)
   await drag(
     page,
-    { x: start.x + 1, y: start.y },
-    { x: start.x - 30, y: start.y },
+    { x: start.x - 2, y: start.y },
+    { x: start.x - 32, y: start.y },
   )
   await expectRangeNear(page, { start: 100 - 30 * secondsPerPixel, end: 101 })
   await expect(endInput(page)).toHaveValue('01:41.0')
+})
+
+test('while submitting, the selection no longer offers a drag', async ({
+  page,
+}) => {
+  await openNewSection(page, 'pending-create')
+  await waitForWaveform(page)
+  await fillRange(page, '00:42.1', '01:05.8')
+  const middle = await trackPoint(overview(page), 54 / SONG_SECONDS)
+  const cursorAt = () =>
+    page.evaluate(
+      ({ x, y }) => getComputedStyle(document.elementFromPoint(x, y)!).cursor,
+      middle,
+    )
+  await expect.poll(cursorAt).toBe('grab')
+
+  await main(page).getByRole('button', { name: '타브 만들기' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(overview(page).locator('[data-disabled="true"]')).toHaveCount(1)
+  await expect.poll(cursorAt).not.toBe('grab')
 })
 
 test('a second finger on the waveform does not take over a drag', async ({
@@ -336,6 +383,25 @@ test('a retry that loads the waveform keeps focus on it', async ({ page }) => {
   await expect(retry).toHaveCount(0)
   await expect(waveform(page)).toBeFocused()
   await expect(startHandle(page)).toHaveCount(0)
+})
+
+test('a retry from the keyboard shows where focus went', async ({ page }) => {
+  await openNewSection(page, 'audio-error')
+  await expect(waveform(page)).toHaveAttribute('data-state', 'failed', {
+    timeout: 15_000,
+  })
+  await page.evaluate(() => window.workspaceTest.healAudio())
+  await waveform(page).getByRole('button', { name: '다시 시도' }).focus()
+  await page.keyboard.press('Enter')
+  await waitForWaveform(page)
+  await expect(waveform(page)).toBeFocused()
+  expect(
+    await waveform(page).evaluate(
+      (element) =>
+        element.matches(':focus-visible') &&
+        getComputedStyle(element).outlineStyle,
+    ),
+  ).toBe('solid')
 })
 
 test('leaving the screen cancels loading the audio', async ({ page }) => {
@@ -533,6 +599,52 @@ test.describe('on a touch screen', () => {
     )
     await expectInSync(page)
     expect(await scrollY(page)).toBe(before)
+  })
+
+  test('a finger moves a short range from inside', async ({ page }) => {
+    await openOnTouch(page)
+    // 7 s is about 10 px here, narrower than the handles' reach.
+    await fillRange(page, '01:40.0', '01:47.0')
+    await canvas(page).scrollIntoViewIfNeeded()
+    const secondsPerPixel =
+      SONG_SECONDS / (await canvas(page).boundingBox())!.width
+    await swipe(page, await at(page, 103.5), steady({ x: 3, y: 0 }, 10))
+
+    const moved = await expectRangeNear(
+      page,
+      { start: 100 + 30 * secondsPerPixel, end: 107 + 30 * secondsPerPixel },
+      1,
+    )
+    expect(moved.end - moved.start).toBeCloseTo(7, 5)
+    await expectInSync(page)
+  })
+
+  test('a finger resting on a handle leaves it in place', async ({ page }) => {
+    await openOnTouch(page)
+    await fillRange(page, '01:00.0', '01:30.0')
+    await canvas(page).scrollIntoViewIfNeeded()
+    const secondsPerPixel =
+      SONG_SECONDS / (await canvas(page).boundingBox())!.width
+    const end = await at(page, 90)
+    const grip = { x: end.x + 8, y: end.y }
+
+    // A tap wobbles 2–3 px, about two seconds here.
+    await swipe(page, grip, [
+      { x: 1, y: 0 },
+      { x: 2, y: 1 },
+      { x: 3, y: 1 },
+    ])
+    await expect(endHandle(page)).toBeFocused()
+    await expect(endInput(page)).toHaveValue('01:30.0')
+
+    // A clear move still takes the handle along from where it was grabbed.
+    await swipe(page, grip, steady({ x: 2, y: 0 }, 10))
+    await expectRangeNear(
+      page,
+      { start: 60, end: 90 + 20 * secondsPerPixel },
+      1,
+    )
+    await expect(startInput(page)).toHaveValue('01:00.0')
   })
 
   test('a finger that turns to scroll after a sideways start keeps the range', async ({

@@ -15,6 +15,16 @@ export function formatSectionTime(tenths: number): string {
   return formatTime(tenths / 10)
 }
 
+// The same time as a screen reader should say it: 42.1초, 1분 5.8초.
+export function formatSpokenTime(tenths: number): string {
+  const minutes = Math.floor(tenths / 600)
+  const rest = tenths % 600
+  const seconds =
+    rest % 10 === 0 ? `${rest / 10}초` : `${(rest / 10).toFixed(1)}초`
+  if (minutes === 0) return seconds
+  return rest === 0 ? `${minutes}분` : `${minutes}분 ${seconds}`
+}
+
 export function formatSectionLength(tenths: number): string {
   return `${(tenths / 10).toFixed(1)}초`
 }

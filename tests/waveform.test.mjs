@@ -7,6 +7,7 @@ import {
 } from '../src/features/waveform/peaks.ts'
 import {
   formatTickLabel,
+  handleDragStarts,
   keyboardRange,
   labelSteps,
   moveHandle,
@@ -245,6 +246,38 @@ test('keys move a handle by a tenth, a second or five seconds', () => {
   assert.equal(move('start', 'Enter'), null)
 })
 
+test('keys held with Alt, Ctrl or Meta are left to the browser', () => {
+  const range = { startTenths: 421, endTenths: 658 }
+  for (const modifier of ['altKey', 'ctrlKey', 'metaKey'])
+    for (const key of ['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp'])
+      assert.equal(
+        keyboardRange(
+          range,
+          'start',
+          { key, shiftKey: false, [modifier]: true },
+          2524,
+        ),
+        null,
+        `${modifier} + ${key}`,
+      )
+  // Shift alone still takes a second-long step.
+  assert.equal(
+    keyboardRange(
+      range,
+      'end',
+      {
+        key: 'ArrowRight',
+        shiftKey: true,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+      },
+      2524,
+    ).endTenths,
+    668,
+  )
+})
+
 test('dragging across the track selects between the press and the pointer', () => {
   assert.deepEqual(spanFrom(100, 50, 2524), { startTenths: 50, endTenths: 100 })
   assert.deepEqual(spanFrom(100, 180, 2524), {
@@ -303,6 +336,14 @@ test('a finger drags only while heading more sideways than up or down', () => {
   assert.equal(startsDrag(1, -6, true), false)
   // A diagonal is not clearly sideways, so the page may still take it.
   assert.equal(startsDrag(3, 3, true), false)
+})
+
+test('a finger on a handle drags only once it clearly leaves a tap', () => {
+  // A tap wobbles 2–3 px, about two seconds on a phone.
+  assert.equal(handleDragStarts(3), false)
+  assert.equal(handleDragStarts(-5), false)
+  assert.equal(handleDragStarts(6), true)
+  assert.equal(handleDragStarts(-6), true)
 })
 
 test('a finger that wobbles up first can still turn sideways into a drag', () => {
