@@ -12,6 +12,7 @@ import {
   canReviseSection,
   otherFileSectionForm,
   sectionEditKind,
+  sectionEditUnavailableText,
 } from '../edit-section/sectionEdit.ts'
 import { NewSectionScreen } from '../new-section/NewSectionScreen.tsx'
 import { ReplaceFileDialog } from '../new-section/ReplaceFileDialog.tsx'
@@ -559,13 +560,13 @@ export function WorkspacePage({
             result={taskDetail}
             onRetry={retryWith(taskDetail.retry)}
             onReturnHome={goHome}
-            renderDetail={({ task }) => (
+            renderDetail={(detail) => (
               <div className={styles.centeredState}>
                 <TaskUnavailablePanel
                   title="구간을 바꿀 수 없어요"
-                  description="타브가 완성된 작업과 기타를 찾지 못한 작업만 구간을 바꿀 수 있어요."
+                  description={sectionEditUnavailableText(detail)}
                   actionLabel="작업으로 돌아가기"
-                  onReturnToWorkspace={() => leaveEdit(task.id)}
+                  onReturnToWorkspace={() => leaveEdit(detail.task.id)}
                 />
               </div>
             )}

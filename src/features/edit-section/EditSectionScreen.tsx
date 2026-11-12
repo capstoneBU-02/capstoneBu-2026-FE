@@ -1,5 +1,4 @@
-import { useReducer, type ReactNode } from 'react'
-import { sectionFormReducer } from '../new-section/sectionForm.ts'
+import { useReducer, useState, type ReactNode } from 'react'
 import {
   SectionEditor,
   type SectionEditorText,
@@ -12,6 +11,8 @@ import type {
 import type { ReviseTaskResult } from '../workspace/useWorkspace.ts'
 import {
   canSendSectionEdit,
+  replacedSectionNotice,
+  sectionEditReducer,
   sectionFormFromTask,
   type SectionEditKind,
 } from './sectionEdit.ts'
@@ -81,11 +82,12 @@ export function EditSectionScreen({
   onExpired,
   notice,
 }: Props) {
-  const [form, dispatch] = useReducer(
-    sectionFormReducer,
-    task,
-    sectionFormFromTask,
-  )
+  // Both follow the task as it was opened, as the form does.
+  const [{ reducer, replaced }] = useState(() => ({
+    reducer: sectionEditReducer(task),
+    replaced: replacedSectionNotice(task),
+  }))
+  const [form, dispatch] = useReducer(reducer, task, sectionFormFromTask)
   const { intro, blocked, ...text } = TEXT[kind]
   return (
     <SectionEditor
@@ -95,7 +97,7 @@ export function EditSectionScreen({
       form={form}
       onChange={dispatch}
       onCancel={onCancel}
-      intro={intro}
+      intro={replaced ? [intro, replaced] : [intro]}
       blockedReason={(request) =>
         canSendSectionEdit(task, request) ? null : blocked
       }

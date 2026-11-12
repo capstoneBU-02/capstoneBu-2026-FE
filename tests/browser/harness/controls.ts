@@ -62,6 +62,9 @@ export interface TestControls {
   // Queues a task on the server only, as another tab's change would. The
   // loaded list keeps showing its old state until it loads again.
   queueTaskOnServer(taskId: string): void
+  // Sends 구간 수정 from another tab: the task queues and a finished tab is
+  // kept as a previous result, as the screen's own change would.
+  reviseTaskOnServer(taskId: string, input: ReviseTaskInput): void
   // Moves a task on the server only, as its processing would; the screen
   // sees it on its next request.
   updateTaskOnServer(taskId: string, change: ServerTaskChange): void

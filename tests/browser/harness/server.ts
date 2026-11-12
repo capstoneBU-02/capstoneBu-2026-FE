@@ -228,6 +228,9 @@ export const serverControls = {
     const task = findTask(taskId)
     if (task) revisedTasks.set(taskId, { ...task, processingStatus: 'queued' })
   },
+  reviseTaskOnServer(taskId, input) {
+    if (findTask(taskId)) revisedTask(taskId, input)
+  },
   updateTaskOnServer(taskId, { queueAhead: ahead, ...change }) {
     const task = findTask(taskId)
     if (task) revisedTasks.set(taskId, { ...task, ...change })

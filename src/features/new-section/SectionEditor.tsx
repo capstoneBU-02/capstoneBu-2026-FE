@@ -57,8 +57,8 @@ type Props = {
   onCancel: () => void
   // Offered only where the section may move to another file.
   onReplaceFile?: (returnFocus: HTMLElement) => void
-  // An info line above the waveform.
-  intro?: string
+  // Info lines above the waveform, read as the form's description.
+  intro?: readonly string[]
   // Why a request the form accepts must not be sent, or null to send it.
   blockedReason?: (request: SectionRequest) => string | null
   onSubmit: (
@@ -257,16 +257,19 @@ export function SectionEditor({
           id={formId}
           className={styles.form}
           aria-labelledby={titleId}
-          aria-describedby={intro ? introId : undefined}
+          aria-describedby={
+            intro?.map((_, index) => `${introId}-${index}`).join(' ') ||
+            undefined
+          }
           noValidate
           onSubmit={(event) => void submit(event)}
         >
-          {intro && (
-            <p id={introId} className={styles.intro}>
+          {intro?.map((line, index) => (
+            <p key={index} id={`${introId}-${index}`} className={styles.intro}>
               <Icon name="info" />
-              <span>{intro}</span>
+              <span>{line}</span>
             </p>
-          )}
+          ))}
           <SectionWaveform
             songDurationSeconds={song.durationSeconds}
             audio={audio}
