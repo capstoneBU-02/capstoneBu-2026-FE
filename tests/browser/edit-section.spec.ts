@@ -28,6 +28,10 @@ const NOTICE =
 const UNCHANGED =
   '시작이나 끝, 파트, 튜닝 중 하나를 바꿔야 타브를 다시 만들 수 있어요. 이름만 바꿀 수는 없어요.'
 const SUBMITTING = '타브 다시 만들기를 요청하고 있어요.'
+// The edit URL of a task whose tab is still on its way (M9).
+const MAKING = '타브를 만드는 중이에요. 타브가 완성되면 구간을 바꿀 수 있어요.'
+const REMAKING =
+  '타브를 다시 만드는 중이에요. 타브가 완성되면 구간을 바꿀 수 있어요.'
 const FAILED =
   '타브를 다시 만들지 못했어요. 입력한 내용은 그대로 있어요. 다시 시도해 주세요.'
 
@@ -138,11 +142,7 @@ test('only a finished task offers 구간 수정', async ({ page }) => {
     '/tests/browser/harness.html?view=edit-section&task=task-solo',
   )
   await expect(title(page)).toHaveText('구간을 바꿀 수 없어요')
-  await expect(
-    main(page).getByText(
-      '타브가 완성된 작업과 기타를 찾지 못한 작업만 구간을 바꿀 수 있어요.',
-    ),
-  ).toBeVisible()
+  await expect(main(page).getByText(MAKING)).toBeVisible()
   await expect(form(page)).toHaveCount(0)
   // Opened from its URL, the closed editor's entry turns into the task.
   const length = await historyLength(page)
@@ -245,6 +245,107 @@ test('타브 다시 만들기 queues the new section and keeps the old result', 
   )
 })
 
+test('a section changed twice lists its previous results newest first', async ({
+  page,
+}) => {
+  await openEditFromHome(page)
+  await setEnd(page, '01:00.0')
+  await pressSubmit(page)
+  await expect(main(page).getByText('대기', { exact: true })).toBeVisible()
+  // The new tab is made, and the task opens again from 최근 작업.
+  await page.evaluate(() =>
+    window.workspaceTest.updateTaskOnServer('task-verse', {
+      processingStatus: 'completed',
+      progressPercent: null,
+      hasSeparatedAudio: true,
+    }),
+  )
+  await page.goBack()
+  await expect(title(page)).toHaveText('최근 작업')
+  await page.goForward()
+  await expect(title(page)).toHaveText('벌스 1')
+  await editButton(page).click()
+  await expect(endInput(page)).toHaveValue('01:00.0')
+  await setEnd(page, '00:55.0')
+  await pressSubmit(page)
+  await expect(main(page).getByText('대기', { exact: true })).toBeVisible()
+
+  const previous = main(page)
+    .getByRole('region', { name: '이전 결과' })
+    .getByRole('listitem')
+  await expect(previous).toHaveCount(2)
+  await expect(previous.nth(0)).toHaveText(/벌스 1.*00:42\.1–01:00\.0/)
+  await expect(previous.nth(1)).toHaveText(/벌스 1.*00:42\.1–01:05\.8/)
+  expect(
+    (await reviseCalls(page)).map((call) => call.input.rangeEndSeconds),
+  ).toEqual([60, 55])
+})
+
+// M4: renaming follows 새 구간's numbering, so the song's bare 솔로 keeps its
+// name to itself.
+test('a new name takes its next free number', async ({ page }) => {
+  await openEdit(page)
+  const name = form(page).getByLabel('이름', { exact: true })
+  const number = form(page).getByLabel('번호')
+  await name.selectOption('솔로')
+  await expect(number).toHaveValue('2')
+  await name.selectOption('벌스')
+  await expect(number).toHaveValue('1')
+  // A number the user typed stays with the next name.
+  await number.fill('5')
+  await name.selectOption('솔로')
+  await expect(number).toHaveValue('5')
+  await number.fill('')
+  await name.selectOption('코러스')
+  await expect(number).toHaveValue('')
+
+  // The task's own number on its own name counts as untouched, so it
+  // follows the next name again.
+  await name.selectOption('벌스')
+  await number.fill('1')
+  await name.selectOption('솔로')
+  await setEnd(page, '01:00.0')
+  await pressSubmit(page)
+  await expect(title(page)).toHaveText('솔로 2')
+  expect((await reviseCalls(page))[0].input.sectionName).toBe('솔로 2')
+})
+
+test('a name the policy no longer lists is replaced with a notice', async ({
+  page,
+}) => {
+  await page.goto('/tests/browser/harness.html?refresh=60000')
+  await expect(title(page)).toHaveText('최근 작업')
+  // A task named before the policy changed, made in another tab.
+  await page.evaluate(() => {
+    window.workspaceTest.createTaskOnServer({
+      songId: 'song-paper-moon',
+      sectionName: '기타 솔로',
+      part: 'lead',
+      tuningId: 'e-standard',
+      rangeStartSeconds: 40,
+      rangeEndSeconds: 60,
+    })
+    window.workspaceTest.updateTaskOnServer('task-created-1', {
+      processingStatus: 'completed',
+    })
+    window.dispatchEvent(new Event('focus'))
+  })
+  await sidebarTask(page, '기타 솔로').click()
+  await expect(title(page)).toHaveText('기타 솔로')
+  await editButton(page).click()
+  await expect(form(page)).toBeVisible()
+
+  const replaced =
+    '‘기타 솔로’ 이름은 지금 고를 수 없어서 바꿨어요. 바꾼 값을 확인해 주세요.'
+  await expect(form(page).getByText(replaced)).toBeVisible()
+  await expect(form(page)).toHaveAccessibleDescription(`${NOTICE} ${replaced}`)
+  // The song has a bare 인트로, so the replacement takes the next number.
+  await expect(form(page).getByLabel('이름', { exact: true })).toHaveValue(
+    '인트로',
+  )
+  await expect(form(page).getByLabel('번호')).toHaveValue('2')
+})
+
 test('Back skips a closed editor', async ({ page }) => {
   await openEditFromHome(page)
   await setEnd(page, '01:00.0')
@@ -294,9 +395,15 @@ test('구간 수정 follows the task as loaded, not the list', async ({ page }) 
   await expect(title(page)).toHaveText('벌스 1')
   await page.goBack()
   await expect(title(page)).toHaveText('최근 작업')
-  // Another tab queues the task; this tab's list still says it is done.
+  // Another tab changes the section; this tab's list still says it is done.
   await page.evaluate(() =>
-    window.workspaceTest.queueTaskOnServer('task-verse'),
+    window.workspaceTest.reviseTaskOnServer('task-verse', {
+      sectionName: '벌스 1',
+      part: 'rhythm',
+      tuningId: 'e-standard',
+      rangeStartSeconds: 42.1,
+      rangeEndSeconds: 60,
+    }),
   )
   await page.goForward()
   await expect(main(page).getByText('대기', { exact: true })).toBeVisible()
@@ -304,6 +411,8 @@ test('구간 수정 follows the task as loaded, not the list', async ({ page }) 
   await page.goForward()
   await expect(page).toHaveURL(/view=edit-section&task=task-verse$/)
   await expect(title(page)).toHaveText('구간을 바꿀 수 없어요')
+  // The old tab is kept, so the closed editor says it is being made again.
+  await expect(main(page).getByText(REMAKING)).toBeVisible()
   await expect(form(page)).toHaveCount(0)
   // Loading the task brings the list up to date as well.
   await expect(

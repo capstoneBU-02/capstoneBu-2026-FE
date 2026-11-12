@@ -5,13 +5,17 @@ import {
   checkSectionForm,
   isPolicySectionName,
   parseSectionName,
+  sectionNumberText,
 } from '../src/features/new-section/sectionForm.ts'
 import {
   canReviseSection,
   canSendSectionEdit,
   changesSectionResult,
   otherFileSectionForm,
+  replacedSectionNotice,
   sectionEditKind,
+  sectionEditReducer,
+  sectionEditUnavailableText,
   sectionFormFromTask,
 } from '../src/features/edit-section/sectionEdit.ts'
 
@@ -242,4 +246,114 @@ test('a name the policy does not list falls back to its first name', () => {
   // Values the policy lists are kept as they are.
   assert.equal(form.part, 'rhythm')
   assert.equal(form.tuningId, 'e-standard')
+})
+
+// M4: a new name takes the next free number, as on 새 구간, so a bare 솔로
+// and the renamed 벌스 1 do not both end up as 솔로.
+test('a new name takes its next free number and the old one comes back', () => {
+  const reduce = sectionEditReducer(verse)
+  const names = ['솔로', '코러스 2']
+  const solo = reduce(sectionFormFromTask(verse), {
+    type: 'name',
+    baseName: '솔로',
+  })
+  assert.equal(sectionNumberText(solo, names), '2')
+  const chorus = reduce(solo, { type: 'name', baseName: '코러스' })
+  assert.equal(sectionNumberText(chorus, names), '1')
+  // Back to its own name, the task keeps the number it had.
+  const back = reduce(chorus, { type: 'name', baseName: '벌스' })
+  assert.equal(sectionNumberText(back, ['벌스 1', ...names]), '1')
+  // A form left on its name changes nothing else.
+  assert.equal(
+    reduce(sectionFormFromTask(verse), { type: 'end', value: '01:00.0' }).end,
+    '01:00.0',
+  )
+})
+
+test('a number the user typed stays when the name changes', () => {
+  const reduce = sectionEditReducer(verse)
+  const typed = reduce(sectionFormFromTask(verse), {
+    type: 'number',
+    value: '3',
+  })
+  const solo = reduce(typed, { type: 'name', baseName: '솔로' })
+  assert.equal(sectionNumberText(solo, ['솔로']), '3')
+  // No number is a choice too.
+  const bare = reduce(sectionFormFromTask(verse), { type: 'number', value: '' })
+  assert.equal(
+    sectionNumberText(reduce(bare, { type: 'name', baseName: '솔로' }), []),
+    '',
+  )
+  // Typed back to the task's own number on its own name, it follows again.
+  const own = reduce(reduce(typed, { type: 'name', baseName: '벌스' }), {
+    type: 'number',
+    value: '1',
+  })
+  assert.equal(
+    sectionNumberText(reduce(own, { type: 'name', baseName: '솔로' }), [
+      '솔로',
+    ]),
+    '2',
+  )
+})
+
+test('a bare name keeps no number when the task returns to it', () => {
+  const bareSolo = { ...verse, sectionName: '솔로' }
+  const reduce = sectionEditReducer(bareSolo)
+  const verseName = reduce(sectionFormFromTask(bareSolo), {
+    type: 'name',
+    baseName: '벌스',
+  })
+  assert.equal(sectionNumberText(verseName, ['벌스 1']), '2')
+  const back = reduce(verseName, { type: 'name', baseName: '솔로' })
+  assert.equal(sectionNumberText(back, ['솔로 2']), '')
+})
+
+test('a replaced name, part or tuning is named in the notice', () => {
+  assert.equal(replacedSectionNotice(verse), null)
+  assert.equal(
+    replacedSectionNotice({ ...verse, sectionName: '기타 솔로' }),
+    '‘기타 솔로’ 이름은 지금 고를 수 없어서 바꿨어요. 바꾼 값을 확인해 주세요.',
+  )
+  assert.equal(
+    replacedSectionNotice({ ...verse, part: 'bass', partLabel: '베이스' }),
+    '‘베이스’ 파트는 지금 고를 수 없어서 바꿨어요. 바꾼 값을 확인해 주세요.',
+  )
+  assert.equal(
+    replacedSectionNotice({
+      ...verse,
+      sectionName: '기타 솔로',
+      tuningId: 'b-standard-7',
+      tuningLabel: 'B 표준 7현',
+    }),
+    '‘기타 솔로’ 이름, ‘B 표준 7현’ 튜닝은 지금 고를 수 없어서 바꿨어요. 바꾼 값을 확인해 주세요.',
+  )
+})
+
+// M9: a task still being made says so instead of listing who can edit.
+test('an edit URL of a task being made says it is being made', () => {
+  const kept = [{ id: 'kept-task-verse-1' }]
+  const queued = { ...verse, processingStatus: 'queued' }
+  assert.equal(
+    sectionEditUnavailableText({ task: queued, previousResults: kept }),
+    '타브를 다시 만드는 중이에요. 타브가 완성되면 구간을 바꿀 수 있어요.',
+  )
+  assert.equal(
+    sectionEditUnavailableText({
+      task: { ...verse, processingStatus: 'processing', progressPercent: 64 },
+      previousResults: [],
+    }),
+    '타브를 만드는 중이에요. 타브가 완성되면 구간을 바꿀 수 있어요.',
+  )
+  assert.equal(
+    sectionEditUnavailableText({
+      task: {
+        ...verse,
+        processingStatus: 'failed',
+        failureKind: 'transcription',
+      },
+      previousResults: kept,
+    }),
+    '타브가 완성된 작업과 기타를 찾지 못한 작업만 구간을 바꿀 수 있어요.',
+  )
 })
