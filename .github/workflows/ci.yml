@@ -22,7 +22,9 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Longer than the browser suite's globalTimeout (playwright.config.ts) and
+    # the steps around it, so a suite that runs out still uploads its report.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
         with:
