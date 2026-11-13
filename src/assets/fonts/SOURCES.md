@@ -4,13 +4,15 @@ Retrieved on 2026-11-01. No font package or runtime CDN dependency is required.
 
 ## Design evidence
 
-The Figma Plugin API returned these exact families, styles, and weights for [the workspace](https://www.figma.com/design/87W9ZPWGTWqNHX7HTfQ1kZ?node-id=29-139) and [the consent dialog](https://www.figma.com/design/87W9ZPWGTWqNHX7HTfQ1kZ?node-id=75-1399):
+The Figma Plugin API returned these exact families, styles, and weights for [the workspace](https://www.figma.com/design/87W9ZPWGTWqNHX7HTfQ1kZ?node-id=29-139) and [the consent dialog](https://www.figma.com/design/87W9ZPWGTWqNHX7HTfQ1kZ?node-id=75-1399), except JetBrains Mono Bold, which comes from the board below:
 
-| Family         | Figma styles          | CSS weights   | Use                   |
-| -------------- | --------------------- | ------------- | --------------------- |
-| Noto Sans KR   | Regular, Medium, Bold | 400, 500, 700 | Korean UI             |
-| JetBrains Mono | Regular, Medium       | 400, 500      | Times and tester code |
-| Geist          | SemiBold              | 600           | Wordmark              |
+| Family         | Figma styles          | CSS weights   | Use                               |
+| -------------- | --------------------- | ------------- | --------------------------------- |
+| Noto Sans KR   | Regular, Medium, Bold | 400, 500, 700 | Korean UI                         |
+| JetBrains Mono | Regular, Medium, Bold | 400, 500, 700 | Times, tester code, and tab frets |
+| Geist          | SemiBold              | 600           | Wordmark                          |
+
+JetBrains Mono Bold is the `Mono/Tab` text style, JetBrains Mono Bold 13/16, on [the Foundations board](https://www.figma.com/design/87W9ZPWGTWqNHX7HTfQ1kZ?node-id=34-1651). The tab draws its fret numbers in it.
 
 Figma supplied font metadata, not font binaries. The available Figma MCP asset exporter exposes rendered images, uploaded images, and SVG layers, but no font-file export. The bundled fonts are the same families from their official Google Fonts distribution. Figma does not expose an installed font binary version, so byte-for-byte equivalence with Figma's font files is not claimed.
 
@@ -33,18 +35,20 @@ https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400..500&display=sw
 https://fonts.googleapis.com/css2?family=Geist:wght@600&display=swap
 ```
 
+The JetBrains Mono file served for the `400..500` request carries the font's whole 400–800 weight axis, read from its `fvar` table. The tab's Bold 700 therefore uses the same file unchanged, and `fonts.css` declares 400–700.
+
 WOFF2 files are unmodified Google Fonts outputs, renamed locally. `sources.json` pins their exact `fonts.gstatic.com` URLs, byte counts, and SHA-256 hashes. The source URL's `v40` / `v24` / `v5` denotes the Google Fonts distribution revision, not an assertion about Figma's installed version.
 
 | Family         | Files | Stored bytes | Included coverage                                                                                     |
 | -------------- | ----: | -----------: | ----------------------------------------------------------------------------------------------------- |
 | Noto Sans KR   |    90 |    1,989,640 | Official subsets intersecting Latin, Korean jamo, all 11,172 modern Hangul syllables, and punctuation |
-| JetBrains Mono |     1 |       31,432 | Official Latin subset, normal 400–500 variable weight                                                 |
+| JetBrains Mono |     1 |       31,432 | Official Latin subset, normal variable weight axis 400–800                                            |
 | Geist          |     1 |       13,372 | Official Latin subset, normal 600                                                                     |
 | Total          |    92 |    2,034,444 | No italic assets                                                                                      |
 
 Noto's official 124-subset stylesheet was reduced to the 90 subsets intersecting `U+0000–024F`, `U+1100–11FF`, `U+2000–206F`, `U+3130–318F`, `U+A960–A97F`, `U+AC00–D7FF`, or `U+FFA0–FFDC`. The retained font files and their original `unicode-range` values were not edited. This preserves all modern Hangul syllables for dynamic Korean song/section names rather than limiting Korean support to today's mock strings. Scripts outside this coverage may use the existing system fallback stack.
 
-Variable Noto files serve the three requested UI weights through one shared resource per Unicode subset. JetBrains 400 and 500 likewise share one resource. Declaring only the needed ranges avoids separate static files for every weight.
+Variable Noto files serve the three requested UI weights through one shared resource per Unicode subset. JetBrains 400, 500, and 700 likewise share one resource. Declaring only the needed ranges avoids separate static files for every weight.
 
 ## Loading and validation
 
@@ -52,7 +56,7 @@ Variable Noto files serve the three requested UI weights through one shared reso
 
 Validation should include:
 
-1. `document.fonts.ready` and `document.fonts.check` for all six used family/weight combinations.
+1. `document.fonts.ready` and `document.fonts.check` for all seven used family/weight combinations.
 2. Browser-rendered font inspection for Korean text, monospace times, and the Geist wordmark, with a custom webfont selected rather than a system fallback.
 3. Same-origin font responses, no failed font requests, and viewport overflow checks at 1440 and 390 pixels.
 4. Default workspace and open consent dialog screenshots after fonts finish loading.

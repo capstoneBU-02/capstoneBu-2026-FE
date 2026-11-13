@@ -569,3 +569,63 @@ test('a beat without palm mute ends the run, a rest included', () => {
   assert.ok(marks[1].x1 < layout.beats[2].x)
   assert.ok(marks[1].x2 > layout.beats[4].x && marks[1].x2 < layout.beats[5].x)
 })
+
+test('a P.M. label stays over its run, clear of the next beat and the bar line', () => {
+  const sixteenth = (fret, extra = {}) => ({
+    duration: 16,
+    notes: [{ string: 6, fret }],
+    ...extra,
+  })
+  const pm = (fret) => sixteenth(fret, { palmMute: true })
+  const score = scoreOf([
+    // A one-beat run before an open beat, then a run before a rest.
+    [pm(0), sixteenth(0), pm(0), pm(0), quarterRest, quarterRest, quarterRest],
+    // A one-beat run on the last beat of a bar.
+    [
+      quarterRest,
+      quarterRest,
+      quarterRest,
+      sixteenth(0),
+      sixteenth(0),
+      sixteenth(0),
+      pm(10),
+    ],
+  ])
+  const labelWidth = 4 * TAB_METRICS.smallCharWidth
+  const leftOf = (placed) =>
+    placed.beat.notes.length === 0
+      ? TAB_METRICS.restHalfWidth
+      : Math.max(
+          ...placed.beat.notes.map(
+            (note) => (String(note.fret).length * TAB_METRICS.charWidth) / 2,
+          ),
+        )
+  for (const width of [0, 200, 390, 640, 1280]) {
+    const layout = layoutTab(score, width)
+    const marks = palmMuteMarks(layout)
+    assert.deepEqual(
+      marks.map((mark) => mark.labeled),
+      [true, true, true],
+      `width ${width}`,
+    )
+    for (const mark of marks) {
+      const labelEnd = mark.x1 + labelWidth
+      const run = layout.beats.filter(
+        (placed) =>
+          placed.beat.palmMute &&
+          placed.row === mark.row &&
+          placed.x > mark.x1 &&
+          placed.x < mark.x2,
+      )
+      const last = run.at(-1)
+      const after = layout.beats[layout.beats.indexOf(last) + 1]
+      if (after !== undefined && after.barIndex === last.barIndex) {
+        assert.ok(labelEnd <= after.x - leftOf(after), `width ${width}`)
+      } else {
+        const bar = layout.bars[last.barIndex]
+        assert.ok(labelEnd <= bar.x + bar.width, `width ${width}`)
+      }
+      assert.equal(mark.lineX1, labelEnd + 3)
+    }
+  }
+})

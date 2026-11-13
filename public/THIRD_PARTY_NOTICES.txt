@@ -33,7 +33,7 @@ Source: https://github.com/google/fonts/tree/main/ofl/notosanskr
 License: SIL Open Font License 1.1
 Full original license: fonts/NotoSansKR-OFL.txt
 
-JetBrains Mono — normal variable 400–500, Latin subset
+JetBrains Mono — normal variable weight axis 400–800, used at 400–700, Latin subset
 Copyright 2020 The JetBrains Mono Project Authors
 (https://github.com/JetBrains/JetBrainsMono)
 Source: https://www.jetbrains.com/lp/mono/
