@@ -1,7 +1,13 @@
-import { useRef, type KeyboardEvent, type PointerEvent } from 'react'
-import { formatSectionTime } from '../new-section/sectionTime.ts'
+import {
+  useRef,
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+} from 'react'
+import { formatSpokenTime } from '../new-section/sectionTime.ts'
 import type { WaveformPeaks } from './peaks.ts'
 import {
+  handleDragStarts,
   keyboardRange,
   moveHandle,
   nearestHandle,
@@ -51,6 +57,8 @@ type Drag =
       readonly handle: RangeHandle
       // Where the press landed relative to the boundary, so it does not jump.
       readonly offset: number
+      readonly startX: number
+      readonly moved: boolean
     }
   | {
       readonly kind: 'span' | 'move'
@@ -136,6 +144,10 @@ export function RangeTrack({
         origin: range,
         handle,
         offset: tenths - boundary,
+        startX: event.clientX,
+        // A mouse moves the handle from the first pixel; a finger or pen
+        // waits until it clearly leaves a tap.
+        moved: event.pointerType === 'mouse',
       }
       if (isOverview) focusHandle(handle)
     } else if (isOverview) {
@@ -173,6 +185,10 @@ export function RangeTrack({
     }
     const tenths = tenthsAt(event.clientX)
     if (drag.kind === 'handle') {
+      if (!drag.moved) {
+        if (!handleDragStarts(event.clientX - drag.startX)) return
+        dragRef.current = { ...drag, moved: true }
+      }
       if (range)
         emit(moveHandle(range, drag.handle, tenths - drag.offset, songTenths))
       return
@@ -232,7 +248,7 @@ export function RangeTrack({
       'aria-valuemin': min / 10,
       'aria-valuemax': max / 10,
       'aria-valuenow': value / 10,
-      'aria-valuetext': formatSectionTime(value),
+      'aria-valuetext': formatSpokenTime(value),
       'aria-disabled': disabled || undefined,
       onKeyDown: (event: KeyboardEvent) => {
         if (disabled) return
@@ -302,6 +318,26 @@ export function RangeTrack({
             over={over}
             width={width}
             height={height}
+          />
+        )}
+        {range && isOverview && (
+          // Over the handles' inner reach, so even a range narrower than both
+          // reaches can be moved; its handles are then taken from outside.
+          <div
+            className={styles.moveZone}
+            style={
+              {
+                left: percent(
+                  (range.startTenths + range.endTenths) / 20,
+                  window,
+                ),
+                '--selection-width': lengthPercent(
+                  (range.endTenths - range.startTenths) / 10,
+                  window,
+                ),
+              } as CSSProperties
+            }
+            aria-hidden="true"
           />
         )}
         {range &&

@@ -4,6 +4,7 @@ import { SECTION_POLICY } from '../src/features/new-section/sectionPolicy.ts'
 import {
   formatSectionLength,
   formatSectionTime,
+  formatSpokenTime,
   parseSectionTime,
   songLengthTenths,
 } from '../src/features/new-section/sectionTime.ts'
@@ -46,6 +47,17 @@ test('section times format back to the Figma mm:ss.d and 23.7초 shapes', () => 
   assert.equal(formatSectionTime(0), '00:00.0')
   assert.equal(formatSectionLength(237), '23.7초')
   assert.equal(formatSectionLength(300), '30.0초')
+})
+
+test('times read aloud as minutes and seconds', () => {
+  assert.equal(formatSpokenTime(421), '42.1초')
+  assert.equal(formatSpokenTime(658), '1분 5.8초')
+  assert.equal(formatSpokenTime(650), '1분 5초')
+  assert.equal(formatSpokenTime(600), '1분')
+  assert.equal(formatSpokenTime(601), '1분 0.1초')
+  assert.equal(formatSpokenTime(2524), '4분 12.4초')
+  assert.equal(formatSpokenTime(5), '0.5초')
+  assert.equal(formatSpokenTime(0), '0초')
 })
 
 test('a song length counts only whole tenths it really contains', () => {

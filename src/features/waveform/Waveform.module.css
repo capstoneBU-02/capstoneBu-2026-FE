@@ -19,6 +19,13 @@
   outline: none;
 }
 
+/* Shown when a keyboard retry moves focus here as the waveform loads. */
+.waveform:focus-visible {
+  border-radius: var(--radius-m);
+  outline: 2px solid var(--ink-primary);
+  outline-offset: -2px;
+}
+
 .lane {
   display: flex;
   min-width: 0;
@@ -94,10 +101,20 @@
   background-color: rgb(215 50 42 / 10%);
 }
 
-/* The selection takes presses so the cursor shows it can be moved; the
-   track still handles them. */
-.lane[data-variant='overview'] .selection {
-  pointer-events: auto;
+/* Presses here move the selection whole; the track handles them. It covers
+   the selection between the handles' inner reach, and at least 12px (all of
+   a narrower range) over them. Pointer events follow the track, so a locked
+   track shows no grab cursor. */
+.moveZone {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  bottom: 0;
+  width: max(
+    min(12px, var(--selection-width)),
+    calc(var(--selection-width) - 12px)
+  );
+  transform: translateX(-50%);
   cursor: grab;
 }
 

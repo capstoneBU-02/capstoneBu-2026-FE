@@ -123,14 +123,24 @@ const KEY_STEPS: Readonly<Record<string, number>> = {
   PageDown: -50,
 }
 
+export interface KeyPress {
+  readonly key: string
+  readonly shiftKey: boolean
+  readonly altKey?: boolean
+  readonly ctrlKey?: boolean
+  readonly metaKey?: boolean
+}
+
 // Slider keys: arrows move a tenth (a second with Shift), Page keys five
-// seconds, Home and End to the furthest the handle can go.
+// seconds, Home and End to the furthest the handle can go. Alt, Ctrl and Meta
+// belong to the browser and the system (Alt+← goes back), so they pass.
 export function keyboardRange(
   range: SectionRange,
   handle: RangeHandle,
-  { key, shiftKey }: { key: string; shiftKey: boolean },
+  { key, shiftKey, altKey, ctrlKey, metaKey }: KeyPress,
   songTenths: number,
 ): SectionRange | null {
+  if (altKey || ctrlKey || metaKey) return null
   const current = handle === 'start' ? range.startTenths : range.endTenths
   let target: number
   if (key === 'Home') target = -Infinity
@@ -199,4 +209,15 @@ export function startsDrag(dx: number, dy: number, mayScroll: boolean) {
   const sideways = Math.abs(dx)
   if (sideways < DRAG_THRESHOLD_PX) return false
   return !mayScroll || sideways > Math.abs(dy)
+}
+
+// A finger resting on a handle wobbles 2–3 px, about two seconds on a phone
+// (platforms count moves under about 8 px as a tap).
+const HANDLE_TOUCH_SLOP_PX = 6
+
+// Whether a finger or pen on a handle has moved far enough to take it along.
+// Handles never scroll the page (touch-action: none): only sideways counts.
+// Once it does, the handle keeps the offset it was grabbed at.
+export function handleDragStarts(dx: number) {
+  return Math.abs(dx) >= HANDLE_TOUCH_SLOP_PX
 }
