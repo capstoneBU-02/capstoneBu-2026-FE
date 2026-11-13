@@ -341,3 +341,146 @@ test('elapsed time counts from the section start', () => {
   player.setRange(null)
   assert.equal(player.elapsed(), 0)
 })
+
+test('seeking while paused moves where play resumes', () => {
+  const { player, contexts, sources } = setup()
+  player.seek(1.25)
+  assert.equal(player.position(), 11.25)
+  assert.equal(player.elapsed(), 1.25)
+  assert.equal(player.playing(), false)
+  // Seeking alone opens no output.
+  assert.equal(contexts.length, 0)
+  player.play()
+  assert.deepEqual(sources[0].started, { when: 0, offset: 11.25 })
+})
+
+test('seeking while playing continues from the new time', () => {
+  const { player, contexts, sources, stops } = setup({ repeat: false })
+  player.play()
+  contexts[0].currentTime = 1
+  player.seek(0.5)
+  assert.equal(sources.length, 2)
+  assert.deepEqual(sources[0].stops, [2, 1])
+  assert.equal(sources[0].onended, null)
+  assert.deepEqual(sources[1].started, { when: 1, offset: 10.5 })
+  // Playing once, the new source still stops at the section end.
+  assert.deepEqual(sources[1].stops, [2.5])
+  assert.equal(player.playing(), true)
+  assert.deepEqual(stops, [])
+  contexts[0].currentTime = 1.25
+  assert.equal(player.elapsed(), 0.75)
+})
+
+test('seeking stays inside the section', () => {
+  const { player } = setup()
+  player.seek(-3)
+  assert.equal(player.position(), 10)
+  player.seek(99)
+  assert.ok(player.position() < 12)
+  assert.ok(player.position() > 11.9)
+})
+
+test('seeking without a section or after disposing does nothing', () => {
+  const { player, sources } = setup({ range: null })
+  player.seek(1)
+  assert.equal(player.elapsed(), 0)
+  player.setRange({ start: 10, end: 12 })
+  player.play()
+  player.dispose()
+  player.seek(1)
+  assert.equal(sources.length, 1)
+})
+
+// The separated guitar covers the section alone, from 0 s.
+const guitar = { duration: 2 }
+const guitarRange = { start: 0, end: 2 }
+
+test('switching audio while playing keeps the time and the output', () => {
+  const { player, contexts, sources, stops } = setup()
+  player.play()
+  contexts[0].currentTime = 0.75
+  player.switchAudio(guitar, guitarRange)
+  assert.equal(contexts.length, 1)
+  assert.equal(sources.length, 2)
+  assert.equal(sources[0].disconnected, true)
+  assert.equal(sources[0].onended, null)
+  assert.equal(sources[1].buffer, guitar)
+  assert.equal(sources[1].loopStart, 0)
+  assert.equal(sources[1].loopEnd, 2)
+  assert.deepEqual(sources[1].started, { when: 0.75, offset: 0.75 })
+  assert.equal(player.playing(), true)
+  assert.deepEqual(stops, [])
+  contexts[0].currentTime = 1
+  assert.equal(player.elapsed(), 1)
+  assert.equal(player.position(), 1)
+})
+
+test('switching audio while paused keeps where play resumes', () => {
+  const { player, contexts, sources } = setup()
+  player.play()
+  contexts[0].currentTime = 0.5
+  player.pause()
+  player.switchAudio(guitar, guitarRange)
+  assert.equal(sources.length, 1)
+  assert.equal(player.playing(), false)
+  assert.equal(player.position(), 0.5)
+  player.play()
+  assert.equal(sources[1].buffer, guitar)
+  assert.deepEqual(sources[1].started, { when: 0.5, offset: 0.5 })
+})
+
+test('switching audio before the first play stays at the section start', () => {
+  const { player, contexts } = setup()
+  player.switchAudio(guitar, guitarRange)
+  assert.equal(player.position(), 0)
+  assert.equal(player.elapsed(), 0)
+  assert.equal(contexts.length, 0)
+  // Back on the first audio, the start follows its section again.
+  player.switchAudio(buffer, { start: 10, end: 12 })
+  assert.equal(player.position(), 10)
+})
+
+test('switching to audio that ends sooner starts it from the section start', () => {
+  const { player, contexts, sources } = setup({
+    range: { start: 10, end: 20 },
+  })
+  player.play()
+  contexts[0].currentTime = 5
+  player.switchAudio(guitar, { start: 0, end: 10 })
+  assert.deepEqual(sources[1].started, { when: 5, offset: 0 })
+  assert.equal(sources[1].loopEnd, 2)
+
+  contexts[0].currentTime = 6.5
+  player.pause()
+  player.switchAudio(buffer, { start: 10, end: 20 })
+  assert.equal(player.position(), 11.5)
+})
+
+test('switching audio while playing once keeps the section end', () => {
+  const { player, contexts, sources } = setup({ repeat: false })
+  player.play()
+  contexts[0].currentTime = 0.75
+  player.switchAudio(guitar, guitarRange)
+  assert.equal(sources[1].loop, false)
+  assert.deepEqual(sources[1].stops, [2])
+})
+
+test('switching to audio without the section stops and is reported', () => {
+  const { player, sources, stops } = setup()
+  player.play()
+  player.switchAudio({ duration: 0 }, guitarRange)
+  assert.equal(player.playing(), false)
+  assert.deepEqual(stops, ['stop'])
+  assert.equal(sources[0].disconnected, true)
+  player.play()
+  assert.equal(sources.length, 1)
+})
+
+test('switching audio after disposing does nothing', () => {
+  const { player, sources } = setup()
+  player.play()
+  player.dispose()
+  player.switchAudio(guitar, guitarRange)
+  player.play()
+  assert.equal(sources.length, 1)
+})

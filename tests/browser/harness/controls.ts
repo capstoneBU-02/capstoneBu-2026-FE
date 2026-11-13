@@ -86,6 +86,9 @@ export interface TestControls {
   // Seconds of audio each of those sources plays from, so tests can tell the
   // separated guitar from the whole song.
   sourceDurations(): number[]
+  // Seconds into its audio each of those sources started from; null for one
+  // created but not started.
+  sourceOffsets(): Array<number | null>
   // The latest output's volume; null before the first play.
   outputGain(): number | null
   // React commits anywhere in the page since it loaded.

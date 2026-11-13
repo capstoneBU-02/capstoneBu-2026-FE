@@ -1,6 +1,7 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import { PlayerBar } from '../../player/PlayerBar.tsx'
+import { useSectionPlayer } from '../../player/useSectionPlayer.ts'
 import { TaskUnavailablePanel } from '../../support/TaskUnavailablePanel.tsx'
 import {
   formatTaskRange,
@@ -101,8 +102,16 @@ function TaskWorkspace({
   const previousId = useId()
   const announcement = useStatusAnnouncement(detail)
   const taskAudio = useTaskAudio(detail, audioSource)
-  const { playback } = taskAudio
+  const { tracks, playback, choices, onPlayingChange } = taskAudio
   const playbackState = taskAudio.audio[playback]?.state
+  // One player for the task: switching tracks plays on from the same time.
+  const player = useSectionPlayer(
+    playbackState?.status === 'ready' ? playbackState.buffer : null,
+    trackRange(playback, task),
+  )
+  useEffect(() => {
+    onPlayingChange(player.playing)
+  }, [onPlayingChange, player.playing])
   return (
     <div className={styles.workspace}>
       <div className={styles.content}>
@@ -133,7 +142,7 @@ function TaskWorkspace({
             <span className={styles.truncate}>{song.fileName}</span>
           </p>
         </header>
-        <TaskTracks task={task} {...taskAudio} />
+        <TaskTracks task={task} {...taskAudio} player={player} />
         <TaskBody
           detail={detail}
           refreshFailed={refreshFailed}
@@ -163,10 +172,12 @@ function TaskWorkspace({
         )}
       </div>
       <PlayerBar
-        buffer={playbackState?.status === 'ready' ? playbackState.buffer : null}
-        range={trackRange(playback, task)}
-        source={taskAudio.tracks.find((track) => track.id === playback)?.label}
-        onPlayingChange={taskAudio.onPlayingChange}
+        playback={player}
+        source={
+          choices.length > 0
+            ? { options: choices, value: playback, onChange: taskAudio.choose }
+            : tracks.find((track) => track.id === playback)?.label
+        }
       />
     </div>
   )

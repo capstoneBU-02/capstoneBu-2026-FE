@@ -16,10 +16,16 @@ const playButton = (page: Page) =>
   player(page).getByRole('button', { name: '재생', exact: true })
 const pauseButton = (page: Page) =>
   player(page).getByRole('button', { name: '일시정지' })
+// The one track of separated-guitar input, named in the bar.
 const source = (page: Page) =>
   player(page)
     .locator('p')
     .filter({ hasText: /^재생 트랙 / })
+// The track that plays, where there are two to switch between.
+const chosen = (page: Page) =>
+  player(page)
+    .getByRole('group', { name: '재생 트랙' })
+    .getByRole('radio', { checked: true })
 
 type Change = Parameters<Window['workspaceTest']['updateTaskOnServer']>[1]
 
@@ -83,7 +89,7 @@ test('an original song shows the separated guitar above the original and plays t
   await expect(row(page, '원곡')).toHaveAttribute('data-playing', 'false')
   // The ruler counts song time across the section, 02:31.0–02:52.4.
   await expect(tracks(page)).toContainText('02:32')
-  await expect(source(page)).toHaveText('재생 트랙 분리 기타')
+  await expect(chosen(page)).toHaveAccessibleName('분리 기타')
   await expect(player(page)).toContainText('/ 00:21.4')
 
   await playButton(page).click()
@@ -112,7 +118,7 @@ test('before separation the guitar row waits and the original plays', async ({
   )
   await expect(row(page, '분리 기타')).toHaveAttribute('data-playing', 'false')
   await expect(row(page, '원곡')).toHaveAttribute('data-playing', 'true')
-  await expect(source(page)).toHaveText('재생 트랙 원곡')
+  await expect(chosen(page)).toHaveAccessibleName('원곡')
   await expect(lane(page, '원곡')).toHaveAttribute(
     'data-state',
     'ready',
@@ -161,12 +167,12 @@ test('separation finishing waits for playback to stop before the guitar plays', 
     AUDIO_TIMEOUT,
   )
   // The original keeps playing; nothing restarted it.
-  await expect(source(page)).toHaveText('재생 트랙 원곡')
+  await expect(chosen(page)).toHaveAccessibleName('원곡')
   await expect(pauseButton(page)).toBeVisible()
   expect(await audioSources(page)).toHaveLength(1)
 
   await pauseButton(page).click()
-  await expect(source(page)).toHaveText('재생 트랙 분리 기타')
+  await expect(chosen(page)).toHaveAccessibleName('분리 기타')
   await expect(row(page, '분리 기타')).toHaveAttribute('data-playing', 'true')
   await playButton(page).click()
   await expect(pauseButton(page)).toBeVisible()
@@ -194,12 +200,12 @@ test('finding no guitar while the guitar plays waits for playback to stop', asyn
   })
   await expect(row(page, '분리 기타')).toContainText('기타 소리가 거의 없어요.')
   // The guitar keeps its audio and keeps playing.
-  await expect(source(page)).toHaveText('재생 트랙 분리 기타')
+  await expect(chosen(page)).toHaveAccessibleName('분리 기타')
   await expect(pauseButton(page)).toBeVisible()
   expect(await audioSources(page)).toHaveLength(1)
 
   await pauseButton(page).click()
-  await expect(source(page)).toHaveText('재생 트랙 원곡')
+  await expect(chosen(page)).toHaveAccessibleName('원곡')
   await expect(row(page, '원곡')).toHaveAttribute('data-playing', 'true')
 })
 
@@ -211,7 +217,7 @@ test('no guitar leaves the guitar row flat and the original plays', async ({
   await expect(row(page, '분리 기타')).toContainText('기타 소리가 거의 없어요.')
   await expect(row(page, '분리 기타').locator('canvas')).toHaveCount(1)
   await expect(row(page, '원곡')).toHaveAttribute('data-playing', 'true')
-  await expect(source(page)).toHaveText('재생 트랙 원곡')
+  await expect(chosen(page)).toHaveAccessibleName('원곡')
   await expect(lane(page, '원곡')).toHaveAttribute(
     'data-state',
     'ready',
@@ -300,43 +306,84 @@ test('leaving the task stops playback and closes the output', async ({
   await expect.poll(() => audioContexts(page)).toEqual(['closed'])
 })
 
-test('the player fits its controls and names the track where there is room', async ({
+// How the bar's controls sit: text past its own box, the least room between
+// two on the same line, how many lines, and whether a track name shows.
+const barLayout = (page: Page) =>
+  player(page).evaluate((bar) => {
+    const row = bar.firstElementChild!
+    const shown = [...row.children].filter(
+      (child) => child.getBoundingClientRect().width > 2,
+    )
+    const boxes = shown.map((child) => child.getBoundingClientRect())
+    let room = Infinity
+    boxes.forEach((a, i) =>
+      boxes.slice(i + 1).forEach((b) => {
+        // Only boxes on the same line can run into each other.
+        if (a.bottom <= b.top || b.bottom <= a.top) return
+        room = Math.min(room, Math.max(b.left - a.right, a.left - b.right))
+      }),
+    )
+    const tops = boxes.map((box) => box.top)
+    return {
+      // Text running past its own box, such as the time under the switch.
+      overflow: Math.max(
+        ...shown.map((child) => child.scrollWidth - child.clientWidth),
+        bar.scrollWidth - bar.clientWidth,
+      ),
+      room,
+      lines: Math.max(...tops) - Math.min(...tops) > 20 ? 2 : 1,
+      named: shown.some((child) => child.textContent?.startsWith('재생 트랙')),
+    }
+  })
+
+test('the player fits its controls and keeps the track switch at every width', async ({
   page,
 }) => {
   await openTask(page, 'task-solo')
   // The bar is the main column: 720px and 800px keep the sidebar beside it.
+  const sizes = [
+    { width: 1280, lines: 1 },
+    { width: 900, lines: 1 },
+    { width: 800, lines: 2 },
+    { width: 720, lines: 2 },
+    { width: 390, lines: 2 },
+    { width: 320, lines: 2 },
+  ]
+  for (const size of sizes) {
+    await page.setViewportSize({ width: size.width, height: 800 })
+    const layout = await barLayout(page)
+    expect(layout.overflow, `${size.width}px`).toBe(0)
+    expect(layout.room, `${size.width}px`).toBeGreaterThanOrEqual(12)
+    expect(layout.lines, `${size.width}px`).toBe(size.lines)
+    for (const label of ['원곡', '분리 기타'])
+      await expect(
+        player(page).getByText(label, { exact: true }),
+        `${size.width}px`,
+      ).toBeInViewport({ ratio: 1 })
+    await expect(chosen(page)).toHaveAccessibleName('분리 기타')
+  }
+})
+
+test('the player names a single track where there is room', async ({
+  page,
+}) => {
+  await openTask(page, 'task-intro')
   const sizes = [
     { width: 1280, named: true },
     { width: 900, named: true },
     { width: 800, named: false },
     { width: 720, named: false },
     { width: 390, named: false },
+    { width: 320, named: false },
   ]
   for (const size of sizes) {
     await page.setViewportSize({ width: size.width, height: 800 })
-    const layout = await player(page).evaluate((bar) => {
-      const row = bar.firstElementChild!
-      const shown = [...row.children].filter(
-        (child) => child.getBoundingClientRect().width > 2,
-      )
-      const boxes = shown.map((child) => child.getBoundingClientRect())
-      return {
-        // Text running past its own box, such as the time under the name.
-        overflow: Math.max(
-          ...shown.map((child) => child.scrollWidth - child.clientWidth),
-        ),
-        room: Math.min(
-          ...boxes.slice(1).map((box, i) => box.left - boxes[i].right),
-        ),
-        named: shown.some((child) =>
-          child.textContent?.startsWith('재생 트랙'),
-        ),
-      }
-    })
+    const layout = await barLayout(page)
     expect(layout.overflow, `${size.width}px`).toBe(0)
     expect(layout.room, `${size.width}px`).toBeGreaterThanOrEqual(12)
+    expect(layout.lines, `${size.width}px`).toBe(1)
     expect(layout.named, `${size.width}px`).toBe(size.named)
     // Screen readers hear the name at every width.
-    await expect(source(page)).toHaveText('재생 트랙 분리 기타')
+    await expect(source(page)).toHaveText('재생 트랙 올린 음원')
   }
 })

@@ -42,13 +42,44 @@ export function taskTracks(
   ]
 }
 
+const hasAudio = (tracks: readonly TaskTrack[], id: TrackId) =>
+  tracks.some((track) => track.id === id && track.content === 'audio')
+
 // The separated guitar once there is one to hear, the input until then.
 export function preferredTrack(tracks: readonly TaskTrack[]): TrackId {
-  return tracks.some(
-    (track) => track.id === 'separated' && track.content === 'audio',
-  )
-    ? 'separated'
-    : 'input'
+  return hasAudio(tracks, 'separated') ? 'separated' : 'input'
+}
+
+// The track the listener chose while it has audio to play, the preferred
+// one otherwise.
+export function wantedTrack(
+  tracks: readonly TaskTrack[],
+  choice: TrackId | null,
+): TrackId {
+  return choice !== null && hasAudio(tracks, choice)
+    ? choice
+    : preferredTrack(tracks)
+}
+
+export interface TrackChoice {
+  readonly id: TrackId
+  readonly label: string
+  readonly enabled: boolean
+}
+
+// The player's switch, the original first. A single track has nothing to
+// switch to. A track shows but cannot be chosen until its audio is ready to
+// play: without audio, still loading, or failed to load.
+export function trackChoices(
+  tracks: readonly TaskTrack[],
+  playable: (id: TrackId) => boolean,
+): readonly TrackChoice[] {
+  if (tracks.length < 2) return []
+  return [...tracks].reverse().map((track) => ({
+    id: track.id,
+    label: track.label,
+    enabled: track.content === 'audio' && playable(track.id),
+  }))
 }
 
 // Seconds within the track's own audio. The input is the whole song; the
@@ -67,4 +98,11 @@ export function trackRange(id: TrackId, task: TaskSection): SectionRange {
   return id === 'input'
     ? { startTenths, endTenths }
     : { startTenths: 0, endTenths: endTenths - startTenths }
+}
+
+// Seconds from the start of the track's window to where its player counts
+// from. The input plays from the section start rounded to tenths; the
+// separated guitar from its own start.
+export function trackLead(id: TrackId, task: TaskSection): number {
+  return trackRange(id, task).startTenths / 10 - trackWindow(id, task).start
 }

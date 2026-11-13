@@ -97,6 +97,8 @@ export function separatedAudio(
 // check what really plays.
 const audioContexts: AudioContext[] = []
 const audioSources: AudioBufferSourceNode[] = []
+// Where in its audio each source started, in seconds.
+const sourceOffsets = new WeakMap<AudioBufferSourceNode, number>()
 const audioGains: GainNode[] = []
 const NativeAudioContext = window.AudioContext
 window.AudioContext = class RecordedAudioContext extends NativeAudioContext {
@@ -107,6 +109,11 @@ window.AudioContext = class RecordedAudioContext extends NativeAudioContext {
   createBufferSource() {
     const source = super.createBufferSource()
     audioSources.push(source)
+    const start = source.start.bind(source)
+    source.start = (when?: number, offset?: number, duration?: number) => {
+      sourceOffsets.set(source, offset ?? 0)
+      start(when, offset, duration)
+    }
     return source
   }
   createGain() {
@@ -149,5 +156,7 @@ export const mediaControls = {
     })),
   sourceDurations: () =>
     audioSources.map((source) => source.buffer?.duration ?? 0),
+  sourceOffsets: () =>
+    audioSources.map((source) => sourceOffsets.get(source) ?? null),
   outputGain: () => audioGains.at(-1)?.gain.value ?? null,
 } satisfies Partial<TestControls>

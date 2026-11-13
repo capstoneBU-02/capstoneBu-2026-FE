@@ -1,12 +1,11 @@
 import {
   useEffect,
-  useEffectEvent,
+  useId,
   useLayoutEffect,
   useRef,
   type CSSProperties,
 } from 'react'
 import { formatSectionTime } from '../new-section/sectionTime.ts'
-import type { SectionRange } from '../waveform/timeline.ts'
 import {
   PauseIcon,
   PlayIcon,
@@ -14,16 +13,28 @@ import {
   RestartIcon,
   VolumeIcon,
 } from './PlayerIcons.tsx'
-import { useSectionPlayer } from './useSectionPlayer.ts'
+import type { SectionPlayback } from './useSectionPlayer.ts'
 import styles from './PlayerBar.module.css'
 
+export interface SourceOption {
+  readonly id: string
+  readonly label: string
+  // False for a source with nothing to hear yet; it shows but cannot be
+  // chosen.
+  readonly enabled: boolean
+}
+
+export interface SourceSwitch {
+  readonly options: readonly SourceOption[]
+  readonly value: string
+  onChange(id: string): void
+}
+
 type Props = {
-  // The decoded song; null while it loads or when it failed.
-  buffer: AudioBuffer | null
-  range: SectionRange | null
-  // The name of the track that plays, on screens built from tracks.
-  source?: string
-  onPlayingChange?: (playing: boolean) => void
+  playback: SectionPlayback
+  // On screens built from tracks: the name of the one track, or a switch
+  // between them.
+  source?: string | SourceSwitch
 }
 
 // Rounded down, so the display never reads the full length before wrapping.
@@ -37,25 +48,67 @@ function paintTime(element: HTMLElement | null, seconds: number): void {
   if (element.textContent !== text) element.textContent = text
 }
 
-export function PlayerBar({ buffer, range, source, onPlayingChange }: Props) {
-  const playback = useSectionPlayer(buffer, range)
-  const { available, length, playing, repeat, volume, muted, elapsed } =
-    playback
+function SourceName({ name }: { name: string }) {
+  return (
+    <p className={styles.source}>
+      <span className={styles.hidden}>재생 트랙 </span>
+      {name}
+    </p>
+  )
+}
+
+function SourceChoices({ options, value, onChange }: SourceSwitch) {
+  const name = useId()
+  return (
+    <fieldset className={styles.switch}>
+      <legend className={styles.hidden}>재생 트랙</legend>
+      {options.map((option) => (
+        <label
+          key={option.id}
+          className={styles.segment}
+          data-disabled={!option.enabled}
+        >
+          <input
+            type="radio"
+            className={styles.segmentInput}
+            name={name}
+            value={option.id}
+            checked={option.id === value}
+            disabled={!option.enabled}
+            onChange={() => onChange(option.id)}
+          />
+          {option.label}
+        </label>
+      ))}
+    </fieldset>
+  )
+}
+
+export function PlayerBar({ playback, source }: Props) {
+  const {
+    available,
+    length,
+    playing,
+    repeat,
+    volume,
+    muted,
+    elapsed,
+    subscribeSeek,
+  } = playback
   const timeRef = useRef<HTMLSpanElement>(null)
   const percent = Math.round(volume * 100)
-  const reportPlaying = useEffectEvent((next: boolean) =>
-    onPlayingChange?.(next),
-  )
-
-  useEffect(() => {
-    reportPlaying(playing)
-  }, [playing])
 
   // The playback time is written straight into the element, which React
-  // leaves empty: a frame updates one text node and renders nothing.
+  // leaves empty: a frame or a seek updates one text node and renders
+  // nothing.
   useLayoutEffect(() => {
     paintTime(timeRef.current, elapsed())
   })
+
+  useEffect(
+    () => subscribeSeek(() => paintTime(timeRef.current, elapsed())),
+    [subscribeSeek, elapsed],
+  )
 
   useEffect(() => {
     if (!playing) return
@@ -75,11 +128,7 @@ export function PlayerBar({ buffer, range, source, onPlayingChange }: Props) {
             className={styles.iconButton}
             aria-label="구간 처음으로"
             aria-disabled={!available}
-            onClick={() => {
-              if (!available) return
-              playback.restart()
-              paintTime(timeRef.current, elapsed())
-            }}
+            onClick={() => playback.restart()}
           >
             <RestartIcon />
           </button>
@@ -88,9 +137,7 @@ export function PlayerBar({ buffer, range, source, onPlayingChange }: Props) {
             className={styles.play}
             aria-label={playing ? '일시정지' : '재생'}
             aria-disabled={!available}
-            onClick={() => {
-              if (available) playback.toggle()
-            }}
+            onClick={() => playback.toggle()}
           >
             {playing ? <PauseIcon /> : <PlayIcon />}
           </button>
@@ -114,12 +161,8 @@ export function PlayerBar({ buffer, range, source, onPlayingChange }: Props) {
             / {formatSectionTime(Math.round(length * 10))}
           </span>
         </p>
-        {source && (
-          <p className={styles.source}>
-            <span className={styles.hidden}>재생 트랙 </span>
-            {source}
-          </p>
-        )}
+        {typeof source === 'string' && <SourceName name={source} />}
+        {typeof source === 'object' && <SourceChoices {...source} />}
         <div className={styles.output}>
           {/* The repeat button's pressed state says the same to assistive tech. */}
           <span className={styles.mode} aria-hidden="true">

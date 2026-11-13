@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Button } from '../../../shared/ui/Button.tsx'
+import type { SectionPlayback } from '../../player/useSectionPlayer.ts'
 import { PEAKS_PER_SECOND, type WaveformPeaks } from '../../waveform/peaks.ts'
 import type { TimeWindow } from '../../waveform/timeline.ts'
 import { TimeRuler } from '../../waveform/TimeRuler.tsx'
@@ -7,9 +8,15 @@ import { useElementWidth } from '../../waveform/useElementWidth.ts'
 import type { SongAudio } from '../../waveform/useSongAudio.ts'
 import { WaveformCanvas } from '../../waveform/WaveformCanvas.tsx'
 import type { WorkspaceTask } from '../model.ts'
-import { trackWindow, type TaskTrack, type TrackId } from '../tracks.ts'
+import {
+  trackLead,
+  trackWindow,
+  type TaskTrack,
+  type TrackId,
+} from '../tracks.ts'
 import type { TaskAudio } from '../useTaskAudio.ts'
 import pageStyles from '../WorkspacePage.module.css'
+import { PlayPosition } from './PlayPosition.tsx'
 import styles from './TaskTracks.module.css'
 
 const LANE_HEIGHT = 56
@@ -40,18 +47,27 @@ function Waveform({
   width,
   playing,
 }: LaneProps & { peaks: WaveformPeaks }) {
+  const drawn = {
+    peaks,
+    window,
+    range: null,
+    over: false,
+    width,
+    height: LANE_HEIGHT,
+  }
   // The bar colours come from the row's CSS, which the canvas reads only
   // when it draws: a new key redraws it when the row starts or stops playing.
+  // The row that plays shows its played part in the accent on top, cut at
+  // the play position.
   return (
-    <WaveformCanvas
-      key={playing ? 'playing' : 'quiet'}
-      peaks={peaks}
-      window={window}
-      range={null}
-      over={false}
-      width={width}
-      height={LANE_HEIGHT}
-    />
+    <>
+      <WaveformCanvas key={playing ? 'playing' : 'quiet'} {...drawn} />
+      {playing && (
+        <div className={styles.played}>
+          <WaveformCanvas {...drawn} />
+        </div>
+      )}
+    </>
   )
 }
 
@@ -140,8 +156,13 @@ export function TaskTracks({
   tracks,
   audio,
   playback,
-}: { task: WorkspaceTask } & Pick<TaskAudio, 'tracks' | 'audio' | 'playback'>) {
+  player,
+}: { task: WorkspaceTask; player: SectionPlayback } & Pick<
+  TaskAudio,
+  'tracks' | 'audio' | 'playback'
+>) {
   const rulerRef = useRef<HTMLDivElement>(null)
+  const rowsRef = useRef<HTMLDivElement>(null)
   const width = useElementWidth(rulerRef)
   const windowOf = (id: TrackId) => trackWindow(id, task)
   return (
@@ -151,29 +172,37 @@ export function TaskTracks({
           <TimeRuler window={windowOf('input')} width={width} minor />
         </div>
       </div>
-      {/* Safari drops the list role when list-style is none. */}
-      <ul role="list" className={styles.list}>
-        {tracks.map((track) => {
-          const playing = track.id === playback
-          return (
-            <li key={track.id} className={styles.row} data-playing={playing}>
-              <span className={styles.label}>
-                {track.label}
-                {track.content === 'flat' && (
-                  <span className={styles.alertDot} aria-hidden="true" />
-                )}
-              </span>
-              <TrackLane
-                track={track}
-                audio={audio[track.id]}
-                window={windowOf(track.id)}
-                width={width}
-                playing={playing}
-              />
-            </li>
-          )
-        })}
-      </ul>
+      <div ref={rowsRef} className={styles.rows}>
+        {/* Safari drops the list role when list-style is none. */}
+        <ul role="list" className={styles.list}>
+          {tracks.map((track) => {
+            const playing = track.id === playback
+            return (
+              <li key={track.id} className={styles.row} data-playing={playing}>
+                <span className={styles.label}>
+                  {track.label}
+                  {track.content === 'flat' && (
+                    <span className={styles.alertDot} aria-hidden="true" />
+                  )}
+                </span>
+                <TrackLane
+                  track={track}
+                  audio={audio[track.id]}
+                  window={windowOf(track.id)}
+                  width={width}
+                  playing={playing}
+                />
+              </li>
+            )
+          })}
+        </ul>
+        <PlayPosition
+          rowsRef={rowsRef}
+          section={windowOf('input')}
+          lead={trackLead(playback, task)}
+          player={player}
+        />
+      </div>
     </section>
   )
 }
