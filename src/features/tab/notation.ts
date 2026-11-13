@@ -1,6 +1,7 @@
 import {
   HAMMER_ROOM,
   labelHalf,
+  PALM_MUTE_LABEL_WIDTH,
   stringY,
   TAB_METRICS,
   type TabLayout,
@@ -50,8 +51,11 @@ export interface PalmMuteMark {
   readonly row: number
   readonly x1: number
   readonly x2: number
+  // Where the dotted line starts: after the label, or at x1 without one.
+  readonly lineX1: number
   readonly y: number
-  // Only the first piece of a run that wraps carries the P.M. label.
+  // Only the first piece of a run that wraps carries the P.M. label. The
+  // layout keeps the label over its own run.
   readonly labeled: boolean
 }
 
@@ -77,6 +81,7 @@ const SECOND_BEAM_GAP = 4
 const STUB_BEAM = 6
 const TIE_DROP = 6
 const PALM_MUTE_RISE = 6
+const PALM_MUTE_LINE_GAP = 3
 
 const isNote = (placed: TabPlacedBeat) => placed.beat.notes.length > 0
 
@@ -169,8 +174,14 @@ export function rhythmMarks(layout: TabLayout): RhythmMarks {
   return { stems, beams, flags, dots }
 }
 
-// Palm-muted beats in a row form one run. A run that wraps is cut per row.
-export function palmMuteMarks(layout: TabLayout): readonly PalmMuteMark[] {
+interface PalmMutePiece {
+  readonly row: number
+  readonly x1: number
+  readonly x2: number
+  readonly opensRun: boolean
+}
+
+function palmMutePieces(layout: TabLayout): PalmMutePiece[] {
   const runs: TabPlacedBeat[][] = []
   layout.beats.forEach((placed, index) => {
     if (!placed.beat.palmMute) return
@@ -181,17 +192,30 @@ export function palmMuteMarks(layout: TabLayout): readonly PalmMuteMark[] {
   })
   return runs.flatMap((run) => {
     const rows = [...new Set(run.map((placed) => placed.row))]
-    return rows.map((row, i): PalmMuteMark => {
+    return rows.map((row, i): PalmMutePiece => {
       const inRow = run.filter((placed) => placed.row === row)
       return {
         row,
-        x1: inRow[0].x - 4,
-        x2: inRow.at(-1)!.x + 6,
-        y: layout.rows[row].staffTop - PALM_MUTE_RISE,
-        labeled: i === 0,
+        x1: inRow[0].x - TAB_METRICS.palmMuteLead,
+        x2: inRow.at(-1)!.x + TAB_METRICS.palmMuteTail,
+        opensRun: i === 0,
       }
     })
   })
+}
+
+// Palm-muted beats in a row form one run. A run that wraps is cut per row.
+export function palmMuteMarks(layout: TabLayout): readonly PalmMuteMark[] {
+  return palmMutePieces(layout).map((piece): PalmMuteMark => ({
+    row: piece.row,
+    x1: piece.x1,
+    x2: piece.x2,
+    lineX1: piece.opensRun
+      ? piece.x1 + PALM_MUTE_LABEL_WIDTH + PALM_MUTE_LINE_GAP
+      : piece.x1,
+    y: layout.rows[piece.row].staffTop - PALM_MUTE_RISE,
+    labeled: piece.opensRun,
+  }))
 }
 
 const onString = (placed: TabPlacedBeat, string: number) =>

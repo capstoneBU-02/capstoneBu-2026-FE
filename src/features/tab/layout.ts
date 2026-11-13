@@ -40,7 +40,15 @@ export const TAB_METRICS = {
   // A rest glyph is 10 px wide; a dotted rest's dot reaches 9 px right.
   restHalfWidth: 5,
   restDotReach: 9,
+  // A P.M. run starts this far left of its first beat and ends this far
+  // right of its last.
+  palmMuteLead: 4,
+  palmMuteTail: 6,
 } as const
+
+export const PALM_MUTE_LABEL = 'P.M.'
+export const PALM_MUTE_LABEL_WIDTH =
+  PALM_MUTE_LABEL.length * TAB_METRICS.smallCharWidth
 
 // Clear space a tie arc or a hammer-on `h` needs between two fret numbers.
 const TIE_ROOM = TAB_METRICS.tieMin + 2 * TAB_METRICS.tieGap
@@ -163,15 +171,58 @@ const roomBefore = (beat: TabBeat) =>
 const roomAfter = (beat: TabBeat) =>
   beat.notes.some((note) => note.hammerOn) ? HAMMER_ROOM : TAB_METRICS.labelGap
 
-// What each beat needs so fret numbers, ties and hammer-ons stay clear of
-// each other and of the bar lines. A tie into the first beat may start at the
-// staff edge after a wrap; a hammer-on out of the last beat stays in its bar.
+const minSpan = (span: Span) =>
+  Math.max(span.weight * TAB_METRICS.minUnit, span.need)
+
+// The first and last beat index of each palm-mute run in a bar. A muted
+// first beat counts as opening a run, since a new row may start there.
+function palmMuteRuns(beats: readonly TabBeat[]): Map<number, number> {
+  const startOfRunEndingAt = new Map<number, number>()
+  let start: number | null = null
+  beats.forEach((beat, index) => {
+    if (!beat.palmMute) return
+    start ??= index
+    if (beats[index + 1]?.palmMute !== true) {
+      startOfRunEndingAt.set(index, start)
+      start = null
+    }
+  })
+  return startOfRunEndingAt
+}
+
+// A P.M. label stays over its own run: it ends before the mark of the next
+// beat, or at the bar line when the run reaches the end of the bar. The last
+// beat of a short run takes the room the label needs.
+function roomForPalmMutes(
+  beats: readonly TabBeat[],
+  reaches: readonly Reach[],
+  spans: readonly Span[],
+): readonly Span[] {
+  const { palmMuteLead, barPadRight } = TAB_METRICS
+  const runs = palmMuteRuns(beats)
+  return spans.map((span, index) => {
+    const start = runs.get(index)
+    if (start === undefined) return span
+    const after =
+      index + 1 < beats.length ? reaches[index + 1].left : -barPadRight
+    const reach = PALM_MUTE_LABEL_WIDTH - palmMuteLead + after
+    const before = spans
+      .slice(start, index)
+      .reduce((total, earlier) => total + minSpan(earlier), 0)
+    return { ...span, need: Math.max(span.need, reach - before) }
+  })
+}
+
+// What each beat needs so fret numbers, ties, hammer-ons and P.M. labels stay
+// clear of each other and of the bar lines. A tie into the first beat may
+// start at the staff edge after a wrap; a hammer-on out of the last beat
+// stays in its bar.
 function spacingOf(bar: TabBar): BarSpacing {
-  const { barPadLeft, barPadRight, minUnit } = TAB_METRICS
+  const { barPadLeft, barPadRight } = TAB_METRICS
   const { beats } = bar
   const reaches = beats.map(reachOf)
   const padLeft = Math.max(barPadLeft, reaches[0].left + roomBefore(beats[0]))
-  const spans = beats.map((beat, index): Span => {
+  const marks = beats.map((beat, index): Span => {
     const next = beats[index + 1]
     const need =
       next === undefined
@@ -181,10 +232,8 @@ function spacingOf(bar: TabBar): BarSpacing {
           reaches[index + 1].left
     return { weight: weightOf(beat), need: Math.max(0, need) }
   })
-  const inner = spans.reduce(
-    (total, span) => total + Math.max(span.weight * minUnit, span.need),
-    0,
-  )
+  const spans = roomForPalmMutes(beats, reaches, marks)
+  const inner = spans.reduce((total, span) => total + minSpan(span), 0)
   return { padLeft, spans, minWidth: padLeft + inner + barPadRight }
 }
 

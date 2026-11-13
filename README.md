@@ -169,7 +169,7 @@ Figma의 `Earmark — 기타 카피 보조 서비스 디자인 v2`를 기준으�
 
 ### 디자인 폰트
 
-Figma에서 확인한 Noto Sans KR 400·500·700(UI), JetBrains Mono 400·500(시간·코드), Geist 600(로고)을 로컬 WOFF2로 제공한다. Figma에서는 글꼴 이름과 굵기를 확인했고, 폰트 파일은 공식 Google Fonts 배포본을 사용한다. 세 글꼴은 SIL OFL 1.1로 배포된다.
+Figma에서 확인한 Noto Sans KR 400·500·700(UI), JetBrains Mono 400·500·700(시간·코드·타브 숫자), Geist 600(로고)을 로컬 WOFF2로 제공한다. Figma에서는 글꼴 이름과 굵기를 확인했고, 폰트 파일은 공식 Google Fonts 배포본을 사용한다. 세 글꼴은 SIL OFL 1.1로 배포된다.
 
 Noto Sans KR은 한글 완성형 11,172자와 자모·라틴을 포함하는 공식 유니코드 부분집합을 유지한다. `unicode-range`에 따라 화면에 필요한 파일만 요청하며, 전체 한글 파일을 미리 내려받지 않는다. JetBrains Mono와 Geist는 현재 사용 범위인 라틴 부분집합만 포함한다. `font-display: swap`으로 글자가 보이지 않는 대기를 피하고, 기존 고정 줄 높이를 유지한다. 폰트 요청은 모두 앱과 같은 출처로 향하며 런타임 Google Fonts 요청은 없다.
 
