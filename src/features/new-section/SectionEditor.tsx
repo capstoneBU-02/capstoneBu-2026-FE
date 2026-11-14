@@ -11,6 +11,7 @@ import { canFocus, restoreFocus } from '../../shared/ui/dialogFocus.ts'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import { formatClockDuration } from '../add-song/songFile.ts'
 import { PlayerBar } from '../player/PlayerBar.tsx'
+import { useSectionPlayer } from '../player/useSectionPlayer.ts'
 import { SectionWaveform } from '../waveform/SectionWaveform.tsx'
 import { rangeFromForm } from '../waveform/timeline.ts'
 import { useSongAudio } from '../waveform/useSongAudio.ts'
@@ -96,6 +97,10 @@ export function SectionEditor({
     form.start,
     form.end,
     songLengthTenths(song.durationSeconds),
+  )
+  const playback = useSectionPlayer(
+    audio.state.status === 'ready' ? audio.state.buffer : null,
+    range,
   )
   const formId = useId()
   const titleId = useId()
@@ -314,10 +319,7 @@ export function SectionEditor({
           </span>
         </form>
       </div>
-      <PlayerBar
-        buffer={audio.state.status === 'ready' ? audio.state.buffer : null}
-        range={range}
-      />
+      <PlayerBar playback={playback} />
     </>
   )
 }

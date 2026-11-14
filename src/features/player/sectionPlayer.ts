@@ -25,6 +25,13 @@ export interface SectionPlayer {
   pause(): void
   // Back to the section start; keeps playing if it was.
   restart(): void
+  // To this many seconds after the section start, kept inside the section;
+  // keeps playing if it was.
+  seek(elapsed: number): void
+  // Other audio of the same section, such as another track of it, from the
+  // same time since the section start. Keeps playing if it was, through the
+  // same output.
+  switchAudio(buffer: AudioBuffer, range: PlayRange | null): void
   setRange(range: PlayRange | null): void
   setRepeat(repeat: boolean): void
   setVolume(volume: number): void
@@ -59,6 +66,10 @@ function within(position: number, range: PlayRange): boolean {
   return position >= range.start && position < range.end
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
 // The part of a section the decoded audio covers. The song's metadata
 // length, which the time inputs allow up to, can exceed it slightly.
 export function playableRange(
@@ -80,6 +91,7 @@ export function createSectionPlayer(
   options: SectionPlayerOptions,
 ): SectionPlayer {
   const { createContext, onStop } = options
+  let audio = buffer
   let repeat = options.repeat
   let volume = options.volume
   let range: PlayRange | null = null
@@ -134,7 +146,7 @@ export function createSectionPlayer(
     const { context, gain } = openOutput()
     if (context.state !== 'running') void context.resume()
     const node = context.createBufferSource()
-    node.buffer = buffer
+    node.buffer = audio
     node.loop = repeat
     node.loopStart = range.start
     node.loopEnd = range.end
@@ -153,7 +165,7 @@ export function createSectionPlayer(
   }
 
   function setRange(next: PlayRange | null): void {
-    const target = playableRange(next, buffer.duration)
+    const target = playableRange(next, audio.duration)
     if (target?.start === range?.start && target?.end === range?.end) return
     const at = position()
     range = target
@@ -182,6 +194,31 @@ export function createSectionPlayer(
     scheduleEnd(source, at)
   }
 
+  // Seconds since the section start, or null at the start itself, which
+  // moves with the section.
+  function offset(): number | null {
+    if (!range || (!source && rest === null)) return null
+    return position() - range.start
+  }
+
+  function switchAudio(next: AudioBuffer, nextRange: PlayRange | null): void {
+    if (disposed) return
+    const playing = source !== null
+    const elapsed = offset()
+    release()
+    audio = next
+    range = playableRange(nextRange, next.duration)
+    if (!range) {
+      rest = null
+      if (playing) onStop()
+      return
+    }
+    const at = elapsed === null ? null : range.start + elapsed
+    const inside = at !== null && within(at, range)
+    if (playing) startAt(inside ? at : range.start)
+    else rest = inside ? at : null
+  }
+
   return {
     play() {
       if (disposed || source || !range) return
@@ -201,6 +238,21 @@ export function createSectionPlayer(
       release()
       startAt(range.start)
     },
+    seek(elapsed) {
+      if (disposed || !range) return
+      const at = clamp(
+        range.start + elapsed,
+        range.start,
+        range.end - MIN_SECONDS,
+      )
+      if (!source) {
+        rest = at
+        return
+      }
+      release()
+      startAt(at)
+    },
+    switchAudio,
     setRange,
     setRepeat(next) {
       if (next === repeat) return

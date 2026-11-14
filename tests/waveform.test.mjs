@@ -9,6 +9,7 @@ import {
   formatTickLabel,
   handleDragStarts,
   keyboardRange,
+  keyboardSeek,
   labelSteps,
   moveHandle,
   nearestHandle,
@@ -350,4 +351,25 @@ test('a finger that wobbles up first can still turn sideways into a drag', () =>
   // The first move says nothing yet; the travel so far decides each time.
   assert.equal(startsDrag(1, -3, true), false)
   assert.equal(startsDrag(7, -4, true), true)
+})
+
+test('the position slider steps like the section handles and stays inside', () => {
+  // 21.4 s: the last tenth the time display reaches is 21.3.
+  const seek = (current, key, extra = {}) =>
+    keyboardSeek(current, { key, shiftKey: false, ...extra }, 214)
+  assert.equal(seek(50, 'ArrowRight'), 51)
+  assert.equal(seek(50, 'ArrowUp'), 51)
+  assert.equal(seek(50, 'ArrowLeft'), 49)
+  assert.equal(seek(50, 'ArrowDown'), 49)
+  assert.equal(seek(50, 'ArrowRight', { shiftKey: true }), 60)
+  assert.equal(seek(50, 'ArrowLeft', { shiftKey: true }), 40)
+  assert.equal(seek(50, 'PageUp'), 100)
+  assert.equal(seek(50, 'PageDown'), 0)
+  assert.equal(seek(210, 'PageUp'), 213)
+  assert.equal(seek(50, 'Home'), 0)
+  assert.equal(seek(50, 'End'), 213)
+  assert.equal(seek(0, 'ArrowLeft'), 0)
+  assert.equal(seek(50, 'Enter'), null)
+  for (const modifier of ['altKey', 'ctrlKey', 'metaKey'])
+    assert.equal(seek(50, 'ArrowRight', { [modifier]: true }), null)
 })

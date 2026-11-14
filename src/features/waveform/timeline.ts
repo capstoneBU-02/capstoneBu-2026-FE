@@ -152,6 +152,26 @@ export function keyboardRange(
   return moveHandle(range, handle, target, songTenths)
 }
 
+// The playback position slider steps like the section handles, in tenths
+// since the section start, up to the last tenth the time display reaches.
+export function keyboardSeek(
+  currentTenths: number,
+  { key, shiftKey, altKey, ctrlKey, metaKey }: KeyPress,
+  lengthTenths: number,
+): number | null {
+  if (altKey || ctrlKey || metaKey) return null
+  const last = Math.max(0, lengthTenths - 1)
+  let target: number
+  if (key === 'Home') target = 0
+  else if (key === 'End') target = last
+  else if (key in KEY_STEPS) {
+    const step = KEY_STEPS[key]
+    target =
+      currentTenths + (shiftKey && Math.abs(step) === 1 ? step * 10 : step)
+  } else return null
+  return clamp(target, 0, last)
+}
+
 // Dragging across the track selects from the press to the pointer.
 export function spanFrom(
   anchorTenths: number,

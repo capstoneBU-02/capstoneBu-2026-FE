@@ -10,6 +10,59 @@
   list-style: none;
 }
 
+/* The rows under one play position. --played, the share of the section
+   played so far, is written here as playback moves. */
+.rows {
+  --played: 0;
+  position: relative;
+}
+
+/* Over the waveforms, under nothing a row needs to keep in reach. */
+.position {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--label-width);
+  cursor: pointer;
+}
+
+.position[aria-disabled='true'] {
+  cursor: default;
+}
+
+.position:focus {
+  outline: none;
+}
+
+.position:focus-visible {
+  border-radius: var(--radius-m);
+  outline: 2px solid var(--ink-primary);
+  outline-offset: 2px;
+}
+
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--played) * 100%);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--ink-primary);
+  pointer-events: none;
+}
+
+/* The played part of the row that plays, over its waveform. */
+.played {
+  --wave-bar: var(--accent-default);
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  clip-path: inset(0 calc((1 - var(--played)) * 100%) 0 0);
+  pointer-events: none;
+}
+
 .row {
   --wave-bar: var(--border-strong);
   display: grid;
@@ -72,6 +125,11 @@
 
 .lane:focus {
   outline: none;
+}
+
+/* A retry stays clickable above the play position. */
+.lane:has(button) {
+  z-index: 2;
 }
 
 .note {

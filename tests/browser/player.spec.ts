@@ -181,6 +181,27 @@ test('going back to the start works while paused and while playing', async ({
   await expect(pauseButton(page)).toBeVisible()
 })
 
+test('a paused time follows a range change as it is typed', async ({
+  page,
+}) => {
+  await openWithAudio(page, '00:10.0', '00:20.0')
+  await playButton(page).click()
+  await expect.poll(() => elapsedTenths(page)).toBeGreaterThan(25)
+  await pauseButton(page).click()
+  const held = await elapsedTenths(page)
+
+  // The same point of the song, two seconds closer to the new start. Nothing
+  // else renders while the field keeps focus.
+  await startInput(page).fill('00:12.0')
+  const tenths = held - 20
+  await expect(elapsed(page)).toHaveText(
+    `00:${String(Math.floor(tenths / 10)).padStart(2, '0')}.${tenths % 10}`,
+  )
+  // Past that point: the section starts over.
+  await startInput(page).fill('00:18.0')
+  await expect(elapsed(page)).toHaveText('00:00.0')
+})
+
 test('a new range takes over playback', async ({ page }) => {
   await openWithAudio(page, '00:10.0', '00:20.0')
   await playButton(page).click()
