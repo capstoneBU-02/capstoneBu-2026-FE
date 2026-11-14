@@ -193,6 +193,13 @@
   line-height: 16px;
 }
 
+/* 카피 완료 on a section. Figma shows no mark here; a stand-in until it has one. */
+.copied {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 .addSection,
 .emptySongs {
   color: var(--ink-tertiary);

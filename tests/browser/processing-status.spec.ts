@@ -124,12 +124,14 @@ test('a queued task follows the server until its tab is done', async ({
   })
   await expect(announcement(page)).toHaveText('타브를 다 만들었어요.')
   await expect(
-    main(page).getByRole('heading', { name: '작업 화면 준비 중' }),
+    main(page).getByRole('heading', { level: 2, name: '타브', exact: true }),
   ).toBeVisible()
   await expect(panel(page)).toHaveCount(0)
   await expect(editButton(page)).toBeVisible()
-  // A finished task shows its name alone in the list.
-  await expect(sidebarTask(page, /^벌스 1/)).toHaveText('벌스 1')
+  // A finished task shows no progress in the list, only its 카피 완료.
+  await expect(sidebarTask(page, /^벌스 1/)).toHaveAccessibleName(
+    '벌스 1 카피 완료',
+  )
   // A finished task is not loaded again.
   await expectNoMoreCalls(page)
 })

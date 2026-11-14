@@ -9,12 +9,14 @@ import {
   secondRepository,
 } from './harness/repository.ts'
 import { scenario, serverControls } from './harness/server.ts'
+import { tabCopyControls } from './harness/tabCopy.ts'
 import '../../src/index.css'
 
 // The harness renders production hooks and components against a test server
-// in ./harness: server.ts holds its state, repository.ts answers the screen's
-// requests, and media.ts fakes duration reads and serves audio. Loading
-// media.ts also replaces window.AudioContext before anything renders.
+// in ./harness: server.ts holds its state, repository.ts and tabCopy.ts
+// answer the screen's requests, and media.ts fakes duration reads and serves
+// audio. Loading media.ts also replaces window.AudioContext before anything
+// renders.
 
 // refresh=<ms> turns on refreshing the open task and the list; other tests
 // count requests or keep the list as it first loaded.
@@ -27,6 +29,7 @@ window.workspaceTest = {
   ...requestControls,
   ...serverControls,
   ...mediaControls,
+  ...tabCopyControls,
   // Harness replaces these once it renders.
   switchWorkspace() {},
   saveTwice() {},

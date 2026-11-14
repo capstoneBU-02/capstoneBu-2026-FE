@@ -32,6 +32,7 @@ import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx'
 import { isTaskInProgress } from './format.ts'
 import type { SongInputKind, WorkspaceTask } from './model.ts'
 import type { WorkspaceRepository } from './repository.ts'
+import { useCopyStatus } from './useCopyStatus.ts'
 import { useListRefresh } from './useListRefresh.ts'
 import { useTaskDetail } from './useTaskDetail.ts'
 import { useTaskRecovery } from './useTaskRecovery.ts'
@@ -130,6 +131,15 @@ export function WorkspacePage({
     },
   )
   useListRefresh(workspace, refreshMs)
+  // Saves outlive the task screen, so the list and a reopened task show them.
+  const copy = useCopyStatus(repository, {
+    expired: workspace.loadState === 'expired',
+    onSaved: (task) => {
+      workspace.syncTask(task)
+      taskDetail.replaceTask(task)
+    },
+    onExpired: workspace.markExpired,
+  })
   const [previousViewKey, setPreviousViewKey] = useState(viewKey)
   // Set when a created task opens: a dialog the user opened while it was
   // being created stays open over the task instead of closing.
@@ -596,11 +606,12 @@ export function WorkspacePage({
             result={taskDetail}
             onRetry={retryWith(taskDetail.retry)}
             onReturnHome={goHome}
-            audioSource={{
+            source={{
               loadSongAudio: (songId, signal) =>
                 repository.loadSongAudio(songId, signal),
               loadSeparatedAudio: (taskId, signal) =>
                 repository.loadSeparatedAudio(taskId, signal),
+              loadTab: (taskId, signal) => repository.loadTab(taskId, signal),
               onExpired: workspace.markExpired,
             }}
             recovery={{
@@ -609,6 +620,7 @@ export function WorkspacePage({
               redefine: (taskId) => go({ name: 'edit-section', taskId }),
               uploadOther: uploadOtherFile,
             }}
+            copy={copy}
           />
         )}
         {loadState === 'empty' && view.name === 'home' && (

@@ -1,0 +1,66 @@
+/* Beside the title; under it once the header runs out of room. */
+.copy {
+  display: flex;
+  max-width: 100%;
+  margin-left: auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+/* A plain box with its label; a soft chip once marked (Figma 84:1867). */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle[data-checked='true'] {
+  background: var(--surface-subtle);
+  color: var(--ink-primary);
+  font-weight: 500;
+}
+
+.box {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface-default) center / 12px no-repeat;
+  appearance: none;
+  cursor: inherit;
+}
+
+.box:checked {
+  border-color: var(--ink-primary);
+  background-color: var(--ink-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M10 3 4.5 8.5 2 6' stroke='%23fff' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* Saving: the box keeps focus but takes no input. */
+.box[aria-disabled='true'] {
+  opacity: 0.6;
+}
+
+.toggle:has(.box[aria-disabled='true']) {
+  cursor: progress;
+}
+
+.failure {
+  margin: 0;
+  color: var(--state-alert);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: right;
+  word-break: keep-all;
+}

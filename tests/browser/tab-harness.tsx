@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { DEMO_TAB_INPUTS } from '../../src/features/tab/demoTabScores.ts'
 import { parseTabScore } from '../../src/features/tab/parseTabScore.ts'
 import type { TabScore } from '../../src/features/tab/model.ts'
-import { TabPanel } from '../../src/features/tab/TabPanel.tsx'
+import { TabPanel, type TabSource } from '../../src/features/tab/TabPanel.tsx'
 import '../../src/index.css'
 
 // Renders the tab panel alone. score=<id> picks a demo transcription, and
@@ -67,6 +67,7 @@ const name = new URLSearchParams(window.location.search).get('score')
 const parsed = parseTabScore(inputFor(name ?? 'e-standard'))
 if (!parsed.ok) throw new Error(parsed.error)
 const score = parsed.score
+const tab: TabSource = { status: 'ready', score }
 
 let time = 0
 const elapsed = () => time
@@ -108,7 +109,7 @@ export function Harness() {
     <main>
       <TabPanel
         key={mount}
-        score={score}
+        tab={tab}
         playing={playing}
         elapsed={elapsed}
         subscribeSeek={subscribeSeek}

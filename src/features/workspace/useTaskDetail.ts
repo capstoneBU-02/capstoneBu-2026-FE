@@ -20,6 +20,10 @@ export interface UseTaskDetailResult {
   // Loads the shown task again at once, keeping it on screen meanwhile, as
   // after a change made from it. 'failed' keeps the old copy on screen.
   reload(): Promise<'loaded' | 'failed' | 'cancelled'>
+  // The server's copy of the shown task after a change made from it, as
+  // 카피 완료, shown without loading it again. Another task's copy changes
+  // nothing.
+  replaceTask(task: WorkspaceTask): void
 }
 
 export interface TaskDetailOptions {
@@ -251,5 +255,11 @@ export function useTaskDetail(
     refreshFailed: isCurrent ? state.refreshFailed : false,
     retry: () => setVersion((previous) => previous + 1),
     reload,
+    replaceTask: (task) =>
+      setState((previous) =>
+        previous?.detail?.task.id === task.id
+          ? { ...previous, detail: { ...previous.detail, task } }
+          : previous,
+      ),
   }
 }

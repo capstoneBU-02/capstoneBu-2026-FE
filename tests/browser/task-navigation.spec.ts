@@ -12,6 +12,8 @@ const sidebarTask = (page: Page, name: string | RegExp) =>
     name,
     exact: typeof name === 'string',
   })
+// The seed 벌스 1 is marked 카피 완료, which its row reads after the name.
+const VERSE_ROW = '벌스 1 카피 완료'
 const loadingTask = (page: Page) =>
   main(page).getByRole('status').filter({ hasText: '작업을 여는 중이에요' })
 const SECTION_NAMES = ['벌스 1', '솔로', '인트로', '코러스 2']
@@ -52,23 +54,25 @@ test('a list row opens a read-only task header and history reopens the same task
     await expect(main(page).getByText(text, { exact: true })).toBeVisible()
   }
   await expect(
-    main(page).getByRole('heading', { name: '작업 화면 준비 중' }),
+    main(page).getByRole('heading', { level: 2, name: '타브', exact: true }),
   ).toBeVisible()
-  await expect(sidebarTask(page, '벌스 1')).toHaveAttribute(
+  await expect(sidebarTask(page, VERSE_ROW)).toHaveAttribute(
     'aria-current',
     'page',
   )
   // Unimplemented task actions are not offered as working controls; a
-  // finished task offers only 구간 수정 so far, beside the section player.
+  // finished task offers only 구간 수정 so far, beside the section player,
+  // and its one box is 카피 완료.
   await expect(
     main(page).locator('button:not(section[aria-label="구간 재생"] button)'),
   ).toHaveText(['구간 수정'])
-  await expect(page.getByRole('checkbox')).toHaveCount(0)
+  await expect(page.getByRole('checkbox')).toHaveAccessibleName('카피 완료')
+  await expect(page.getByRole('checkbox')).toBeChecked()
   await expect(page.getByRole('tab')).toHaveCount(0)
 
   await page.goBack()
   await expect(page.getByRole('heading', { name: '최근 작업' })).toBeVisible()
-  await expect(sidebarTask(page, '벌스 1')).not.toHaveAttribute(
+  await expect(sidebarTask(page, VERSE_ROW)).not.toHaveAttribute(
     'aria-current',
     'page',
   )
@@ -163,7 +167,7 @@ test('a late response for a previous task never replaces the task being opened',
 }) => {
   await page.goto('/tests/browser/harness.html?scenario=pending-task')
   await expect(page.locator('tbody tr')).toHaveCount(4)
-  await sidebarTask(page, '벌스 1').click()
+  await sidebarTask(page, VERSE_ROW).click()
   await expect(loadingTask(page)).toBeVisible()
   await sidebarTask(page, /^솔로/).click()
   await expect(sidebarTask(page, /^솔로/)).toHaveAttribute(
@@ -251,14 +255,14 @@ test('an expired session while opening a task offers code re-entry', async ({
   await page.keyboard.press('Enter')
   await expect(page.locator('tbody tr')).toHaveCount(4)
   await page.evaluate(() => window.accessTest.expireSession())
-  await sidebarTask(page, '벌스 1').click()
+  await sidebarTask(page, VERSE_ROW).click()
   const expiredTitle = main(page).getByRole('heading', {
     name: '작업 공간을 열 수 없어요',
   })
   await expect(expiredTitle).toBeVisible()
   // Expiry hides the whole workspace, not just the task body.
   await expect(sidebar(page)).not.toContainText('neon_harbor_live')
-  await expect(sidebarTask(page, '벌스 1')).toHaveCount(0)
+  await expect(sidebarTask(page, VERSE_ROW)).toHaveCount(0)
   await page.getByRole('button', { name: '내 작업', exact: true }).click()
   await expect(expiredTitle).toBeVisible()
   await expect(page.locator('tbody tr')).toHaveCount(0)
@@ -272,14 +276,14 @@ test('reopening a task waits for a fresh result instead of showing the previous 
   page,
 }) => {
   await page.goto('/tests/browser/harness.html?scenario=pending-task')
-  await sidebarTask(page, '벌스 1').click()
+  await sidebarTask(page, VERSE_ROW).click()
   await page.evaluate(() => window.workspaceTest.resolveTask('task-verse'))
   await expect(title(page)).toHaveText('벌스 1')
   await sidebar(page)
     .getByRole('button', { name: '내 작업', exact: true })
     .click()
   await expect(page.getByRole('heading', { name: '최근 작업' })).toBeVisible()
-  await sidebarTask(page, '벌스 1').click()
+  await sidebarTask(page, VERSE_ROW).click()
   await settleRendering(page)
   await expect(loadingTask(page)).toBeVisible()
   await expect(page.getByRole('navigation', { name: '작업 위치' })).toHaveCount(
@@ -304,7 +308,7 @@ test('a previous task that settles after the current one cannot replace it', asy
   page,
 }) => {
   await page.goto('/tests/browser/harness.html?scenario=pending-task')
-  await sidebarTask(page, '벌스 1').click()
+  await sidebarTask(page, VERSE_ROW).click()
   await sidebarTask(page, /^솔로/).click()
   await page.evaluate(() => window.workspaceTest.resolveTask('task-solo'))
   await expect(title(page)).toHaveText('솔로')
@@ -328,7 +332,7 @@ test('a task response from a replaced workspace is ignored', async ({
   page,
 }) => {
   await page.goto('/tests/browser/harness.html?scenario=pending-task')
-  await sidebarTask(page, '벌스 1').click()
+  await sidebarTask(page, VERSE_ROW).click()
   await expect(loadingTask(page)).toBeVisible()
   await page.evaluate(() => window.workspaceTest.switchWorkspace())
   await expect(title(page)).toHaveText('작업을 찾을 수 없어요')

@@ -40,6 +40,18 @@ export interface WorkspaceRepository {
   // The guitar separated from the task's section: as long as the section,
   // with 0 s at the section start. Fails while the task has none.
   loadSeparatedAudio(taskId: string, signal: AbortSignal): Promise<Blob>
+  // The finished task's tab as the server sends it, with 0 s at the section
+  // start; the screen checks it with parseTabScore. The format is still open
+  // with the TAB owner. Fails while the task has no finished tab.
+  loadTab(taskId: string, signal: AbortSignal): Promise<unknown>
+  // 카피 완료 표시·해제 (COPY-04): kept apart from processing and accepted
+  // only for a finished task. Returns the task as the server keeps it; what
+  // an unmarked task becomes is the server's call, as the contract is open.
+  saveCopyStatus(
+    taskId: string,
+    confirmed: boolean,
+    signal: AbortSignal,
+  ): Promise<WorkspaceTask>
 }
 
 type RepositoryErrorCode =
@@ -53,6 +65,8 @@ type RepositoryErrorCode =
   | 'cancel-task-failed'
   | 'retry-task-failed'
   | 'audio-unavailable'
+  | 'tab-unavailable'
+  | 'copy-status-failed'
 
 export class WorkspaceRepositoryError extends Error {
   readonly code: RepositoryErrorCode

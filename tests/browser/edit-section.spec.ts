@@ -7,6 +7,8 @@ const sidebar = (page: Page) =>
   page.getByRole('complementary', { name: '워크스페이스 탐색' })
 const sidebarTask = (page: Page, name: string) =>
   sidebar(page).getByRole('button', { name, exact: true })
+// The seed 벌스 1 is marked 카피 완료, which its row reads after the name.
+const VERSE_ROW = '벌스 1 카피 완료'
 const form = (page: Page) => main(page).getByRole('form', { name: '구간 수정' })
 const editButton = (page: Page) =>
   main(page).getByRole('button', { name: '구간 수정' })
@@ -72,7 +74,7 @@ const historyLength = (page: Page) => page.evaluate(() => history.length)
 async function openEditFromHome(page: Page) {
   await page.goto('/tests/browser/harness.html')
   await expect(title(page)).toHaveText('최근 작업')
-  await sidebarTask(page, '벌스 1').click()
+  await sidebarTask(page, VERSE_ROW).click()
   await expect(title(page)).toHaveText('벌스 1')
   await editButton(page).click()
   await expect(form(page)).toBeVisible()
@@ -108,7 +110,7 @@ test('구간 수정 opens the editor with the task values', async ({ page }) => 
   // Untouched values show no errors and the edited task stays highlighted.
   // Its row opens the task, another page, so it is only the current item.
   await expect(form(page).getByRole('alert')).toHaveCount(0)
-  await expect(sidebarTask(page, '벌스 1')).toHaveAttribute(
+  await expect(sidebarTask(page, VERSE_ROW)).toHaveAttribute(
     'aria-current',
     'true',
   )
@@ -554,7 +556,7 @@ test('구간 수정 sent before leaving refuses another until it answers', async
   await sidebar(page).getByRole('button', { name: '내 작업' }).click()
   await expect(title(page)).toHaveText('최근 작업')
 
-  await sidebarTask(page, '벌스 1').click()
+  await sidebarTask(page, VERSE_ROW).click()
   await expect(title(page)).toHaveText('벌스 1')
   await editButton(page).click()
   await setEnd(page, '01:01.0')

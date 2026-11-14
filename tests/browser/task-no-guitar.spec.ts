@@ -74,7 +74,7 @@ test('a song without guitar offers a new range or another file', async ({
   for (const name of ['다시 시도', '구간 수정', '멈추기'])
     await expect(main(page).getByRole('button', { name })).toHaveCount(0)
   await expect(
-    main(page).getByRole('heading', { name: '작업 화면 준비 중' }),
+    main(page).getByRole('heading', { level: 2, name: '타브', exact: true }),
   ).toHaveCount(0)
 })
 

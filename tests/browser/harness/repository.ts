@@ -16,6 +16,7 @@ import {
 } from '../../../src/features/workspace/repository.ts'
 import type { TestControls } from './controls.ts'
 import { separatedAudio, songAudio } from './media.ts'
+import { loadTab, saveCopyStatus } from './tabCopy.ts'
 import {
   addedSong,
   canceledTask,
@@ -33,7 +34,8 @@ import {
 // stale-response protection. Consent saves always wait for a test to settle
 // them. pending-load, pending-task, pending-add, pending-create,
 // pending-revise, pending-cancel and pending-retry hold their requests the
-// same way. list-error fails every list request that is not held.
+// same way. list-error fails every list request that is not held. Tab and
+// 카피 완료 requests live in tabCopy.ts.
 
 const pendingLoads: Array<(snapshot: WorkspaceSnapshot) => void> = []
 let listCalls = 0
@@ -237,6 +239,8 @@ export const repository: WorkspaceRepository = {
   },
   loadSongAudio: songAudio,
   loadSeparatedAudio: separatedAudio,
+  loadTab,
+  saveCopyStatus,
 }
 
 // The second workspace loads and saves consent; every other request fails.
@@ -269,6 +273,8 @@ export const secondRepository: WorkspaceRepository = {
   retryTask: unavailable('retry-task-failed'),
   loadSongAudio: unavailable('audio-unavailable'),
   loadSeparatedAudio: unavailable('audio-unavailable'),
+  loadTab: unavailable('task-unavailable'),
+  saveCopyStatus: unavailable('task-unavailable'),
 }
 
 // StrictMode may leave an aborted duplicate of a pending request, so the add,
