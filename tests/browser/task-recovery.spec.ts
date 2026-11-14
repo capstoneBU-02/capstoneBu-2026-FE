@@ -7,9 +7,10 @@ const sidebar = (page: Page) =>
   page.getByRole('complementary', { name: '워크스페이스 탐색' })
 const sidebarTask = (page: Page, name: RegExp) =>
   sidebar(page).getByRole('button', { name })
-// The top bar's own button; the dialog's 멈추기 sits deeper inside it.
+// The top bar's own button, in its row of actions; the dialog's 멈추기 sits
+// deeper inside it.
 const stopButton = (page: Page) =>
-  main(page).locator('header > button', { hasText: '멈추기' })
+  main(page).locator('header > div > button', { hasText: '멈추기' })
 const stopDialog = (page: Page, sectionName: string) =>
   page.getByRole('alertdialog', { name: `${sectionName} 작업을 멈출까요?` })
 const stopNotice = (page: Page) =>

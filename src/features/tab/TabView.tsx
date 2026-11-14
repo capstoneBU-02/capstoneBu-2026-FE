@@ -1,4 +1,4 @@
-import { Fragment, memo } from 'react'
+import { Fragment, memo, type Ref } from 'react'
 import {
   fretLabel,
   PALM_MUTE_LABEL,
@@ -20,6 +20,10 @@ import { RestGlyph, SvgText } from './tabGlyphs.tsx'
 interface TabViewProps {
   readonly score: TabScore
   readonly layout: TabLayout
+}
+
+interface TabSvgProps extends TabViewProps {
+  readonly svgRef?: Ref<SVGSVGElement>
 }
 
 const BAR_NUMBER_RISE = 14
@@ -259,11 +263,16 @@ function Rhythm({ layout }: { readonly layout: TabLayout }) {
 
 // The whole tab as one SVG. It depends only on the score and the layout, so
 // playback and other panel state never redraw it.
-export const TabView = memo(function TabView({ score, layout }: TabViewProps) {
+export const TabView = memo(function TabView({
+  score,
+  layout,
+  svgRef,
+}: TabSvgProps) {
   const width = Math.ceil(layout.width)
   const height = Math.ceil(layout.height)
   return (
     <svg
+      ref={svgRef}
       xmlns="http://www.w3.org/2000/svg"
       width={width}
       height={height}

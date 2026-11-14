@@ -13,6 +13,7 @@
   --border-strong: #c9c5bc;
   --state-done: #1f8a4c;
   --state-alert: #d7322a;
+  --state-alert-soft: #fbe3e1;
   /* The dark playback console. */
   --console-base: #161614;
   --console-raised: #22211e;

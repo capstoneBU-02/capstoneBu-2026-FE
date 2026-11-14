@@ -237,3 +237,53 @@ test('the current bar stays put across a track switch and a restart', async ({
   await expect(elapsed(page)).toHaveText('00:00.0')
   await expect(overlay(page)).toHaveAttribute('data-bar', '1')
 })
+
+test('each track counts the tab from where its player starts', async ({
+  page,
+}) => {
+  // 42.14 s is not on a tenth: the original plays from 42.1 s, 0.04 s
+  // before the section, while the guitar starts on it.
+  await openTask(page, 'task-verse', '&refresh=150')
+  await expect(staff(page)).toHaveAccessibleName('타브 악보 12마디')
+  const calls = await page.evaluate(
+    () => window.workspaceTest.tabCalls().length,
+  )
+  await page.evaluate(() => {
+    window.workspaceTest.reviseTaskOnServer('task-verse', {
+      sectionName: '벌스 1',
+      part: 'rhythm',
+      tuningId: 'e-standard',
+      rangeStartSeconds: 42.14,
+      rangeEndSeconds: 65.8,
+    })
+    window.workspaceTest.updateTaskOnServer('task-verse', {
+      processingStatus: 'completed',
+      progressPercent: null,
+      hasSeparatedAudio: true,
+    })
+  })
+  // The range reads the same to a tenth; the tab loads again for it.
+  await expect
+    .poll(() => page.evaluate(() => window.workspaceTest.tabCalls().length))
+    .toBeGreaterThan(calls)
+  for (const label of ['분리 기타', '원곡'])
+    await expect(lane(page, label)).toHaveAttribute(
+      'data-state',
+      'ready',
+      AUDIO_TIMEOUT,
+    )
+  await expect(staff(page)).toBeVisible()
+
+  await choice(page, '원곡').check()
+  await position(page).focus()
+  await page.keyboard.press('Home')
+  await page.keyboard.press('Shift+ArrowRight')
+  await page.keyboard.press('Shift+ArrowRight')
+  await expect(elapsed(page)).toHaveText('00:02.0')
+  // 2.0 s into the original is 1.96 s into the section: still the first bar.
+  await expect(overlay(page)).toHaveAttribute('data-bar', '1')
+
+  await choice(page, '분리 기타').check()
+  await expect(elapsed(page)).toHaveText('00:02.0')
+  await expect(overlay(page)).toHaveAttribute('data-bar', '2')
+})

@@ -297,6 +297,18 @@
   gap: 12px;
 }
 
+.topActions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Holds what the task screen adds without a box of its own. */
+.slot {
+  display: contents;
+}
+
 .body {
   min-width: 0;
   padding: 28px;

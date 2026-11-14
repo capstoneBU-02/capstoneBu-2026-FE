@@ -59,7 +59,7 @@ function Loading() {
 
 // The tab area of a completed task. The heading shows at once; the tab and
 // the drawing code arrive on their own.
-export function TabPanel({ tab, ...clock }: TabPanelProps) {
+export function TabPanel({ tab, ...staff }: TabPanelProps) {
   const headingId = useId()
   const headingRef = useRef<HTMLHeadingElement>(null)
   // Remounting the boundary clears its failure and renders the fresh Staff.
@@ -97,7 +97,7 @@ export function TabPanel({ tab, ...clock }: TabPanelProps) {
           onRetry={retryWith(() => setAttempt((last) => last + 1))}
         >
           <Suspense fallback={<Loading />}>
-            <Staff score={tab.score} {...clock} />
+            <Staff score={tab.score} {...staff} />
           </Suspense>
         </TabLoadBoundary>
       )}

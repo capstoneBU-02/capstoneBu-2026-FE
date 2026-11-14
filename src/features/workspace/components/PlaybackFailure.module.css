@@ -1,0 +1,37 @@
+/* Full width between the task header and its tracks. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border-default);
+  padding: 10px 28px;
+  background: var(--state-alert-soft);
+  color: var(--ink-primary);
+}
+
+.banner p {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.retry {
+  flex-shrink: 0;
+}
+
+@media (max-width: 1100px) {
+  .banner {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+}
+
+@media (max-width: 700px) {
+  .banner {
+    flex-wrap: wrap;
+    padding: 10px 16px;
+  }
+}

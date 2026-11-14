@@ -1,4 +1,5 @@
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactNode, type Ref } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import { PlayerBar } from '../../player/PlayerBar.tsx'
 import {
@@ -6,6 +7,7 @@ import {
   type SectionPlayback,
 } from '../../player/useSectionPlayer.ts'
 import { TaskUnavailablePanel } from '../../support/TaskUnavailablePanel.tsx'
+import type { TabSource } from '../../tab/TabPanel.tsx'
 import {
   formatTaskRange,
   isTaskInProgress,
@@ -17,12 +19,15 @@ import { processingPhase, statusAnnouncement } from '../processing.ts'
 import { trackLead, trackRange, type TrackId } from '../tracks.ts'
 import { useTaskAudio, type TaskAudioSource } from '../useTaskAudio.ts'
 import type { CopyStatus } from '../useCopyStatus.ts'
+import { useTabDownload } from '../useTabDownload.ts'
 import type { UseTaskDetailResult } from '../useTaskDetail.ts'
-import type { TaskTabSource } from '../useTaskTab.ts'
+import { tabMadeFrom, useTaskTab, type TaskTabSource } from '../useTaskTab.ts'
 import pageStyles from '../WorkspacePage.module.css'
 import { CopyToggle } from './CopyToggle.tsx'
+import { PlaybackFailure } from './PlaybackFailure.tsx'
 import { ProcessingPanel } from './ProcessingPanel.tsx'
 import { LoadingState, ProblemState } from './StateMessage.tsx'
+import { TabDownloadFailure, TabDownloadMenu } from './TabDownload.tsx'
 import {
   NoGuitarPanel,
   TaskFailurePanel,
@@ -72,14 +77,16 @@ function TaskBody({
   detail,
   refreshFailed,
   recovery,
-  source,
+  tab,
+  svgRef,
   player,
   playback,
 }: {
   detail: TaskDetail
   refreshFailed: boolean
   recovery: TaskRecoveryActions
-  source: TaskTabSource
+  tab: TabSource
+  svgRef: Ref<SVGSVGElement>
   player: SectionPlayback
   playback: TrackId
 }) {
@@ -92,20 +99,11 @@ function TaskBody({
     ) : (
       <TaskFailurePanel detail={detail} {...recovery} />
     )
-  // The tab is made from these. A section changed elsewhere, as from another
-  // browser tab, can finish again before this screen sees it processing.
-  const madeFrom = [
-    task.id,
-    task.part,
-    task.tuningId,
-    task.rangeStartSeconds,
-    task.rangeEndSeconds,
-  ].join(':')
   return (
     <TaskTab
-      key={madeFrom}
-      taskId={task.id}
-      source={source}
+      key={tabMadeFrom(task)}
+      tab={tab}
+      svgRef={svgRef}
       player={player}
       lead={trackLead(playback, task)}
     />
@@ -118,12 +116,14 @@ function TaskWorkspace({
   source,
   recovery,
   copy,
+  actions,
 }: {
   detail: TaskDetail
   refreshFailed: boolean
   source: TaskSource
   recovery: TaskRecoveryActions
   copy: CopyStatus
+  actions: HTMLElement | null
 }) {
   const { task, song, previousResults } = detail
   const previousId = useId()
@@ -139,6 +139,27 @@ function TaskWorkspace({
   useEffect(() => {
     onPlayingChange(player.playing)
   }, [onPlayingChange, player.playing])
+  const tab = useTaskTab(task, source)
+  // The tab drawn on screen. Its drawing code loads on its own and can fail,
+  // so a loaded tab is not yet one to download.
+  const [svg, setSvg] = useState<SVGSVGElement | null>(null)
+  const drawn = tab.status === 'ready' && svg !== null
+  const download = useTabDownload({
+    tab,
+    svg,
+    songName: song.name,
+    sectionName: task.sectionName,
+    // A tab that loads again, even the same one, starts with no failure.
+    key: drawn ? tabMadeFrom(task) : '',
+  })
+  const playbackAudio = taskAudio.audio[playback]
+  const playbackTrack = tracks.find((track) => track.id === playback)
+  // Only a finished task has a tab to fall back on.
+  const playbackFailed =
+    task.processingStatus === 'completed' &&
+    playbackAudio != null &&
+    playbackTrack !== undefined &&
+    (playbackAudio.state.status === 'failed' || playbackAudio.retrying)
   return (
     <div className={styles.workspace}>
       <div className={styles.content}>
@@ -174,12 +195,21 @@ function TaskWorkspace({
             <CopyToggle task={task} copy={copy} />
           )}
         </header>
-        <TaskTracks task={task} {...taskAudio} player={player} />
+        {playbackFailed && (
+          <PlaybackFailure label={playbackTrack.label} audio={playbackAudio} />
+        )}
+        <TaskTracks
+          task={task}
+          {...taskAudio}
+          player={player}
+          bannerTrack={playbackFailed ? playback : null}
+        />
         <TaskBody
           detail={detail}
           refreshFailed={refreshFailed}
           recovery={recovery}
-          source={source}
+          tab={tab}
+          svgRef={setSvg}
           player={player}
           playback={playback}
         />
@@ -211,9 +241,17 @@ function TaskWorkspace({
         source={
           choices.length > 0
             ? { options: choices, value: playback, onChange: taskAudio.choose }
-            : tracks.find((track) => track.id === playback)?.label
+            : playbackTrack?.label
+        }
+        notice={
+          drawn &&
+          download.failure && <TabDownloadFailure download={download} />
         }
       />
+      {/* 내려받기 sits in the page's top bar, beside 구간 수정. */}
+      {drawn &&
+        actions &&
+        createPortal(<TabDownloadMenu download={download} />, actions)}
     </div>
   )
 }
@@ -230,11 +268,14 @@ type TaskPanelProps = {
       source?: never
       recovery?: never
       copy?: never
+      actions?: never
     }
   | {
       source: TaskSource
       recovery: TaskRecoveryActions
       copy: CopyStatus
+      // Where the top bar keeps the task's actions, for 내려받기.
+      actions: HTMLElement | null
       renderDetail?: never
     }
 )
@@ -247,6 +288,7 @@ export function TaskPanel({
   source,
   recovery,
   copy,
+  actions,
 }: TaskPanelProps) {
   switch (result.status) {
     case 'success':
@@ -261,6 +303,7 @@ export function TaskPanel({
           source={source}
           recovery={recovery}
           copy={copy}
+          actions={actions}
         />
       )
     case 'unavailable':

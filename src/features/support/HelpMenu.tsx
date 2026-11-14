@@ -1,7 +1,8 @@
-import { useEffect, useRef, type RefObject } from 'react'
+import type { RefObject } from 'react'
 import fileIcon from '../../assets/figma/support/file-16.svg'
 import helpIcon from '../../assets/figma/support/help-16.svg'
 import infoIcon from '../../assets/figma/support/info-16.svg'
+import { Menu } from '../../shared/ui/Menu.tsx'
 import type { SupportTopic } from './SupportDialog.tsx'
 import './support.css'
 
@@ -26,60 +27,13 @@ export function HelpMenu({
   onClose,
   triggerRef,
 }: HelpMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (open) menuRef.current?.querySelector('button')?.focus()
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    function handlePointerDown(event: PointerEvent) {
-      if (
-        event.target instanceof Node &&
-        !menuRef.current?.contains(event.target) &&
-        !triggerRef.current?.contains(event.target)
-      )
-        onClose()
-    }
-    document.addEventListener('pointerdown', handlePointerDown)
-    return () => document.removeEventListener('pointerdown', handlePointerDown)
-  }, [open, onClose, triggerRef])
-
-  if (!open) return null
-
   return (
-    <div
-      ref={menuRef}
+    <Menu
+      open={open}
+      label="도움말"
+      onClose={onClose}
+      triggerRef={triggerRef}
       className="support-help-menu"
-      role="menu"
-      aria-label="도움말"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' || event.key === 'Tab') {
-          if (event.key === 'Escape') {
-            event.preventDefault()
-            event.stopPropagation()
-          }
-          onClose()
-          triggerRef.current?.focus({ preventScroll: true })
-          return
-        }
-        const buttons = [...event.currentTarget.querySelectorAll('button')]
-        const current = buttons.indexOf(
-          document.activeElement as HTMLButtonElement,
-        )
-        let next: number | null = null
-        if (event.key === 'ArrowDown') next = (current + 1) % buttons.length
-        if (event.key === 'ArrowUp')
-          next = (current - 1 + buttons.length) % buttons.length
-        if (event.key === 'Home') next = 0
-        if (event.key === 'End') next = buttons.length - 1
-        if (next !== null) {
-          event.preventDefault()
-          event.stopPropagation()
-          buttons[next]?.focus()
-        }
-      }}
     >
       {items.map(({ topic, label, icon }) => (
         <button
@@ -100,6 +54,6 @@ export function HelpMenu({
           {label}
         </button>
       ))}
-    </div>
+    </Menu>
   )
 }
