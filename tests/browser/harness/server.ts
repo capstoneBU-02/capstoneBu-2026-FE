@@ -217,6 +217,21 @@ export function retriedTask(taskId: string): WorkspaceTask {
   return retried
 }
 
+// 카피 완료 is kept for a finished task only (COPY-04).
+export function copiedTask(taskId: string, confirmed: boolean): WorkspaceTask {
+  const task = findTask(taskId)
+  if (!task)
+    throw new WorkspaceRepositoryError('task-unavailable', 'Unavailable')
+  if (task.processingStatus !== 'completed')
+    throw new WorkspaceRepositoryError('copy-status-failed', 'Not finished')
+  const saved: WorkspaceTask = {
+    ...task,
+    copyStatus: confirmed ? 'confirmed' : 'unreviewed',
+  }
+  revisedTasks.set(taskId, saved)
+  return saved
+}
+
 export const serverControls = {
   setRetriesUsed(taskId, used) {
     retriesUsed.set(taskId, used)

@@ -167,6 +167,20 @@ const repository: AccessRepository = {
               )
             : workspace.loadSeparatedAudio(taskId, signal)
         },
+        loadTab(taskId, signal) {
+          return expired
+            ? Promise.reject(
+                new WorkspaceRepositoryError('expired', 'Expired test session'),
+              )
+            : workspace.loadTab(taskId, signal)
+        },
+        saveCopyStatus(taskId, confirmed, signal) {
+          return expired
+            ? Promise.reject(
+                new WorkspaceRepositoryError('expired', 'Expired test session'),
+              )
+            : workspace.saveCopyStatus(taskId, confirmed, signal)
+        },
       }
       wrappers.set(workspace, wrapper)
     }

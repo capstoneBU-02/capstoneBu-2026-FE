@@ -39,6 +39,7 @@ import {
   newTaskLabels,
   waitForMockRequest,
 } from './mockServer.ts'
+import { mockTabInput } from './mockTab.ts'
 import { taskStages } from './processing.ts'
 import {
   WorkspaceRepositoryError,
@@ -386,6 +387,39 @@ export function createMockWorkspaceRepository(
         (candidate) => candidate.id === taskId,
       )
       return audio.separated(task, signal)
+    },
+    async loadTab(taskId, signal) {
+      await waitForMockRequest(300, signal)
+      throwIfExpired()
+      const { task } = findCurrent(taskId)
+      if (task.processingStatus !== 'completed') {
+        throw new WorkspaceRepositoryError(
+          'tab-unavailable',
+          '타브를 불러오지 못했어요.',
+        )
+      }
+      return mockTabInput(
+        task.tuningId,
+        task.rangeEndSeconds - task.rangeStartSeconds,
+      )
+    },
+    async saveCopyStatus(taskId, confirmed, signal) {
+      await waitForMockRequest(300, signal)
+      throwIfExpired()
+      const { index, task } = findCurrent(taskId)
+      // A task back in the queue has no tab to copy yet.
+      if (task.processingStatus !== 'completed') {
+        throw new WorkspaceRepositoryError(
+          'copy-status-failed',
+          '카피 완료를 저장하지 못했어요.',
+        )
+      }
+      const saved: WorkspaceTask = {
+        ...task,
+        copyStatus: confirmed ? 'confirmed' : 'unreviewed',
+      }
+      tasks.splice(index, 1, saved)
+      return { ...saved }
     },
   }
 }

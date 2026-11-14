@@ -1,7 +1,10 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import { PlayerBar } from '../../player/PlayerBar.tsx'
-import { useSectionPlayer } from '../../player/useSectionPlayer.ts'
+import {
+  useSectionPlayer,
+  type SectionPlayback,
+} from '../../player/useSectionPlayer.ts'
 import { TaskUnavailablePanel } from '../../support/TaskUnavailablePanel.tsx'
 import {
   formatTaskRange,
@@ -11,10 +14,13 @@ import {
 } from '../format.ts'
 import type { TaskDetail } from '../model.ts'
 import { processingPhase, statusAnnouncement } from '../processing.ts'
-import { trackRange } from '../tracks.ts'
+import { trackLead, trackRange, type TrackId } from '../tracks.ts'
 import { useTaskAudio, type TaskAudioSource } from '../useTaskAudio.ts'
+import type { CopyStatus } from '../useCopyStatus.ts'
 import type { UseTaskDetailResult } from '../useTaskDetail.ts'
+import type { TaskTabSource } from '../useTaskTab.ts'
 import pageStyles from '../WorkspacePage.module.css'
+import { CopyToggle } from './CopyToggle.tsx'
 import { ProcessingPanel } from './ProcessingPanel.tsx'
 import { LoadingState, ProblemState } from './StateMessage.tsx'
 import {
@@ -22,9 +28,13 @@ import {
   TaskFailurePanel,
   type TaskRecoveryActions,
 } from './TaskFailurePanel.tsx'
+import { TaskTab } from './TaskTab.tsx'
 import { TaskTracks } from './TaskTracks.tsx'
 import { taskStatusIcon } from './taskStatusIcon.ts'
 import styles from './TaskWorkspace.module.css'
+
+// What a task's screen loads: the audio of its tracks and its tab.
+export type TaskSource = TaskAudioSource & TaskTabSource
 
 export function TaskBreadcrumb({
   songName,
@@ -55,18 +65,24 @@ function useStatusAnnouncement({ task, stages }: TaskDetail): string {
   return announced.message
 }
 
-// A failed task gets the recovery its failure allows. A finished task keeps
-// the placeholder until its tab and comparison land.
+// A failed task gets the recovery its failure allows; a finished one shows
+// its tab, which loads again whenever the task finishes again or its section
+// changes.
 function TaskBody({
   detail,
   refreshFailed,
   recovery,
+  source,
+  player,
+  playback,
 }: {
   detail: TaskDetail
   refreshFailed: boolean
   recovery: TaskRecoveryActions
+  source: TaskTabSource
+  player: SectionPlayback
+  playback: TrackId
 }) {
-  const pendingId = useId()
   const { task } = detail
   if (isTaskInProgress(task))
     return <ProcessingPanel detail={detail} refreshFailed={refreshFailed} />
@@ -76,32 +92,43 @@ function TaskBody({
     ) : (
       <TaskFailurePanel detail={detail} {...recovery} />
     )
+  // The tab is made from these. A section changed elsewhere, as from another
+  // browser tab, can finish again before this screen sees it processing.
+  const madeFrom = [
+    task.id,
+    task.part,
+    task.tuningId,
+    task.rangeStartSeconds,
+    task.rangeEndSeconds,
+  ].join(':')
   return (
-    <section className={styles.pending} aria-labelledby={pendingId}>
-      <h2 id={pendingId}>작업 화면 준비 중</h2>
-      <p>
-        타브와 비교는 다음 단계에서 연결돼요. 내려받기, 녹음, 카피 완료 표시도
-        그때 사용할 수 있어요.
-      </p>
-    </section>
+    <TaskTab
+      key={madeFrom}
+      taskId={task.id}
+      source={source}
+      player={player}
+      lead={trackLead(playback, task)}
+    />
   )
 }
 
 function TaskWorkspace({
   detail,
   refreshFailed,
-  audioSource,
+  source,
   recovery,
+  copy,
 }: {
   detail: TaskDetail
   refreshFailed: boolean
-  audioSource: TaskAudioSource
+  source: TaskSource
   recovery: TaskRecoveryActions
+  copy: CopyStatus
 }) {
   const { task, song, previousResults } = detail
   const previousId = useId()
   const announcement = useStatusAnnouncement(detail)
-  const taskAudio = useTaskAudio(detail, audioSource)
+  const taskAudio = useTaskAudio(detail, source)
   const { tracks, playback, choices, onPlayingChange } = taskAudio
   const playbackState = taskAudio.audio[playback]?.state
   // One player for the task: switching tracks plays on from the same time.
@@ -124,29 +151,37 @@ function TaskWorkspace({
         >
           {announcement}
         </p>
-        <header className={styles.header}>
-          <div className={styles.titleRow}>
-            <h1>{task.sectionName}</h1>
-            <span className={styles.status}>
-              <Icon name={taskStatusIcon(task)} />
-              {taskHeadlineStatus(task)}
-            </span>
+        <header className={`${styles.header} ${styles.taskHeader}`}>
+          <div className={styles.heading}>
+            <div className={styles.titleRow}>
+              <h1>{task.sectionName}</h1>
+              <span className={styles.status}>
+                <Icon name={taskStatusIcon(task)} />
+                {taskHeadlineStatus(task)}
+              </span>
+            </div>
+            <p className={styles.meta}>
+              <span className={styles.range}>{formatTaskRange(task)}</span>
+              <span>{task.partLabel}</span>
+              <span>{task.tuningLabel}</span>
+            </p>
+            <p className={styles.meta}>
+              <span>입력 · {songInputLabel(song.inputKind)}</span>
+              <span className={styles.truncate}>{song.fileName}</span>
+            </p>
           </div>
-          <p className={styles.meta}>
-            <span className={styles.range}>{formatTaskRange(task)}</span>
-            <span>{task.partLabel}</span>
-            <span>{task.tuningLabel}</span>
-          </p>
-          <p className={styles.meta}>
-            <span>입력 · {songInputLabel(song.inputKind)}</span>
-            <span className={styles.truncate}>{song.fileName}</span>
-          </p>
+          {task.processingStatus === 'completed' && (
+            <CopyToggle task={task} copy={copy} />
+          )}
         </header>
         <TaskTracks task={task} {...taskAudio} player={player} />
         <TaskBody
           detail={detail}
           refreshFailed={refreshFailed}
           recovery={recovery}
+          source={source}
+          player={player}
+          playback={playback}
         />
         {/* SEG-04: each kept result names the section it was made from. */}
         {previousResults.length > 0 && (
@@ -192,12 +227,14 @@ type TaskPanelProps = {
 } & (
   | {
       renderDetail: (detail: TaskDetail) => ReactNode
-      audioSource?: never
+      source?: never
       recovery?: never
+      copy?: never
     }
   | {
-      audioSource: TaskAudioSource
+      source: TaskSource
       recovery: TaskRecoveryActions
+      copy: CopyStatus
       renderDetail?: never
     }
 )
@@ -207,8 +244,9 @@ export function TaskPanel({
   onRetry,
   onReturnHome,
   renderDetail,
-  audioSource,
+  source,
   recovery,
+  copy,
 }: TaskPanelProps) {
   switch (result.status) {
     case 'success':
@@ -220,8 +258,9 @@ export function TaskPanel({
           key={result.detail.task.id}
           detail={result.detail}
           refreshFailed={result.refreshFailed}
-          audioSource={audioSource}
+          source={source}
           recovery={recovery}
+          copy={copy}
         />
       )
     case 'unavailable':

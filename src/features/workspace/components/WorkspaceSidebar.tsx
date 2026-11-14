@@ -85,6 +85,12 @@ function SongGroup({
               <Icon name={taskStatusIcon(task)} />
               <span className={styles.truncate}>{task.sectionName}</span>
               {progress && <span className={styles.progress}>{progress}</span>}
+              {task.copyStatus === 'confirmed' && (
+                <span className={styles.copied}>
+                  <Icon name="check" />
+                  <span className={styles.srOnly}>카피 완료</span>
+                </span>
+              )}
             </button>
           )
         })}

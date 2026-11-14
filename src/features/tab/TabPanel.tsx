@@ -6,15 +6,35 @@ import {
   useState,
   type ComponentType,
 } from 'react'
-import { TabLoadBoundary } from './TabLoadBoundary.tsx'
+import type { TabScore } from './model.ts'
+import { TabFailure } from './TabFailure.tsx'
+import { TAB_DRAW_FAILED, TabLoadBoundary } from './TabLoadBoundary.tsx'
 import styles from './TabPanel.module.css'
 import type { TabStaffProps } from './TabStaff.tsx'
 
-export type TabPanelProps = TabStaffProps
+// The tab as its request stands: a request that failed, or an answer the
+// screen could not read, can be asked for again.
+export type TabSource =
+  | { readonly status: 'loading' }
+  | {
+      readonly status: 'failed'
+      readonly reason: 'request' | 'format'
+      retry(): void
+    }
+  | { readonly status: 'ready'; readonly score: TabScore }
+
+export interface TabPanelProps extends Omit<TabStaffProps, 'score'> {
+  readonly tab: TabSource
+}
 
 interface StaffModule {
   readonly default: ComponentType<TabStaffProps>
 }
+
+const FAILURE_MESSAGES = {
+  request: '타브를 불러오지 못했어요. 다시 시도해 주세요.',
+  format: TAB_DRAW_FAILED,
+} as const
 
 // A lazy component keeps a failed load for good, so a failure swaps in a
 // fresh one: the retry, and every panel after it, loads the code again.
@@ -29,18 +49,26 @@ function loadStaff(): Promise<StaffModule> {
 // and a panel opened later, for another task, draws at once.
 let Staff = lazy(loadStaff)
 
-// The tab area of a completed task. The heading shows at once; the drawing
-// code arrives as its own chunk.
-export function TabPanel(props: TabPanelProps) {
+function Loading() {
+  return (
+    <p className={styles.message} role="status">
+      타브를 불러오는 중이에요
+    </p>
+  )
+}
+
+// The tab area of a completed task. The heading shows at once; the tab and
+// the drawing code arrive on their own.
+export function TabPanel({ tab, ...clock }: TabPanelProps) {
   const headingId = useId()
   const headingRef = useRef<HTMLHeadingElement>(null)
   // Remounting the boundary clears its failure and renders the fresh Staff.
   const [attempt, setAttempt] = useState(0)
 
-  const retry = () => {
-    // The button goes away with the failure, so focus stays in the tab area.
+  // The button goes away with the failure, so focus stays in the tab area.
+  const retryWith = (retry: () => void) => () => {
     headingRef.current?.focus({ preventScroll: true })
-    setAttempt((last) => last + 1)
+    retry()
   }
 
   return (
@@ -56,17 +84,23 @@ export function TabPanel(props: TabPanelProps) {
         </h2>
         <span className={styles.draft}>초안 · 자동 생성</span>
       </div>
-      <TabLoadBoundary key={attempt} onRetry={retry}>
-        <Suspense
-          fallback={
-            <p className={styles.message} role="status">
-              타브를 불러오는 중이에요
-            </p>
-          }
+      {tab.status === 'loading' && <Loading />}
+      {tab.status === 'failed' && (
+        <TabFailure
+          message={FAILURE_MESSAGES[tab.reason]}
+          onRetry={retryWith(tab.retry)}
+        />
+      )}
+      {tab.status === 'ready' && (
+        <TabLoadBoundary
+          key={attempt}
+          onRetry={retryWith(() => setAttempt((last) => last + 1))}
         >
-          <Staff {...props} />
-        </Suspense>
-      </TabLoadBoundary>
+          <Suspense fallback={<Loading />}>
+            <Staff score={tab.score} {...clock} />
+          </Suspense>
+        </TabLoadBoundary>
+      )}
     </section>
   )
 }

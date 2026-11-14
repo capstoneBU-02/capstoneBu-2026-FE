@@ -68,6 +68,18 @@ export interface TestControls {
   // Moves a task on the server only, as its processing would; the screen
   // sees it on its next request.
   updateTaskOnServer(taskId: string, change: ServerTaskChange): void
+  // Tab requests, oldest first, and whether the screen has cancelled each.
+  tabCalls(): Array<{ taskId: string; aborted: boolean }>
+  // pending-tab keeps loadTab requests open until settled here.
+  resolveTab(): void
+  // Answers the open tab requests with a tab the screen cannot read.
+  resolveTabWithBadFormat(): void
+  failTab(code: 'tab-unavailable' | 'expired'): void
+  // Copy status saves, oldest first, and whether each was cancelled.
+  copyCalls(): Array<{ taskId: string; confirmed: boolean; aborted: boolean }>
+  // pending-copy keeps saveCopyStatus requests open until settled here.
+  resolveCopy(): void
+  failCopy(code: 'copy-status-failed' | 'expired'): void
   // slow.mp3 duration reads stay pending until resolved here.
   resolveProbe(seconds: number): void
   // Ends the pending slow.mp3 reads as the real probe's timeout would.
