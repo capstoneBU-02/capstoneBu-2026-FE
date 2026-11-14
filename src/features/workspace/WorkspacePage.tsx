@@ -157,6 +157,8 @@ export function WorkspacePage({
     null,
   )
   const mainContentRef = useRef<HTMLElement>(null)
+  // The top bar's spot for the task screen's actions.
+  const [taskActions, setTaskActions] = useState<HTMLElement | null>(null)
   // Shown on the list after 멈추기 took the user off the stopped task, or on
   // a task that finished before it could be stopped.
   const [stopNotice, setStopNotice] = useState<
@@ -440,38 +442,42 @@ export function WorkspacePage({
             ) : (
               TOP_BAR_LABELS[view.name]
             )}
-            {shownTask && canReviseSection(shownTask) && (
-              <Button
-                variant="ghost"
-                compact
-                onClick={() =>
-                  go({ name: 'edit-section', taskId: shownTask.id })
-                }
-              >
-                구간 수정
-              </Button>
-            )}
-            {shownTask && detail && (
-              <StopTaskControl
-                key={shownTask.id}
-                task={shownTask}
-                stoppable={stoppable}
-                inputKind={detail.song.inputKind}
-                previousResultCount={detail.previousResults.length}
-                stopping={recovery.stoppingTaskId === shownTask.id}
-                onStop={() => recovery.stop(shownTask)}
-                onEnded={() => {
-                  if (workspaceId)
-                    setStopNotice({
-                      workspaceId,
-                      viewKey,
-                      message: `${shownTask.sectionName} 작업이 이미 끝나서 멈출 수 없어요.`,
-                      icon: 'info',
-                    })
-                }}
-                fallbackFocusRef={mainContentRef}
-              />
-            )}
+            <div className={styles.topActions}>
+              {shownTask && canReviseSection(shownTask) && (
+                <Button
+                  variant="ghost"
+                  compact
+                  onClick={() =>
+                    go({ name: 'edit-section', taskId: shownTask.id })
+                  }
+                >
+                  구간 수정
+                </Button>
+              )}
+              {/* The task screen puts 내려받기 here once its tab is ready. */}
+              <div ref={setTaskActions} className={styles.slot} />
+              {shownTask && detail && (
+                <StopTaskControl
+                  key={shownTask.id}
+                  task={shownTask}
+                  stoppable={stoppable}
+                  inputKind={detail.song.inputKind}
+                  previousResultCount={detail.previousResults.length}
+                  stopping={recovery.stoppingTaskId === shownTask.id}
+                  onStop={() => recovery.stop(shownTask)}
+                  onEnded={() => {
+                    if (workspaceId)
+                      setStopNotice({
+                        workspaceId,
+                        viewKey,
+                        message: `${shownTask.sectionName} 작업이 이미 끝나서 멈출 수 없어요.`,
+                        icon: 'info',
+                      })
+                  }}
+                  fallbackFocusRef={mainContentRef}
+                />
+              )}
+            </div>
           </header>
         )}
         {!ownTopBar && consentFeedback}
@@ -621,6 +627,7 @@ export function WorkspacePage({
               uploadOther: uploadOtherFile,
             }}
             copy={copy}
+            actions={taskActions}
           />
         )}
         {loadState === 'empty' && view.name === 'home' && (

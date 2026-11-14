@@ -14,9 +14,10 @@ const songHeading = (page: Page, name: string) =>
 const rows = (page: Page) => main(page).locator('tbody tr')
 const editButton = (page: Page) =>
   main(page).getByRole('button', { name: '구간 수정' })
-// The top bar's own button; the dialog's 멈추기 sits deeper inside it.
+// The top bar's own button, in its row of actions; the dialog's 멈추기 sits
+// deeper inside it.
 const stopButton = (page: Page) =>
-  main(page).locator('header > button', { hasText: '멈추기' })
+  main(page).locator('header > div > button', { hasText: '멈추기' })
 
 type Change = Parameters<Window['workspaceTest']['updateTaskOnServer']>[1]
 

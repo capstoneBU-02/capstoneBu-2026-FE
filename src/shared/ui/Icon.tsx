@@ -5,6 +5,7 @@ import chevronDown from '../../assets/earmark/chevron-down.svg'
 import chevronRight from '../../assets/earmark/chevron-right.svg'
 import clock from '../../assets/earmark/clock.svg'
 import close from '../../assets/earmark/close.svg'
+import download from '../../assets/earmark/download.svg'
 import help from '../../assets/earmark/help.svg'
 import info from '../../assets/earmark/info.svg'
 import list from '../../assets/earmark/list.svg'
@@ -23,9 +24,9 @@ import stop from '../../assets/earmark/stop.svg'
 import upload from '../../assets/earmark/upload.svg'
 import styles from './Ui.module.css'
 
-// alertTriangle, checkDone, clock, music, refresh and stop follow Lucide
-// shapes in the Figma palette; they are not Figma exports. refresh is white
-// for the primary button.
+// alertTriangle, checkDone, clock, download, music, refresh and stop follow
+// Lucide shapes in the Figma palette; they are not Figma exports. refresh is
+// white for the primary button.
 const icons = {
   alertTriangle: [alertTriangle, 16],
   check: [check, 12],
@@ -34,6 +35,7 @@ const icons = {
   chevronRight: [chevronRight, 14],
   clock: [clock, 12],
   close: [close, 16],
+  download: [download, 14],
   help: [help, 15],
   info: [info, 14],
   list: [list, 15],

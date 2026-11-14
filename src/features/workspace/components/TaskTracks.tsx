@@ -74,14 +74,25 @@ function Waveform({
 function AudioLane({
   label,
   audio,
+  retryElsewhere,
   ...lane
-}: LaneProps & { label: string; audio: SongAudio }) {
+}: LaneProps & {
+  label: string
+  audio: SongAudio
+  // The playback failure banner holds this lane's retry.
+  retryElsewhere: boolean
+}) {
   const { state, retrying } = audio
   const laneRef = useRef<HTMLDivElement>(null)
   const retriedRef = useRef(false)
   const message = STATUS_TEXT[state.status]
 
-  // The retry button goes away once the waveform loads; keep focus nearby.
+  useEffect(() => {
+    if (retrying) retriedRef.current = true
+  }, [retrying])
+
+  // The retry button, here or in the banner, goes away once the waveform
+  // loads; keep focus nearby.
   useEffect(() => {
     if (state.status !== 'ready' || !retriedRef.current) return
     retriedRef.current = false
@@ -107,16 +118,14 @@ function AudioLane({
         {message && <span className={pageStyles.srOnly}>{label} </span>}
         {message}
       </p>
-      {(state.status === 'failed' || retrying) && (
+      {(state.status === 'failed' || retrying) && !retryElsewhere && (
         <Button
           compact
           aria-label={`${label} 다시 시도`}
           aria-disabled={retrying}
           data-busy={retrying}
           onClick={() => {
-            if (retrying) return
-            retriedRef.current = true
-            audio.retry()
+            if (!retrying) audio.retry()
           }}
         >
           다시 시도
@@ -129,8 +138,13 @@ function AudioLane({
 function TrackLane({
   track,
   audio,
+  retryElsewhere,
   ...lane
-}: LaneProps & { track: TaskTrack; audio: SongAudio | null }) {
+}: LaneProps & {
+  track: TaskTrack
+  audio: SongAudio | null
+  retryElsewhere: boolean
+}) {
   if (track.content === 'pending' || track.content === 'missing')
     return (
       <div className={styles.lane}>
@@ -145,7 +159,12 @@ function TrackLane({
       </div>
     )
   return audio ? (
-    <AudioLane label={track.label} audio={audio} {...lane} />
+    <AudioLane
+      label={track.label}
+      audio={audio}
+      retryElsewhere={retryElsewhere}
+      {...lane}
+    />
   ) : null
 }
 
@@ -157,10 +176,13 @@ export function TaskTracks({
   audio,
   playback,
   player,
-}: { task: WorkspaceTask; player: SectionPlayback } & Pick<
-  TaskAudio,
-  'tracks' | 'audio' | 'playback'
->) {
+  bannerTrack,
+}: {
+  task: WorkspaceTask
+  player: SectionPlayback
+  // The track whose failure the banner above shows, with its retry.
+  bannerTrack: TrackId | null
+} & Pick<TaskAudio, 'tracks' | 'audio' | 'playback'>) {
   const rulerRef = useRef<HTMLDivElement>(null)
   const rowsRef = useRef<HTMLDivElement>(null)
   const width = useElementWidth(rulerRef)
@@ -188,6 +210,7 @@ export function TaskTracks({
                 <TrackLane
                   track={track}
                   audio={audio[track.id]}
+                  retryElsewhere={track.id === bannerTrack}
                   window={windowOf(track.id)}
                   width={width}
                   playing={playing}

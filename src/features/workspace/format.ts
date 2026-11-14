@@ -49,3 +49,10 @@ export function isTaskInProgress(
     task.processingStatus === 'queued' || task.processingStatus === 'processing'
   )
 }
+
+// The banner over a finished task whose playing track failed to load. A
+// label that already ends in 음원, like 올린 음원, keeps it once.
+export function playbackFailureText(trackLabel: string): string {
+  const audio = trackLabel.endsWith('음원') ? trackLabel : `${trackLabel} 음원`
+  return `${audio}을 재생하지 못했어요. 타브는 그대로 볼 수 있어요.`
+}

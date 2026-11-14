@@ -21,6 +21,16 @@
   scroll-padding-bottom: calc(112px + env(safe-area-inset-bottom));
 }
 
+/* Clear of the bar by 20px, in the middle of it. */
+.notice {
+  position: absolute;
+  bottom: calc(100% + 20px);
+  left: 50%;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  transform: translateX(-50%);
+}
+
 .row {
   display: flex;
   min-height: 64px;

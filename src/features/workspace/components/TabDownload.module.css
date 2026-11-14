@@ -1,0 +1,93 @@
+/* The menu opens under 내려받기, its right edge on the button's. */
+.anchor {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 258px;
+  max-width: calc(100vw - 32px);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 6px;
+  background: var(--surface-default);
+  box-shadow: 0 8px 12px rgb(20 20 18 / 12%);
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: transparent;
+  color: var(--ink-primary);
+  text-align: left;
+}
+
+.item:hover,
+.item:focus-visible {
+  background: var(--surface-canvas);
+}
+
+.item img {
+  display: block;
+  flex-shrink: 0;
+  max-width: none;
+  margin-top: 1px;
+}
+
+.text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  letter-spacing: -0.013px;
+}
+
+.about {
+  color: var(--ink-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* On the console's dark, centred over the player bar. */
+.failure {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius-m);
+  padding: 8px 8px 8px 14px;
+  background: var(--console-base);
+  color: var(--console-text);
+  box-shadow: 0 8px 20px rgb(20 20 18 / 24%);
+}
+
+.failure p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.failure .retry {
+  flex-shrink: 0;
+  border-color: var(--console-line);
+  background: transparent;
+  color: var(--console-text);
+}

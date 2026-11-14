@@ -50,6 +50,22 @@ Noto's official 124-subset stylesheet was reduced to the 90 subsets intersecting
 
 Variable Noto files serve the three requested UI weights through one shared resource per Unicode subset. JetBrains 400, 500, and 700 likewise share one resource. Declaring only the needed ranges avoids separate static files for every weight.
 
+### Tab PDF export — 2026-11-14
+
+jsPDF embeds TrueType only, so the tab's PDF export carries JetBrains Mono as two static TTF files, fetched once from the official CSS2 API with a non-WOFF2 user-agent:
+
+```text
+https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400
+https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700
+```
+
+| File                     |   Bytes | Weight | Use                                         |
+| ------------------------ | ------: | -----: | ------------------------------------------- |
+| `jetbrains-mono-400.ttf` | 112,172 |    400 | Tab PDF: string names, bar numbers, P.M., h |
+| `jetbrains-mono-700.ttf` | 112,092 |    700 | Tab PDF: fret numbers (Mono/Tab)            |
+
+They are unmodified Google Fonts outputs, renamed locally, pinned in `sources.json` with their `fonts.gstatic.com` URLs and SHA-256 hashes. They are not part of `fonts.css`: the export module imports them with `?url`, so the browser requests them only when a PDF is made. jsPDF writes only the glyphs used into the PDF. The PNG export inlines the WOFF2 above instead, since an SVG drawn into a canvas cannot reach the page's fonts.
+
 ## Loading and validation
 
 `src/index.css` imports `fonts.css`; Vite resolves the relative font URLs into fingerprinted local assets. `font-display: swap` keeps text visible during loading. Existing line heights and component sizes remain explicit. The browser requests only subsets whose Unicode ranges occur on the rendered page; there are no global font preloads or external font requests.

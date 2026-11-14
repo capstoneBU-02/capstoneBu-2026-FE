@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type Ref,
 } from 'react'
 import { barAtTime } from './barAtTime.ts'
 import { layoutTab, type TabLayout } from './layout.ts'
@@ -20,6 +21,8 @@ export interface TabStaffProps {
   // Calls back when the time moves without playback, as a restart while
   // paused does, and returns the unsubscribe.
   subscribeSeek(listener: () => void): () => void
+  // The drawn tab SVG, for a download of the tab as it shows.
+  readonly svgRef?: Ref<SVGSVGElement>
 }
 
 interface Painted {
@@ -108,7 +111,7 @@ function useWidth() {
 // Loaded only when a tab is shown, so the rest of the app never downloads
 // the layout and drawing code.
 export default function TabStaff(props: TabStaffProps) {
-  const { score } = props
+  const { score, svgRef } = props
   const [scrollerRef, width] = useWidth()
   const layout = useMemo(
     () => (width === null ? null : layoutTab(score, width)),
@@ -129,7 +132,7 @@ export default function TabStaff(props: TabStaffProps) {
     >
       {layout !== null && (
         <div className={styles.canvas}>
-          <TabView score={score} layout={layout} />
+          <TabView score={score} layout={layout} svgRef={svgRef} />
           <div
             ref={currentBarRef}
             className={styles.currentBar}

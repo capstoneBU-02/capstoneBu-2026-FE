@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   type CSSProperties,
+  type ReactNode,
 } from 'react'
 import { formatSectionTime } from '../new-section/sectionTime.ts'
 import {
@@ -35,6 +36,8 @@ type Props = {
   // On screens built from tracks: the name of the one track, or a switch
   // between them.
   source?: string | SourceSwitch
+  // A message about the screen, centred just above the bar.
+  notice?: ReactNode
 }
 
 // Rounded down, so the display never reads the full length before wrapping.
@@ -84,7 +87,7 @@ function SourceChoices({ options, value, onChange }: SourceSwitch) {
   )
 }
 
-export function PlayerBar({ playback, source }: Props) {
+export function PlayerBar({ playback, source, notice }: Props) {
   const {
     available,
     length,
@@ -121,6 +124,7 @@ export function PlayerBar({ playback, source }: Props) {
 
   return (
     <section className={styles.bar} aria-label="구간 재생">
+      {notice && <div className={styles.notice}>{notice}</div>}
       <div className={styles.row}>
         <div className={styles.transport}>
           <button

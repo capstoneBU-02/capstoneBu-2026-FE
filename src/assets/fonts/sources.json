@@ -637,6 +637,20 @@
     "sha256": "83c005d49d8a6a50474c73a5a36ac0468076e9c4a29da7bdb14995d80560a5be"
   },
   {
+    "family": "jetbrains-mono",
+    "file": "jetbrains-mono-400.ttf",
+    "sourceUrl": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPQ.ttf",
+    "bytes": 112172,
+    "sha256": "44ce4a84f20d60f24539bd0cef11f79c29e38609e0f8adf18551c9794a5d9dc3"
+  },
+  {
+    "family": "jetbrains-mono",
+    "file": "jetbrains-mono-700.ttf",
+    "sourceUrl": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8L6tjPQ.ttf",
+    "bytes": 112092,
+    "sha256": "a1d92abc6b02a87faed23d98067ab1027e8e95242fd7c9978a072ea383b89d1a"
+  },
+  {
     "family": "geist",
     "file": "geist-latin.woff2",
     "sourceUrl": "https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_RQuQImpna.woff2",
