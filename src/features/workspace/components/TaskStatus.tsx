@@ -1,9 +1,10 @@
 import { Icon } from '../../../shared/ui/Icon.tsx'
-import type { WorkspaceTask } from '../model.ts'
+import type { SongInputKind, WorkspaceTask } from '../model.ts'
+import { taskHeadlineStatus } from '../format.ts'
 import { taskStatusIcon } from './taskStatusIcon.ts'
 import styles from '../WorkspacePage.module.css'
 
-function statusLabel(task: WorkspaceTask) {
+function statusLabel(task: WorkspaceTask, inputKind?: SongInputKind) {
   if (task.processingStatus === 'completed') {
     return task.comparisonCount > 0
       ? `완료 · 비교 ${task.comparisonCount}회`
@@ -14,16 +15,21 @@ function statusLabel(task: WorkspaceTask) {
       ? '타브 만드는 중'
       : `타브 만드는 중 ${task.progressPercent}%`
   }
-  if (task.processingStatus === 'queued') return '대기'
-  return task.failureKind === 'no-guitar' ? '기타를 찾지 못함' : '타브 실패'
+  return taskHeadlineStatus(task, inputKind)
 }
 
-export function TaskStatus({ task }: { task: WorkspaceTask }) {
+export function TaskStatus({
+  task,
+  inputKind,
+}: {
+  task: WorkspaceTask
+  inputKind?: SongInputKind
+}) {
   return (
     <div className={styles.taskStatus}>
       <span className={styles.statusLine}>
         <Icon name={taskStatusIcon(task)} />
-        {statusLabel(task)}
+        {statusLabel(task, inputKind)}
       </span>
       {task.copyStatus === 'confirmed' && (
         <span className={styles.copyStatus}>

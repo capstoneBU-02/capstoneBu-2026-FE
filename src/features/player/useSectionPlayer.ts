@@ -19,6 +19,7 @@ export interface SectionPlayback {
   // Seconds that play: the section, cut where the decoded audio ends.
   readonly length: number
   readonly playing: boolean
+  readonly failed: boolean
   readonly repeat: boolean
   // 0 to 1; muting keeps it for unmuting.
   readonly volume: number
@@ -67,6 +68,7 @@ export function useSectionPlayer(
   range: SectionRange | null,
 ): SectionPlayback {
   const [playing, setPlaying] = useState(false)
+  const [failed, setFailed] = useState(false)
   const [repeat, setRepeatState] = useState(true)
   const [volume, setVolumeState] = useState(DEFAULT_VOLUME)
   const [muted, setMutedState] = useState(false)
@@ -96,6 +98,11 @@ export function useSectionPlayer(
     const player = createSectionPlayer(audio, {
       createContext: openAudioContext,
       onStop: () => setPlaying(false),
+      onError: () => {
+        setPlaying(false)
+        setFailed(true)
+        notifySeek()
+      },
       repeat,
       volume: muted ? 0 : volume,
     })
@@ -108,6 +115,7 @@ export function useSectionPlayer(
   // before the browser shows the commit.
   useLayoutEffect(() => {
     loadedRef.current = buffer
+    setFailed(false)
     if (buffer) load(buffer)
     else {
       // Nothing to hear until the audio loads; the time stays where it was.
@@ -150,6 +158,7 @@ export function useSectionPlayer(
     // Before the audio loads, the section as chosen.
     length: lengthOf(buffer ? playable : requested),
     playing,
+    failed,
     repeat,
     volume,
     muted,
@@ -157,7 +166,10 @@ export function useSectionPlayer(
       const player = playerRef.current
       if (!player || !available) return
       if (player.playing()) player.pause()
-      else player.play()
+      else {
+        setFailed(false)
+        player.play()
+      }
       setPlaying(player.playing())
     },
     restart() {

@@ -127,6 +127,12 @@
   outline: none;
 }
 
+.lane:focus-visible {
+  border-radius: var(--radius-m);
+  outline: 2px solid var(--ink-primary);
+  outline-offset: -2px;
+}
+
 /* A retry stays clickable above the play position. */
 .lane:has(button) {
   z-index: 2;

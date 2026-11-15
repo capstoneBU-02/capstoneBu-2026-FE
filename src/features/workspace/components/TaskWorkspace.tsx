@@ -178,7 +178,7 @@ function TaskWorkspace({
               <h1>{task.sectionName}</h1>
               <span className={styles.status}>
                 <Icon name={taskStatusIcon(task)} />
-                {taskHeadlineStatus(task)}
+                {taskHeadlineStatus(task, song.inputKind)}
               </span>
             </div>
             <p className={styles.meta}>
