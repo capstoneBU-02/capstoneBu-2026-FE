@@ -15,7 +15,7 @@ export function TaskTable({
   tasks: readonly WorkspaceTask[]
   onOpenTask: (taskId: string) => void
 }) {
-  const songNames = new Map(songs.map((song) => [song.id, song.name]))
+  const songById = new Map(songs.map((song) => [song.id, song]))
   return (
     <table className={styles.taskTable}>
       <caption className={styles.srOnly}>{caption}</caption>
@@ -62,14 +62,17 @@ export function TaskTable({
               >
                 <span className={styles.sectionName}>{task.sectionName}</span>
                 <span className={styles.songName}>
-                  {songNames.get(task.songId) ?? ''}
+                  {songById.get(task.songId)?.name ?? ''}
                 </span>
               </button>
             </th>
             <td>{task.partLabel}</td>
             <td className={styles.range}>{formatTaskRange(task)}</td>
             <td>
-              <TaskStatus task={task} />
+              <TaskStatus
+                task={task}
+                inputKind={songById.get(task.songId)?.inputKind}
+              />
             </td>
             <td className={styles.updated}>{task.updatedAtLabel}</td>
             <td className={styles.rowArrow} aria-hidden="true">

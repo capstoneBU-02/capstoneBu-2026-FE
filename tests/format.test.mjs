@@ -28,29 +28,35 @@ test('input kinds and headline statuses have distinct labels', () => {
   )
   const base = { failureKind: null }
   assert.equal(
-    taskHeadlineStatus({ ...base, processingStatus: 'completed' }),
+    taskHeadlineStatus({ ...base, processingStatus: 'completed' }, null),
     '완료',
   )
   assert.equal(
-    taskHeadlineStatus({ ...base, processingStatus: 'processing' }),
+    taskHeadlineStatus({ ...base, processingStatus: 'processing' }, null),
     '진행 중',
   )
   assert.equal(
-    taskHeadlineStatus({ ...base, processingStatus: 'queued' }),
+    taskHeadlineStatus({ ...base, processingStatus: 'queued' }, null),
     '대기',
   )
   assert.equal(
-    taskHeadlineStatus({
-      processingStatus: 'failed',
-      failureKind: 'transcription',
-    }),
+    taskHeadlineStatus(
+      {
+        processingStatus: 'failed',
+        failureKind: 'transcription',
+      },
+      'transcription',
+    ),
     '타브 실패',
   )
   assert.equal(
-    taskHeadlineStatus({
-      processingStatus: 'failed',
-      failureKind: 'no-guitar',
-    }),
+    taskHeadlineStatus(
+      {
+        processingStatus: 'failed',
+        failureKind: 'no-guitar',
+      },
+      'separation',
+    ),
     '기타를 찾지 못함',
   )
 })
@@ -76,4 +82,21 @@ test('a track that fails to play is named once, with 음원', () => {
     playbackFailureText('올린 음원'),
     '올린 음원을 재생하지 못했어요. 타브는 그대로 볼 수 있어요.',
   )
+})
+
+test('failure labels follow the supplied stage regardless of audio availability', () => {
+  for (const hasSeparatedAudio of [false, true]) {
+    const task = {
+      processingStatus: 'failed',
+      failureKind: 'transcription',
+      hasSeparatedAudio,
+    }
+    assert.equal(taskHeadlineStatus(task, 'separation'), '기타 분리 실패')
+    assert.equal(taskHeadlineStatus(task, 'transcription'), '타브 실패')
+    assert.equal(taskHeadlineStatus(task, null), '타브 실패')
+    assert.equal(
+      taskHeadlineStatus({ ...task, failureKind: 'no-guitar' }, 'separation'),
+      '기타를 찾지 못함',
+    )
+  }
 })

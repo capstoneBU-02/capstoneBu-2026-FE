@@ -100,11 +100,25 @@ const audioSources: AudioBufferSourceNode[] = []
 // Where in its audio each source started, in seconds.
 const sourceOffsets = new WeakMap<AudioBufferSourceNode, number>()
 const audioGains: GainNode[] = []
+let holdOutput = false
+const pendingResumes: Array<{ resolve(): void; reject(): void }> = []
 const NativeAudioContext = window.AudioContext
 window.AudioContext = class RecordedAudioContext extends NativeAudioContext {
   constructor(options?: AudioContextOptions) {
     super(options)
     audioContexts.push(this)
+  }
+  resume() {
+    if (!holdOutput) return super.resume()
+    return new Promise<void>((resolve, reject) => {
+      pendingResumes.push({
+        resolve: () => {
+          void super.resume().then(resolve, reject)
+        },
+        reject: () =>
+          reject(new DOMException('Output unavailable', 'NotAllowedError')),
+      })
+    })
   }
   createBufferSource() {
     const source = super.createBufferSource()
@@ -124,6 +138,17 @@ window.AudioContext = class RecordedAudioContext extends NativeAudioContext {
 }
 
 export const mediaControls = {
+  async holdOutputResume() {
+    await audioContexts.at(-1)?.suspend()
+    holdOutput = true
+  },
+  settleOutputResume(success: boolean) {
+    holdOutput = false
+    const request = pendingResumes.shift()
+    if (success) request?.resolve()
+    else request?.reject()
+  },
+  pendingOutputResumes: () => pendingResumes.length,
   resolveProbe(seconds) {
     pendingProbes.splice(0).forEach(({ resolve }) => resolve(seconds))
   },

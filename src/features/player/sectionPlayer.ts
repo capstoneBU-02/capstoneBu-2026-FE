@@ -15,6 +15,8 @@ export interface SectionPlayerOptions {
   createContext: () => AudioContext
   // Playback stopped without being asked: the section ended or went away.
   onStop: () => void
+  // The output could not start; play can be tried again from the same time.
+  onError: () => void
   repeat: boolean
   // Output gain, 0 to 1.
   volume: number
@@ -90,7 +92,7 @@ export function createSectionPlayer(
   buffer: AudioBuffer,
   options: SectionPlayerOptions,
 ): SectionPlayer {
-  const { createContext, onStop } = options
+  const { createContext, onStop, onError } = options
   let audio = buffer
   let repeat = options.repeat
   let volume = options.volume
@@ -143,25 +145,46 @@ export function createSectionPlayer(
 
   function startAt(at: number): void {
     if (!range) return
-    const { context, gain } = openOutput()
-    if (context.state !== 'running') void context.resume()
-    const node = context.createBufferSource()
-    node.buffer = audio
-    node.loop = repeat
-    node.loopStart = range.start
-    node.loopEnd = range.end
-    node.connect(gain)
-    node.onended = () => {
-      if (source !== node) return
-      node.disconnect()
-      source = null
-      rest = null
-      onStop()
+    let prepared: AudioBufferSourceNode | null = null
+    try {
+      const { context, gain } = openOutput()
+      const node = context.createBufferSource()
+      prepared = node
+      node.buffer = audio
+      node.loop = repeat
+      node.loopStart = range.start
+      node.loopEnd = range.end
+      node.connect(gain)
+      node.onended = () => {
+        if (source !== node) return
+        node.disconnect()
+        source = null
+        rest = null
+        onStop()
+      }
+      node.start(context.currentTime, at)
+      source = node
+      anchor = { offset: at, time: context.currentTime }
+      scheduleEnd(node, at)
+      if (context.state !== 'running') {
+        void context.resume().catch(() => {
+          // Pause, a new source, or leaving the screen retires this request.
+          if (source !== node) return
+          rest = position()
+          release()
+          onError()
+        })
+      }
+    } catch {
+      rest = at
+      if (source && source === prepared) release()
+      else if (prepared) {
+        // A source whose start threw cannot be stopped, but can be detached.
+        prepared.onended = null
+        prepared.disconnect()
+      }
+      onError()
     }
-    node.start(context.currentTime, at)
-    source = node
-    anchor = { offset: at, time: context.currentTime }
-    scheduleEnd(node, at)
   }
 
   function setRange(next: PlayRange | null): void {

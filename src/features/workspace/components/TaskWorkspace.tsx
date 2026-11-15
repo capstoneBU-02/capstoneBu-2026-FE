@@ -15,7 +15,11 @@ import {
   taskHeadlineStatus,
 } from '../format.ts'
 import type { TaskDetail } from '../model.ts'
-import { processingPhase, statusAnnouncement } from '../processing.ts'
+import {
+  failedStage,
+  processingPhase,
+  statusAnnouncement,
+} from '../processing.ts'
 import { trackLead, trackRange, type TrackId } from '../tracks.ts'
 import { useTaskAudio, type TaskAudioSource } from '../useTaskAudio.ts'
 import type { CopyStatus } from '../useCopyStatus.ts'
@@ -178,7 +182,7 @@ function TaskWorkspace({
               <h1>{task.sectionName}</h1>
               <span className={styles.status}>
                 <Icon name={taskStatusIcon(task)} />
-                {taskHeadlineStatus(task)}
+                {taskHeadlineStatus(task, failedStage(detail.stages))}
               </span>
             </div>
             <p className={styles.meta}>

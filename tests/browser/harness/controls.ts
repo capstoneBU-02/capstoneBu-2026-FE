@@ -2,12 +2,16 @@ import type {
   NewTaskInput,
   ReviseTaskInput,
   SongInputKind,
+  TaskStage,
   WorkspaceTask,
 } from '../../../src/features/workspace/model.ts'
 
 // What browser tests call on window.workspaceTest. Each harness module
 // provides its part; harness.tsx puts them together.
 export interface TestControls {
+  holdOutputResume(): Promise<void>
+  settleOutputResume(success: boolean): void
+  pendingOutputResumes(): number
   releaseLoads(): void
   // Workspace list requests: the first load, 다시 시도 and every refresh.
   listCalls(): number
@@ -112,7 +116,10 @@ export type ServerTaskChange = Partial<
     WorkspaceTask,
     'processingStatus' | 'failureKind' | 'progressPercent' | 'hasSeparatedAudio'
   >
-> & { readonly queueAhead?: number | null }
+> & {
+  readonly queueAhead?: number | null
+  readonly stages?: readonly TaskStage[]
+}
 
 declare global {
   interface Window {

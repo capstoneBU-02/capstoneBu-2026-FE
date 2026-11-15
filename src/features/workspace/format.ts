@@ -1,4 +1,4 @@
-import type { SongInputKind, WorkspaceTask } from './model.ts'
+import type { SongInputKind, TaskStageId, WorkspaceTask } from './model.ts'
 
 // mm:ss.d, matching the Figma Mono/Data samples such as 00:42.1.
 export function formatTime(seconds: number): string {
@@ -34,11 +34,17 @@ export function songInputShortLabel(kind: SongInputKind): string {
 }
 
 // Short status for a task headline; the list keeps its detailed wording.
-export function taskHeadlineStatus(task: WorkspaceTask): string {
+// The caller supplies the failed stage: detail uses its explicit stages,
+// while a list without stages infers them from the task and input kind.
+export function taskHeadlineStatus(
+  task: WorkspaceTask,
+  stage: TaskStageId | null,
+): string {
   if (task.processingStatus === 'completed') return '완료'
   if (task.processingStatus === 'processing') return '진행 중'
   if (task.processingStatus === 'queued') return '대기'
-  return task.failureKind === 'no-guitar' ? '기타를 찾지 못함' : '타브 실패'
+  if (task.failureKind === 'no-guitar') return '기타를 찾지 못함'
+  return stage === 'separation' ? '기타 분리 실패' : '타브 실패'
 }
 
 // The 진행 중 filter covers tasks still waiting for their turn.

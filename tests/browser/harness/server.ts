@@ -14,6 +14,7 @@ import type {
   PreviousTaskResult,
   ReviseTaskInput,
   TaskDetail,
+  TaskStage,
   WorkspaceSnapshot,
   WorkspaceSong,
   WorkspaceTask,
@@ -56,6 +57,8 @@ const revisedTasks = new Map<string, WorkspaceTask>()
 const keptResults = new Map<string, PreviousTaskResult[]>()
 // Tasks ahead of a queued task, as the server reports them.
 const queueAhead = new Map<string, number | null>()
+// Explicit detail stages can differ from the list's inferred stages.
+const detailStages = new Map<string, readonly TaskStage[]>()
 // Tasks removed by 멈추기, and the retries the server counts per task.
 const canceledTasks = new Set<string>()
 const retriesUsed = new Map<string, number>(Object.entries(mockRetriesUsed))
@@ -103,7 +106,7 @@ export function taskDetail(taskId: string): TaskDetail | null {
         task,
         song,
         previousResults: keptResults.get(taskId) ?? [],
-        stages: taskStages(task, song.inputKind),
+        stages: detailStages.get(taskId) ?? taskStages(task, song.inputKind),
         queueAhead:
           task.processingStatus === 'queued'
             ? (queueAhead.get(taskId) ?? null)
@@ -246,9 +249,10 @@ export const serverControls = {
   reviseTaskOnServer(taskId, input) {
     if (findTask(taskId)) revisedTask(taskId, input)
   },
-  updateTaskOnServer(taskId, { queueAhead: ahead, ...change }) {
+  updateTaskOnServer(taskId, { queueAhead: ahead, stages, ...change }) {
     const task = findTask(taskId)
     if (task) revisedTasks.set(taskId, { ...task, ...change })
     if (ahead !== undefined) queueAhead.set(taskId, ahead)
+    if (stages !== undefined) detailStages.set(taskId, stages)
   },
 } satisfies Partial<TestControls>

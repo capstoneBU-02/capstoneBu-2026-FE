@@ -92,6 +92,7 @@ export function PlayerBar({ playback, source, notice }: Props) {
     available,
     length,
     playing,
+    failed,
     repeat,
     volume,
     muted,
@@ -124,7 +125,16 @@ export function PlayerBar({ playback, source, notice }: Props) {
 
   return (
     <section className={styles.bar} aria-label="구간 재생">
-      {notice && <div className={styles.notice}>{notice}</div>}
+      {(notice || failed) && (
+        <div className={styles.notice}>
+          {notice}
+          {failed && (
+            <p className={styles.failure} role="alert">
+              음원을 재생하지 못했어요. 재생 버튼을 눌러 다시 시도해 주세요.
+            </p>
+          )}
+        </div>
+      )}
       <div className={styles.row}>
         <div className={styles.transport}>
           <button
