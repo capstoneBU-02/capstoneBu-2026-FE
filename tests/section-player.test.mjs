@@ -82,14 +82,16 @@ const buffer = { duration: 252 }
 function setup({ repeat = true, range = { start: 10, end: 12 } } = {}) {
   const audio = fakeAudio()
   const stops = []
+  const errors = []
   const player = createSectionPlayer(buffer, {
     createContext: audio.createContext,
     onStop: () => stops.push('stop'),
+    onError: () => errors.push('error'),
     repeat,
     volume: 0.5,
   })
   player.setRange(range)
-  return { ...audio, player, stops }
+  return { ...audio, player, stops, errors }
 }
 
 test('the position wraps inside the section only while repeating', () => {
@@ -483,4 +485,152 @@ test('switching audio after disposing does nothing', () => {
   player.switchAudio(guitar, guitarRange)
   player.play()
   assert.equal(sources.length, 1)
+})
+
+// Resume settles after the user's next action in these output-failure cases.
+function holdResume(context) {
+  context.state = 'suspended'
+  let resolve, reject
+  const promise = new Promise((yes, no) => {
+    resolve = () => {
+      context.state = 'running'
+      yes()
+    }
+    reject = () => no(new Error('Output unavailable'))
+  })
+  context.resume = () => promise
+  return { resolve, reject }
+}
+const settleOutput = () => new Promise((resolve) => setImmediate(resolve))
+
+test('a rejected output resume stops its source and can be retried at the same position', async () => {
+  const { player, contexts, sources, errors } = setup()
+  player.play()
+  contexts[0].currentTime = 0.5
+  player.pause()
+  const held = holdResume(contexts[0])
+  player.play()
+  held.reject()
+  await settleOutput()
+  assert.equal(player.playing(), false)
+  assert.equal(player.position(), 10.5)
+  assert.equal(sources[1].disconnected, true)
+  assert.equal(sources[1].onended, null)
+  assert.deepEqual(errors, ['error'])
+  contexts[0].resume = () => {
+    contexts[0].state = 'running'
+    return Promise.resolve()
+  }
+  player.play()
+  assert.equal(player.playing(), true)
+  assert.equal(sources[2].started.offset, 10.5)
+})
+
+for (const action of [
+  'pause',
+  'dispose',
+  'switch',
+  'range',
+  'seek',
+  'restart',
+  'repeat',
+]) {
+  test(`an old resume rejection after ${action} leaves the newer playback alone`, async () => {
+    const { player, contexts, sources, errors } = setup()
+    player.play()
+    player.pause()
+    const held = holdResume(contexts[0])
+    player.play()
+    const oldSource = sources.at(-1)
+    // New sources can resume independently from the older pending request.
+    contexts[0].resume = () => {
+      contexts[0].state = 'running'
+      return Promise.resolve()
+    }
+    switch (action) {
+      case 'pause':
+        player.pause()
+        break
+      case 'dispose':
+        player.dispose()
+        break
+      case 'switch':
+        player.switchAudio(guitar, guitarRange)
+        break
+      case 'range':
+        player.setRange({ start: 20, end: 25 })
+        break
+      case 'seek':
+        player.seek(0.5)
+        break
+      case 'restart':
+        player.restart()
+        break
+      case 'repeat':
+        player.setRepeat(false)
+        break
+    }
+    const playing = player.playing()
+    const latest = sources.at(-1)
+    held.reject()
+    await settleOutput()
+    assert.equal(player.playing(), playing)
+    assert.equal(oldSource.disconnected, true)
+    if (playing) assert.equal(latest.disconnected, false)
+    assert.deepEqual(errors, [])
+  })
+}
+
+test('resuming after a pause never restarts the stopped source', async () => {
+  const { player, contexts, sources, errors } = setup()
+  player.play()
+  player.pause()
+  const held = holdResume(contexts[0])
+  player.play()
+  player.pause()
+  held.resolve()
+  await settleOutput()
+  assert.equal(player.playing(), false)
+  assert.equal(sources.at(-1).disconnected, true)
+  assert.equal(sources.length, 2)
+  assert.deepEqual(errors, [])
+})
+
+test('output creation and source start failures are reported and allow retry', () => {
+  const audio = fakeAudio()
+  const errors = []
+  let broken = true
+  const player = createSectionPlayer(buffer, {
+    createContext() {
+      if (broken) throw new Error('Output unavailable')
+      return audio.createContext()
+    },
+    onStop() {},
+    onError: () => errors.push('error'),
+    repeat: true,
+    volume: 0.5,
+  })
+  player.setRange({ start: 10, end: 12 })
+  assert.doesNotThrow(() => player.play())
+  assert.equal(player.playing(), false)
+  assert.deepEqual(errors, ['error'])
+  broken = false
+  player.play()
+  player.pause()
+  const context = audio.contexts[0]
+  const create = context.createBufferSource
+  context.createBufferSource = () => {
+    const node = create()
+    node.start = () => {
+      throw new Error('Cannot start output')
+    }
+    return node
+  }
+  assert.doesNotThrow(() => player.play())
+  assert.equal(player.playing(), false)
+  assert.equal(audio.sources.at(-1).disconnected, true)
+  assert.deepEqual(errors, ['error', 'error'])
+  context.createBufferSource = create
+  player.play()
+  assert.equal(player.playing(), true)
 })
