@@ -68,7 +68,9 @@ export function useSectionPlayer(
   range: SectionRange | null,
 ): SectionPlayback {
   const [playing, setPlaying] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [failedAudio, setFailedAudio] = useState<AudioBuffer | null>(null)
+  // An output failure belongs to its audio, not the next selected track.
+  if (failedAudio && failedAudio !== buffer) setFailedAudio(null)
   const [repeat, setRepeatState] = useState(true)
   const [volume, setVolumeState] = useState(DEFAULT_VOLUME)
   const [muted, setMutedState] = useState(false)
@@ -100,7 +102,7 @@ export function useSectionPlayer(
       onStop: () => setPlaying(false),
       onError: () => {
         setPlaying(false)
-        setFailed(true)
+        setFailedAudio(loadedRef.current)
         notifySeek()
       },
       repeat,
@@ -115,7 +117,6 @@ export function useSectionPlayer(
   // before the browser shows the commit.
   useLayoutEffect(() => {
     loadedRef.current = buffer
-    setFailed(false)
     if (buffer) load(buffer)
     else {
       // Nothing to hear until the audio loads; the time stays where it was.
@@ -158,7 +159,7 @@ export function useSectionPlayer(
     // Before the audio loads, the section as chosen.
     length: lengthOf(buffer ? playable : requested),
     playing,
-    failed,
+    failed: failedAudio !== null && failedAudio === buffer && available,
     repeat,
     volume,
     muted,
@@ -167,7 +168,7 @@ export function useSectionPlayer(
       if (!player || !available) return
       if (player.playing()) player.pause()
       else {
-        setFailed(false)
+        setFailedAudio(null)
         player.play()
       }
       setPlaying(player.playing())

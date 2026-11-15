@@ -68,6 +68,33 @@ for (const screen of ['task', 'editor'] as const) {
   })
 }
 
+test('changing tracks clears the old output failure even when returning to that track', async ({
+  page,
+}) => {
+  await openPlayer(page, 'task')
+  await page.evaluate(() => window.workspaceTest.holdOutputResume())
+  await play(page).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.workspaceTest.pendingOutputResumes()),
+    )
+    .toBe(1)
+  await page.evaluate(() => window.workspaceTest.settleOutputResume(false))
+  await expect(player(page).getByRole('alert')).toHaveText(OUTPUT_FAILURE)
+  for (const name of ['원곡', '분리 기타']) {
+    await player(page).getByRole('radio', { name, exact: true }).check()
+    await expect(play(page)).toHaveAttribute('aria-disabled', 'false', {
+      timeout: 15_000,
+    })
+    await expect(player(page).getByRole('alert')).toHaveCount(0)
+  }
+  await play(page).click()
+  await expect(pause(page)).toBeVisible()
+  await expect
+    .poll(() => page.evaluate(() => window.workspaceTest.audioContexts()))
+    .toEqual(['running'])
+})
+
 test('a late output failure after leaving a task does not report an error in the list', async ({
   page,
 }) => {
