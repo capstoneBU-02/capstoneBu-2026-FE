@@ -1,10 +1,14 @@
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import type { SongInputKind, WorkspaceTask } from '../model.ts'
 import { taskHeadlineStatus } from '../format.ts'
+import { failedStage, taskStages } from '../processing.ts'
 import { taskStatusIcon } from './taskStatusIcon.ts'
 import styles from '../WorkspacePage.module.css'
 
-function statusLabel(task: WorkspaceTask, inputKind?: SongInputKind) {
+function statusLabel(
+  task: WorkspaceTask,
+  inputKind: SongInputKind | undefined,
+) {
   if (task.processingStatus === 'completed') {
     return task.comparisonCount > 0
       ? `완료 · 비교 ${task.comparisonCount}회`
@@ -15,7 +19,10 @@ function statusLabel(task: WorkspaceTask, inputKind?: SongInputKind) {
       ? '타브 만드는 중'
       : `타브 만드는 중 ${task.progressPercent}%`
   }
-  return taskHeadlineStatus(task, inputKind)
+  // Lists have no explicit stages. An unavailable song keeps the existing
+  // unknown-stage fallback; detail labels use their own stages instead.
+  const stage = inputKind ? failedStage(taskStages(task, inputKind)) : null
+  return taskHeadlineStatus(task, stage)
 }
 
 export function TaskStatus({
@@ -23,7 +30,7 @@ export function TaskStatus({
   inputKind,
 }: {
   task: WorkspaceTask
-  inputKind?: SongInputKind
+  inputKind: SongInputKind | undefined
 }) {
   return (
     <div className={styles.taskStatus}>
