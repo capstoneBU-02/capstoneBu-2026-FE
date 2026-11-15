@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import type {} from './harness.tsx'
+import type { TaskStage } from '../../src/features/workspace/model.ts'
 
 const main = (page: Page) => page.locator('#workspace-content')
 const player = (page: Page) =>
@@ -136,6 +137,52 @@ test('a separation failure names the same stage in the list and task headline', 
     main(page).getByRole('heading', { name: '기타를 분리하지 못했어요' }),
   ).toBeVisible()
 })
+
+for (const hasSeparatedAudio of [false, true]) {
+  test(`detail failure stage overrides audio availability (${hasSeparatedAudio})`, async ({
+    page,
+  }) => {
+    await page.goto('/tests/browser/harness.html')
+    await expect(page.locator('tbody tr')).toHaveCount(4)
+    // Deliberately differs from the list's inference. Both detail labels
+    // must read the supplied stages, not infer from available audio again.
+    const stages: TaskStage[] = hasSeparatedAudio
+      ? [
+          { id: 'separation', status: 'failed' },
+          { id: 'transcription', status: 'waiting' },
+        ]
+      : [
+          { id: 'separation', status: 'done' },
+          { id: 'transcription', status: 'failed' },
+        ]
+    await page.evaluate(
+      ({ hasSeparatedAudio, stages }) =>
+        window.workspaceTest.updateTaskOnServer('task-verse', {
+          processingStatus: 'failed',
+          failureKind: 'transcription',
+          hasSeparatedAudio,
+          stages,
+        }),
+      { hasSeparatedAudio, stages },
+    )
+    await page
+      .getByRole('complementary')
+      .getByRole('button', { name: /벌스 1/ })
+      .click()
+    await expect(
+      main(page).getByRole('heading', {
+        name: hasSeparatedAudio
+          ? '기타를 분리하지 못했어요'
+          : '타브를 만들지 못했어요',
+      }),
+    ).toBeVisible()
+    await expect(
+      main(page).getByText(hasSeparatedAudio ? '기타 분리 실패' : '타브 실패', {
+        exact: true,
+      }),
+    ).toBeVisible()
+  })
+}
 
 for (const task of ['task-solo', 'task-verse']) {
   test(`keyboard retry on ${task} shows the focused waveform`, async ({

@@ -2,6 +2,7 @@ import type {
   NewTaskInput,
   ReviseTaskInput,
   SongInputKind,
+  TaskStage,
   WorkspaceTask,
 } from '../../../src/features/workspace/model.ts'
 
@@ -115,7 +116,10 @@ export type ServerTaskChange = Partial<
     WorkspaceTask,
     'processingStatus' | 'failureKind' | 'progressPercent' | 'hasSeparatedAudio'
   >
-> & { readonly queueAhead?: number | null }
+> & {
+  readonly queueAhead?: number | null
+  readonly stages?: readonly TaskStage[]
+}
 
 declare global {
   interface Window {

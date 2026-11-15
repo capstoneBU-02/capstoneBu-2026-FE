@@ -634,3 +634,47 @@ test('output creation and source start failures are reported and allow retry', (
   player.play()
   assert.equal(player.playing(), true)
 })
+
+test('a rejection after seeking while the resume is pending keeps the sought position', async () => {
+  const { player, contexts, sources, errors } = setup()
+  player.play()
+  contexts[0].currentTime = 0.5
+  player.pause()
+  const held = holdResume(contexts[0])
+  player.play()
+  player.seek(1.5)
+  held.reject()
+  await settleOutput()
+  assert.equal(player.playing(), false)
+  assert.deepEqual(errors, ['error'])
+  assert.equal(player.position(), 11.5)
+  contexts[0].resume = () => {
+    contexts[0].state = 'running'
+    return Promise.resolve()
+  }
+  player.play()
+  assert.equal(sources.at(-1).started.offset, 11.5)
+})
+
+test('a source that cannot start after a seek keeps the sought position', () => {
+  const { player, contexts, sources, errors } = setup()
+  player.play()
+  contexts[0].currentTime = 0.5
+  player.pause()
+  player.play()
+  const create = contexts[0].createBufferSource
+  contexts[0].createBufferSource = () => {
+    const node = create()
+    node.start = () => {
+      throw new Error('Cannot start output')
+    }
+    return node
+  }
+  player.seek(1.5)
+  assert.equal(player.playing(), false)
+  assert.deepEqual(errors, ['error'])
+  assert.equal(player.position(), 11.5)
+  contexts[0].createBufferSource = create
+  player.play()
+  assert.equal(sources.at(-1).started.offset, 11.5)
+})
