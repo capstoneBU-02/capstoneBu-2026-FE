@@ -99,7 +99,7 @@ test('native close while saving permits reopening, and a prior save cannot close
       (element as HTMLDialogElement).close(),
     )
   }
-  await expect(dialog(page)).toHaveCount(0)
+  await expect(dialog(page)).not.toBeVisible()
   await openConsentSettings(page)
   await expect(dialog(page)).toBeVisible()
   await page.evaluate(() => window.workspaceTest.resolveSave())

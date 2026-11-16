@@ -68,16 +68,18 @@ const defaultDurationProbe = createMediaDurationProbe(
 // Set for the mock's pace; to be revisited with the server's status contract.
 const REFRESH_MS = 3_000
 
-interface AddSongRequest {
+type AddSongRequest = {
   readonly workspaceId: string
   readonly files: readonly File[]
-  readonly title?: string
-  // Set when 파일 바꾸기 adds a replacement for this song's draft.
-  readonly replacesSongId?: string
-  readonly inputKind?: SongInputKind
-  // The new song's first draft, set by 다른 파일 올리기.
-  readonly draft?: SectionForm
-}
+} & (
+  | { readonly kind: 'add' }
+  | {
+      readonly kind: 'replace'
+      readonly songId: string
+      readonly inputKind: SongInputKind | undefined
+    }
+  | { readonly kind: 'other'; readonly draft: SectionForm }
+)
 
 interface ReplaceFileRequest {
   readonly workspaceId: string
@@ -150,6 +152,7 @@ export function WorkspacePage({
     topic: SupportTopic
     workspaceId: string
   } | null>(null)
+  const [consentOpening, setConsentOpening] = useState(0)
   const supportReturnFocusRef = useRef<HTMLElement | null>(null)
   const [addSong, setAddSong] = useState<AddSongRequest | null>(null)
   const addSongReturnFocusRef = useRef<HTMLElement | null>(null)
@@ -259,6 +262,7 @@ export function WorkspacePage({
     // A request can fail after a view change or native dialog close. Keep that
     // result until the user retries or dismisses the dialog after seeing it.
     setConsentWorkspaceId(workspaceId)
+    setConsentOpening((previous) => previous + 1)
   }
 
   function closeConsent() {
@@ -281,16 +285,16 @@ export function WorkspacePage({
   ) {
     if (!workspaceId || !workspaceReady) return
     addSongReturnFocusRef.current = returnFocus
-    setAddSong({ workspaceId, files })
+    setAddSong({ kind: 'add', workspaceId, files })
   }
   function confirmReplaceFile() {
     if (!replaceFile) return
     // Focus returns to 파일 바꾸기 if the user cancels the file choice.
     setAddSong({
+      kind: 'replace',
       workspaceId: replaceFile.workspaceId,
       files: [],
-      title: '파일 바꾸기',
-      replacesSongId: replaceFile.songId,
+      songId: replaceFile.songId,
       inputKind: songs.find((song) => song.id === replaceFile.songId)
         ?.inputKind,
     })
@@ -306,9 +310,9 @@ export function WorkspacePage({
     if (!workspaceId || !workspaceReady) return
     addSongReturnFocusRef.current = returnFocus
     setAddSong({
+      kind: 'other',
       workspaceId,
       files: [],
-      title: '다른 파일 올리기',
       draft: otherFileSectionForm(task),
     })
   }
@@ -439,6 +443,8 @@ export function WorkspacePage({
                 songName={detail.song.name}
                 current={detail.task.sectionName}
               />
+            ) : view.name === 'edit-section' && !detail ? (
+              '작업 불러오기'
             ) : (
               TOP_BAR_LABELS[view.name]
             )}
@@ -702,6 +708,7 @@ export function WorkspacePage({
       </main>
       {consentWorkspaceId !== null && consentWorkspaceId === workspaceId && (
         <ConsentDialog
+          key={consentOpening}
           consent={workspace.consent}
           onSave={workspace.saveConsent}
           onClose={closeConsent}
@@ -718,16 +725,24 @@ export function WorkspacePage({
       )}
       {addSong && addSong.workspaceId === workspaceId && workspaceReady && (
         <AddSongDialog
-          title={addSong.title}
+          title={
+            addSong.kind === 'add'
+              ? undefined
+              : addSong.kind === 'replace'
+                ? '파일 바꾸기'
+                : '다른 파일 올리기'
+          }
           probeDuration={probeDuration}
           initialFiles={addSong.files}
-          initialInputKind={addSong.inputKind}
+          initialInputKind={
+            addSong.kind === 'replace' ? addSong.inputKind : undefined
+          }
           onSubmit={workspace.addSong}
           onAdded={(song) => {
             // The draft follows the new file; its range and part start over.
-            if (addSong.replacesSongId)
-              drafts.replaceFile(addSong.replacesSongId, song.id)
-            if (addSong.draft) drafts.seed(song.id, addSong.draft)
+            if (addSong.kind === 'replace')
+              drafts.replaceFile(addSong.songId, song.id)
+            if (addSong.kind === 'other') drafts.seed(song.id, addSong.draft)
             setAddSong(null)
             go({ name: 'new-section', songId: song.id })
           }}

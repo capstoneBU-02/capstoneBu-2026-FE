@@ -59,6 +59,12 @@ export function useTaskRecovery({
   }
 
   async function retry(taskId: string) {
+    const trigger = document.activeElement
+    const restoreFocus = () => {
+      const active = document.activeElement
+      if (active === trigger || active === document.body || active === null)
+        onRetried()
+    }
     const result = await workspace.retryTask(
       taskId,
       new AbortController().signal,
@@ -71,9 +77,21 @@ export function useTaskRecovery({
     // failed reload after a retry opens the task afresh, so the old failure
     // never stays on screen with its 다시 시도.
     const reloaded = await taskDetail.reload()
-    if (result.status === 'failed') return 'failed'
-    if (reloaded === 'failed') taskDetail.retry()
-    if (reloaded !== 'cancelled') onRetried()
+    if (openTask.current !== taskId || reloaded.status === 'cancelled')
+      return 'cancelled'
+    if (result.status === 'failed') {
+      if (reloaded.status === 'loaded') {
+        const task = reloaded.detail?.task
+        if (
+          task?.processingStatus !== 'failed' ||
+          task.failureKind === 'no-guitar'
+        )
+          restoreFocus()
+      }
+      return 'failed'
+    }
+    if (reloaded.status === 'failed') taskDetail.retry()
+    restoreFocus()
     return 'retried'
   }
 

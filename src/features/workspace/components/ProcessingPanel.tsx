@@ -33,16 +33,26 @@ export function ProcessingPanel({
   const headingId = useId()
   const queued = task.processingStatus === 'queued'
   const percent = queued ? 0 : task.progressPercent
+  const separating = stages.some(
+    (stage) => stage.id === 'separation' && stage.status === 'running',
+  )
   return (
     <section className={styles.panel} aria-labelledby={headingId}>
       <div className={styles.titleRow}>
         <h2 id={headingId}>
-          {queued ? '순서를 기다리고 있어요' : '타브 만드는 중'}
+          {queued
+            ? '순서를 기다리고 있어요'
+            : separating
+              ? '기타 분리 중'
+              : '타브 만드는 중'}
         </h2>
         {!queued && percent !== null && (
           <span className={styles.percent} aria-hidden="true">
             {percent}%
           </span>
+        )}
+        {percent === null && (
+          <span className={styles.percent}>진행률 확인 중</span>
         )}
       </div>
       {/* Without a value the bar is indeterminate. */}
@@ -53,9 +63,13 @@ export function ProcessingPanel({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent ?? undefined}
-        aria-valuetext={queued ? '시작 전' : undefined}
+        aria-valuetext={
+          queued ? '시작 전' : percent === null ? '진행률 확인 중' : undefined
+        }
       >
-        {percent !== null && (
+        {percent === null ? (
+          <span className={`${styles.fill} ${styles.indeterminate}`} />
+        ) : (
           <span className={styles.fill} style={{ width: `${percent}%` }} />
         )}
       </div>

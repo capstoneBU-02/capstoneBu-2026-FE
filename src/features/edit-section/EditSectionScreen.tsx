@@ -50,7 +50,7 @@ const TEXT: Record<SectionEditKind, Omit<EditText, 'current'>> = {
     failed:
       '타브를 다시 만들지 못했어요. 입력한 내용은 그대로 있어요. 다시 시도해 주세요.',
     intro:
-      '구간을 바꾸면 타브를 새로 만들어요. 지금 타브는 이전 결과로 남아요.',
+      '구간·파트·튜닝을 바꾸면 타브를 새로 만들어요. 이전 구간과 카피·비교 상태는 이전 결과 목록에 남아요.',
     // The name is part of 구간 too, so say what the tab is made from.
     blocked:
       '시작이나 끝, 파트, 튜닝 중 하나를 바꿔야 타브를 다시 만들 수 있어요. 이름만 바꿀 수는 없어요.',

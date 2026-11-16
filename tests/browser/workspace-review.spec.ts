@@ -176,21 +176,16 @@ test('native close during saving preserves a late failure until it is acknowledg
   await consentDialog(page).evaluate((element) =>
     (element as HTMLDialogElement).close(),
   )
-  // The native close event is queued. Wait until React unmounts the dialog,
-  // not just until the closed element leaves the accessibility tree.
-  await expect(page.locator('dialog')).toHaveCount(0)
+  // The hidden instance now survives its save so it can show a failure.
+  await expect(consentDialog(page)).not.toBeVisible()
   await page.evaluate(() => window.workspaceTest.rejectSave())
   await expect(page.getByRole('alert')).toContainText(
     '선택을 저장하지 못했어요.',
   )
-  const retryButton = page.getByRole('button', {
-    name: 'AI 학습 활용 다시 선택',
-  })
-  await expect(retryButton).toBeInViewport()
+  await expect(consentDialog(page).getByRole('alert')).toBeInViewport()
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
     320,
   )
-  await retryButton.click()
   await expect(consentDialog(page).getByRole('alert')).toBeVisible()
   await consentDialog(page)
     .getByRole('button', { name: 'AI 학습 활용 창 닫기' })
