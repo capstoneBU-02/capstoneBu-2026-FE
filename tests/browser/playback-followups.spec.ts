@@ -139,6 +139,52 @@ test('synchronous failures replace the announcement and retain keyboard focus', 
   ).toBeFocused()
 })
 
+test('repeated async failures produce new alerts without moving focus', async ({
+  page,
+}) => {
+  await openPlayer(page)
+  await page.evaluate(() => window.workspaceTest.holdOutputResume())
+  await play(page).click()
+  await expect(cancel(page)).toBeVisible()
+  await page.evaluate(() => window.workspaceTest.settleOutputResume(false))
+  await expect(outputFailure(page)).toBeVisible()
+  const first = await outputFailure(page).elementHandle()
+  await page.evaluate(() => window.workspaceTest.holdOutputResume())
+  await play(page).press('Enter')
+  await expect(cancel(page)).toBeFocused()
+  await page.evaluate(() => window.workspaceTest.settleOutputResume(false))
+  await expect(outputFailure(page)).toBeVisible()
+  expect(await first!.evaluate((element) => element.isConnected)).toBe(false)
+  await expect(play(page)).toBeFocused()
+})
+
+test('a late resume success after leaving does not restore playback or its notice', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await openPlayer(page)
+  await page.evaluate(() => window.workspaceTest.holdOutputResume())
+  await play(page).click()
+  await expect(cancel(page)).toBeVisible()
+  await page
+    .getByRole('complementary')
+    .getByRole('button', { name: '내 작업', exact: true })
+    .click()
+  await expect(page.getByRole('heading', { name: '최근 작업' })).toBeVisible()
+  await page.evaluate(() => window.workspaceTest.settleOutputResume(true))
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.workspaceTest.pendingOutputResumes()),
+    )
+    .toBe(0)
+  await expect
+    .poll(() => page.evaluate(() => window.workspaceTest.audioContexts()))
+    .toEqual(['closed'])
+  await expect(player(page)).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
 for (const width of [320, 390]) {
   test(`both output and download failures keep their controls usable at ${width}px`, async ({
     page,
