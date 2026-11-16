@@ -224,8 +224,9 @@ function TaskWorkspace({
             <p>구간을 바꾸기 전에 만든 결과예요. 최근 것부터 보여요.</p>
             {/* Safari drops the list role when list-style is none. */}
             <ul role="list">
-              {previousResults.map((result) => (
+              {previousResults.map((result, index) => (
                 <li key={result.id} className={styles.meta}>
+                  <span>결과 {previousResults.length - index}</span>
                   <span className={styles.previousName}>
                     {result.sectionName}
                   </span>
@@ -234,6 +235,14 @@ function TaskWorkspace({
                   </span>
                   <span>{result.partLabel}</span>
                   <span>{result.tuningLabel}</span>
+                  <span>비교 {result.comparisonCount}회</span>
+                  <span>
+                    {result.copyStatus === 'confirmed'
+                      ? '카피 완료'
+                      : result.copyStatus === 'needs-review'
+                        ? '확인 필요'
+                        : '카피 미확인'}
+                  </span>
                 </li>
               ))}
             </ul>

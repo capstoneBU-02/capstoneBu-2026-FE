@@ -55,6 +55,7 @@ export function StopTaskControl({
   fallbackFocusRef: RefObject<HTMLElement | null>
 }) {
   const [open, setOpen] = useState(false)
+  const [opening, setOpening] = useState(0)
   const [failed, setFailed] = useState(false)
   const [ended, setEnded] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -79,6 +80,7 @@ export function StopTaskControl({
           onClick={() => {
             setFailed(false)
             setOpen(true)
+            setOpening((previous) => previous + 1)
           }}
         >
           <Icon name="stop" />
@@ -87,6 +89,7 @@ export function StopTaskControl({
       )}
       {open && (
         <ConfirmDialog
+          key={opening}
           title={`${task.sectionName} 작업을 멈출까요?`}
           description={stopDescription(task, inputKind, previousResultCount)}
           confirmLabel="멈추기"

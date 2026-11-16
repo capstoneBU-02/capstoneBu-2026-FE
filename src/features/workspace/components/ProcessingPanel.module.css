@@ -49,6 +49,20 @@
   list-style: none;
 }
 
+.indeterminate {
+  width: 35%;
+  animation: pending 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes pending {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(185%);
+  }
+}
+
 .stage {
   display: inline-flex;
   align-items: center;
@@ -90,6 +104,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .indeterminate {
+    animation: none;
+  }
   .fill {
     transition: none;
   }

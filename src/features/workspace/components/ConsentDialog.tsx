@@ -19,6 +19,7 @@ export function ConsentDialog({
   fallbackFocusRef,
 }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
   const saveInFlight = useRef(false)
   const pointerStartedOutside = useRef(false)
   const [localError, setLocalError] = useState<string | null>(null)
@@ -51,12 +52,23 @@ export function ConsentDialog({
     if (saveInFlight.current || busy) return
     saveInFlight.current = true
     setLocalError(null)
+    let saved = false
     try {
-      if ((await onSave(choice)) && dialogRef.current?.open) onClose()
+      saved = await onSave(choice)
     } catch {
       setLocalError('선택을 저장하지 못했어요. 다시 시도해 주세요.')
     } finally {
       saveInFlight.current = false
+      // A native close during the request keeps this instance alive. A view
+      // change or an explicit reopening replaces it and clears its ref.
+      const dialog = dialogRef.current
+      if (dialog) {
+        if (saved) onClose()
+        else if (!dialog.open) {
+          dialog.showModal()
+          titleRef.current?.focus({ preventScroll: true })
+        }
+      }
     }
   }
 
@@ -72,7 +84,8 @@ export function ConsentDialog({
       aria-describedby={descriptionId}
       onClose={(event) => {
         // Ignore a queued close from StrictMode cleanup after showModal reruns.
-        if (!event.currentTarget.open) onClose()
+        if (!event.currentTarget.open && !saveInFlight.current && !busy)
+          onClose()
       }}
       onCancel={(event) => {
         event.preventDefault()
@@ -106,7 +119,9 @@ export function ConsentDialog({
       }}
     >
       <div className={styles.dialogHeader}>
-        <h2 id={titleId}>AI 학습 활용</h2>
+        <h2 ref={titleRef} id={titleId} tabIndex={-1}>
+          AI 학습 활용
+        </h2>
         <button
           type="button"
           className={styles.dialogClose}

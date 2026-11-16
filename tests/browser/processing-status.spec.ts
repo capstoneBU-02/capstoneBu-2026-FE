@@ -8,7 +8,7 @@ const sidebarTask = (page: Page, name: RegExp) =>
   sidebar(page).getByRole('button', { name })
 const panel = (page: Page) =>
   main(page).getByRole('region', {
-    name: /^(순서를 기다리고 있어요|타브 만드는 중)$/,
+    name: /^(순서를 기다리고 있어요|기타 분리 중|타브 만드는 중)$/,
   })
 const progress = (page: Page) => panel(page).getByRole('progressbar')
 const stages = (page: Page) =>
@@ -90,7 +90,7 @@ test('a queued task follows the server until its tab is done', async ({
     processingStatus: 'processing',
     progressPercent: 12,
   })
-  await expect(panel(page)).toHaveAccessibleName('타브 만드는 중')
+  await expect(panel(page)).toHaveAccessibleName('기타 분리 중')
   await expect(progress(page)).toHaveAttribute('aria-valuenow', '12')
   await expect(panel(page).getByText('12%', { exact: true })).toBeVisible()
   await expect(stages(page)).toHaveText([

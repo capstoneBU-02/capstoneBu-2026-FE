@@ -150,6 +150,7 @@ export function WorkspacePage({
     topic: SupportTopic
     workspaceId: string
   } | null>(null)
+  const [consentOpening, setConsentOpening] = useState(0)
   const supportReturnFocusRef = useRef<HTMLElement | null>(null)
   const [addSong, setAddSong] = useState<AddSongRequest | null>(null)
   const addSongReturnFocusRef = useRef<HTMLElement | null>(null)
@@ -259,6 +260,7 @@ export function WorkspacePage({
     // A request can fail after a view change or native dialog close. Keep that
     // result until the user retries or dismisses the dialog after seeing it.
     setConsentWorkspaceId(workspaceId)
+    setConsentOpening((previous) => previous + 1)
   }
 
   function closeConsent() {
@@ -439,6 +441,8 @@ export function WorkspacePage({
                 songName={detail.song.name}
                 current={detail.task.sectionName}
               />
+            ) : view.name === 'edit-section' && !detail ? (
+              '작업 불러오기'
             ) : (
               TOP_BAR_LABELS[view.name]
             )}
@@ -702,6 +706,7 @@ export function WorkspacePage({
       </main>
       {consentWorkspaceId !== null && consentWorkspaceId === workspaceId && (
         <ConsentDialog
+          key={consentOpening}
           consent={workspace.consent}
           onSave={workspace.saveConsent}
           onClose={closeConsent}

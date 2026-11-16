@@ -11,6 +11,10 @@ import {
 export type TaskDetailStatus =
   'idle' | 'loading' | 'success' | 'unavailable' | 'error' | 'expired'
 
+export type TaskReloadResult =
+  | { readonly status: 'loaded'; readonly detail: TaskDetail | null }
+  | { readonly status: 'failed' | 'cancelled' }
+
 export interface UseTaskDetailResult {
   readonly status: TaskDetailStatus
   readonly detail: TaskDetail | null
@@ -19,7 +23,7 @@ export interface UseTaskDetailResult {
   retry(): void
   // Loads the shown task again at once, keeping it on screen meanwhile, as
   // after a change made from it. 'failed' keeps the old copy on screen.
-  reload(): Promise<'loaded' | 'failed' | 'cancelled'>
+  reload(): Promise<TaskReloadResult>
   // The server's copy of the shown task after a change made from it, as
   // 카피 완료, shown without loading it again. Another task's copy changes
   // nothing.
@@ -213,8 +217,8 @@ export function useTaskDetail(
     return () => controller.abort()
   }, [behindList, repository, taskId, version, listedTask])
 
-  async function reload() {
-    if (!isCurrent || taskId === null) return 'cancelled'
+  async function reload(): Promise<TaskReloadResult> {
+    if (!isCurrent || taskId === null) return { status: 'cancelled' }
     const settled = request
     const controller = new AbortController()
     reloadController.current?.abort()
@@ -225,12 +229,12 @@ export function useTaskDetail(
       )
     try {
       const detail = await repository.loadTask(taskId, controller.signal)
-      if (controller.signal.aborted) return 'cancelled'
+      if (controller.signal.aborted) return { status: 'cancelled' }
       keep(settledState(settled, 'success', detail))
       onLoaded?.(detail)
-      return 'loaded'
+      return { status: 'loaded', detail }
     } catch (error) {
-      if (controller.signal.aborted) return 'cancelled'
+      if (controller.signal.aborted) return { status: 'cancelled' }
       const status = failureStatus(error)
       if (status === 'error') {
         setState((previous) =>
@@ -238,11 +242,11 @@ export function useTaskDetail(
             ? { ...previous, refreshFailed: true }
             : previous,
         )
-        return 'failed'
+        return { status: 'failed' }
       }
       keep(settledState(settled, status, null))
       if (status === 'expired') onExpired()
-      return 'loaded'
+      return { status: 'loaded', detail: null }
     } finally {
       if (reloadController.current === controller)
         reloadController.current = null
