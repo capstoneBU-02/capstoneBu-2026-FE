@@ -285,7 +285,8 @@ test('previous results keep distinct numbers and copy metadata when a range retu
   await expect(results.nth(1)).toContainText('비교 2회')
   await expect(results.nth(1)).toContainText('카피 완료')
   await page.setViewportSize({ width: 390, height: 844 })
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
-    390,
-  )
+  // The waveform and ruler recalculate their width through ResizeObserver.
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBe(390)
 })
