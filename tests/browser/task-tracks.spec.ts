@@ -199,6 +199,16 @@ test('finding no guitar while the guitar plays waits for playback to stop', asyn
     progressPercent: null,
   })
   await expect(row(page, '분리 기타')).toContainText('기타 소리가 거의 없어요.')
+  const failure = main(page).getByRole('region', {
+    name: '기타 소리를 거의 찾지 못했어요',
+  })
+  await expect(failure).toBeVisible()
+  await expect(
+    failure.getByRole('button', { name: '구간 다시 정하기' }),
+  ).toBeEnabled()
+  await expect(
+    failure.getByRole('button', { name: '다른 파일 올리기' }),
+  ).toBeEnabled()
   // The guitar keeps its audio and keeps playing.
   await expect(chosen(page)).toHaveAccessibleName('분리 기타')
   await expect(pauseButton(page)).toBeVisible()
