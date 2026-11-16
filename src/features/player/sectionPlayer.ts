@@ -2,6 +2,10 @@
 // source's own loop points, so the section wraps without a gap; playing once
 // schedules the stop at the section end. Framework-free so it can be tested
 // with a stand-in for AudioContext.
+import {
+  playbackDiagnostic,
+  type PlaybackDiagnostic,
+} from './playbackDiagnostic.ts'
 
 // Seconds within the song; the end is exclusive.
 export interface PlayRange {
@@ -16,7 +20,9 @@ export interface SectionPlayerOptions {
   // Playback stopped without being asked: the section ended or went away.
   onStop: () => void
   // The output could not start; play can be tried again from the same time.
-  onError: () => void
+  onError: (diagnostic: PlaybackDiagnostic) => void
+  // Source or resume state changed, including an asynchronous resume result.
+  onChange?: () => void
   repeat: boolean
   // Output gain, 0 to 1.
   volume: number
@@ -41,7 +47,9 @@ export interface SectionPlayer {
   position(): number
   // Seconds since the section start; 0 without a section.
   elapsed(): number
+  // A source is scheduled; it may still be waiting for the output to resume.
   playing(): boolean
+  pending(): boolean
   // Stops the sound and closes the output for good.
   dispose(): void
 }
@@ -99,6 +107,7 @@ export function createSectionPlayer(
   let range: PlayRange | null = null
   let output: Output | null = null
   let source: AudioBufferSourceNode | null = null
+  let resuming = false
   // While playing: the position and context time playback last started from.
   let anchor = { offset: 0, time: 0 }
   // While stopped: where play resumes. Null is the section start, wherever
@@ -136,6 +145,8 @@ export function createSectionPlayer(
     source.stop()
     source.disconnect()
     source = null
+    resuming = false
+    options.onChange?.()
   }
 
   function scheduleEnd(node: AudioBufferSourceNode, at: number): void {
@@ -146,8 +157,10 @@ export function createSectionPlayer(
   function startAt(at: number): void {
     if (!range) return
     let prepared: AudioBufferSourceNode | null = null
+    let stage: PlaybackDiagnostic['stage'] = 'context'
     try {
       const { context, gain } = openOutput()
+      stage = 'source'
       const node = context.createBufferSource()
       prepared = node
       node.buffer = audio
@@ -159,23 +172,37 @@ export function createSectionPlayer(
         if (source !== node) return
         node.disconnect()
         source = null
+        resuming = false
         rest = null
+        options.onChange?.()
         onStop()
       }
+      stage = 'start'
       node.start(context.currentTime, at)
       source = node
       anchor = { offset: at, time: context.currentTime }
       scheduleEnd(node, at)
       if (context.state !== 'running') {
-        void context.resume().catch(() => {
-          // Pause, a new source, or leaving the screen retires this request.
-          if (source !== node) return
-          rest = position()
-          release()
-          onError()
-        })
+        stage = 'resume'
+        const resumed = context.resume()
+        resuming = true
+        void resumed.then(
+          () => {
+            if (source !== node) return
+            resuming = false
+            options.onChange?.()
+          },
+          (error: unknown) => {
+            // Pause, a new source, or leaving retires both success and failure.
+            if (source !== node) return
+            rest = position()
+            release()
+            onError(playbackDiagnostic('resume', error))
+          },
+        )
       }
-    } catch {
+      options.onChange?.()
+    } catch (error) {
       rest = at
       if (source && source === prepared) release()
       else if (prepared) {
@@ -183,7 +210,7 @@ export function createSectionPlayer(
         prepared.onended = null
         prepared.disconnect()
       }
-      onError()
+      onError(playbackDiagnostic(stage, error))
     }
   }
 
@@ -297,6 +324,7 @@ export function createSectionPlayer(
     position,
     elapsed: () => (range ? position() - range.start : 0),
     playing: () => source !== null,
+    pending: () => resuming,
     dispose() {
       if (disposed) return
       disposed = true

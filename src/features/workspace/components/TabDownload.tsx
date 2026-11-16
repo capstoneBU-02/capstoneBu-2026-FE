@@ -6,6 +6,7 @@ import { Menu } from '../../../shared/ui/Menu.tsx'
 import type { TabDownload, TabFormat } from '../useTabDownload.ts'
 import pageStyles from '../WorkspacePage.module.css'
 import styles from './TabDownload.module.css'
+import noticeStyles from '../../player/PlayerNotice.module.css'
 
 const FORMATS = [
   {
@@ -114,13 +115,13 @@ export function TabDownloadFailure({
   const { busy, failure, noticeRef, start } = download
   if (failure === null) return null
   return (
-    <div ref={noticeRef} className={styles.failure} role="alert">
+    <div ref={noticeRef} className={noticeStyles.notice} role="alert">
       <Icon name="alertTriangle" />
       {/* A new failure is a new line, read out again. */}
       <p key={failure.count}>타브를 내려받지 못했어요.</p>
       <Button
         compact
-        className={styles.retry}
+        className={noticeStyles.action}
         aria-disabled={busy !== null}
         data-busy={busy !== null}
         onClick={() => {

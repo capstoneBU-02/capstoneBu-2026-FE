@@ -1,0 +1,30 @@
+/* Shared by output and download notices above the player. */
+.notice {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius-m);
+  padding: 10px 12px;
+  background: var(--console-base);
+  color: var(--console-text);
+  box-shadow: 0 8px 20px rgb(20 20 18 / 24%);
+}
+
+.notice p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.action {
+  flex-shrink: 0;
+  border-color: var(--console-line);
+  background: transparent;
+  color: var(--console-text);
+}

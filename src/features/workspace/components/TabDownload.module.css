@@ -65,29 +65,3 @@
   font-size: 12px;
   line-height: 16px;
 }
-
-/* On the console's dark, centred over the player bar. */
-.failure {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-radius: var(--radius-m);
-  padding: 8px 8px 8px 14px;
-  background: var(--console-base);
-  color: var(--console-text);
-  box-shadow: 0 8px 20px rgb(20 20 18 / 24%);
-}
-
-.failure p {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 18px;
-}
-
-.failure .retry {
-  flex-shrink: 0;
-  border-color: var(--console-line);
-  background: transparent;
-  color: var(--console-text);
-}
