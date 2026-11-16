@@ -77,7 +77,11 @@ test('leaving a hidden consent save prevents a late failure from reopening it', 
   ).toBeVisible()
 })
 
-for (const status of ['queued', 'completed'] as const) {
+for (const [status, label] of [
+  ['queued', '대기'],
+  ['completed', '완료'],
+  ['failed', '기타를 찾지 못함'],
+] as const) {
   test(`a failed retry response focuses the refreshed ${status} task`, async ({
     page,
   }) => {
@@ -90,12 +94,12 @@ for (const status of ['queued', 'completed'] as const) {
     await page.evaluate((status) => {
       window.workspaceTest.updateTaskOnServer('task-intro', {
         processingStatus: status,
-        failureKind: null,
+        failureKind: status === 'failed' ? 'no-guitar' : null,
       })
       window.workspaceTest.failRetry('retry-task-failed')
     }, status)
     await expect(
-      main(page).getByText(status === 'queued' ? '대기' : '완료', {
+      main(page).getByText(label, {
         exact: true,
       }),
     ).toBeVisible()
@@ -126,6 +130,35 @@ test('a late retry refresh does not take focus from another control', async ({
   })
   await expect(main(page).getByText('대기', { exact: true })).toBeVisible()
   await expect(choice).toBeFocused()
+})
+
+test('previous results retain a needs-review status', async ({ page }) => {
+  await page.goto('/tests/browser/harness.html')
+  await expect(page.locator('tbody tr')).toHaveCount(4)
+  await page.evaluate(() =>
+    window.workspaceTest.updateTaskOnServer('task-intro', {
+      processingStatus: 'completed',
+      failureKind: null,
+    }),
+  )
+  await page
+    .getByRole('complementary')
+    .getByRole('button', { name: /^인트로/ })
+    .click()
+  await main(page)
+    .getByRole('button', { name: '구간 수정', exact: true })
+    .click()
+  const end = main(page).getByLabel('끝', { exact: true })
+  await end.fill('00:15.0')
+  await end.press('Tab')
+  await main(page)
+    .getByRole('button', { name: '타브 다시 만들기', exact: true })
+    .click()
+  const result = main(page)
+    .getByRole('region', { name: '이전 결과' })
+    .getByRole('listitem')
+  await expect(result).toContainText('확인 필요')
+  await expect(result).toContainText('비교 0회')
 })
 
 test('the stop trigger reopens its pending native dialog without sending twice', async ({

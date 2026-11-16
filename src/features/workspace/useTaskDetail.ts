@@ -83,6 +83,22 @@ function settledState(
   return { ...request, status, detail, refreshFailed: false }
 }
 
+// Both manual and background refreshes keep the shown task on a network
+// error, but remove it on expiry or loss of access. Stale requests do neither.
+function refreshedState(
+  previous: TaskDetailState | null,
+  request: TaskDetailRequest,
+  status: TaskDetailState['status'],
+  detail: TaskDetail | null,
+): TaskDetailState | null {
+  if (previous === null || !sameRequest(previous, request)) return previous
+  if (status === 'error')
+    return previous.refreshFailed
+      ? previous
+      : { ...previous, refreshFailed: true }
+  return settledState(request, status, detail)
+}
+
 // Task detail is fetched per task, separately from the workspace list.
 export function useTaskDetail(
   repository: WorkspaceRepository,
@@ -158,6 +174,14 @@ export function useTaskDetail(
 
   // A background load of the shown task. A failure keeps the task on screen
   // and marks it; one in a row keeps the same state, so nothing re-renders.
+  function keepRefresh(
+    settled: TaskDetailRequest,
+    status: TaskDetailState['status'],
+    detail: TaskDetail | null = null,
+  ) {
+    setState((previous) => refreshedState(previous, settled, status, detail))
+  }
+
   const settleBackground = useEffectEvent(
     (
       settled: SettledRequest,
@@ -166,23 +190,14 @@ export function useTaskDetail(
     ): RefreshStep => {
       if (signal.aborted) return 'stop'
       if ('detail' in outcome) {
-        setState(settledState(settled, 'success', outcome.detail))
+        keepRefresh(settled, 'success', outcome.detail)
         reportLoaded(outcome.detail)
         // A finished task ends the refresh effect.
         return 'continue'
       }
       const status = failureStatus(outcome.error)
-      if (status === 'error') {
-        setState((previous) =>
-          previous !== null &&
-          sameRequest(previous, settled) &&
-          !previous.refreshFailed
-            ? { ...previous, refreshFailed: true }
-            : previous,
-        )
-        return 'continue'
-      }
-      setState(settledState(settled, status, null))
+      keepRefresh(settled, status)
+      if (status === 'error') return 'continue'
       if (status === 'expired') reportExpired()
       return 'stop'
     },
@@ -223,28 +238,17 @@ export function useTaskDetail(
     const controller = new AbortController()
     reloadController.current?.abort()
     reloadController.current = controller
-    const keep = (next: TaskDetailState) =>
-      setState((previous) =>
-        previous !== null && sameRequest(previous, settled) ? next : previous,
-      )
     try {
       const detail = await repository.loadTask(taskId, controller.signal)
       if (controller.signal.aborted) return { status: 'cancelled' }
-      keep(settledState(settled, 'success', detail))
+      keepRefresh(settled, 'success', detail)
       onLoaded?.(detail)
       return { status: 'loaded', detail }
     } catch (error) {
       if (controller.signal.aborted) return { status: 'cancelled' }
       const status = failureStatus(error)
-      if (status === 'error') {
-        setState((previous) =>
-          previous !== null && sameRequest(previous, settled)
-            ? { ...previous, refreshFailed: true }
-            : previous,
-        )
-        return { status: 'failed' }
-      }
-      keep(settledState(settled, status, null))
+      keepRefresh(settled, status)
+      if (status === 'error') return { status: 'failed' }
       if (status === 'expired') onExpired()
       return { status: 'loaded', detail: null }
     } finally {
