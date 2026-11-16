@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react'
 import type { SectionRange } from '../waveform/timeline.ts'
+import { reportPlaybackDiagnostic } from './playbackDiagnostic.ts'
 import {
   createSectionPlayer,
   playableRange,
@@ -19,7 +20,10 @@ export interface SectionPlayback {
   // Seconds that play: the section, cut where the decoded audio ends.
   readonly length: number
   readonly playing: boolean
+  // The output has been resuming long enough to say so; not playing yet.
+  readonly pending: boolean
   readonly failed: boolean
+  readonly failureCount: number
   readonly repeat: boolean
   // 0 to 1; muting keeps it for unmuting.
   readonly volume: number
@@ -41,6 +45,10 @@ export interface SectionPlayback {
 }
 
 const DEFAULT_VOLUME = 0.8
+// An output still resuming after this long is shown as waiting. WebKit opens
+// a new output suspended, so an ordinary first play resumes it too; that
+// takes milliseconds, and showing it would flash the waiting state.
+const WAITING_NOTICE_MS = 500
 
 function playRange(
   startTenths: number | null,
@@ -67,7 +75,11 @@ export function useSectionPlayer(
   buffer: AudioBuffer | null,
   range: SectionRange | null,
 ): SectionPlayback {
-  const [playing, setPlaying] = useState(false)
+  // A source is scheduled, whether or not the output has resumed yet.
+  const [scheduled, setScheduled] = useState(false)
+  const [waiting, setWaiting] = useState(false)
+  const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [failureCount, setFailureCount] = useState(0)
   const [failedAudio, setFailedAudio] = useState<AudioBuffer | null>(null)
   // An output failure belongs to its audio, not the next selected track.
   if (failedAudio && failedAudio !== buffer) setFailedAudio(null)
@@ -75,6 +87,22 @@ export function useSectionPlayer(
   const [volume, setVolumeState] = useState(DEFAULT_VOLUME)
   const [muted, setMutedState] = useState(false)
   const playerRef = useRef<SectionPlayer | null>(null)
+  const syncPlayback = () => {
+    const player = playerRef.current
+    setScheduled(player?.playing() ?? false)
+    if (player?.pending()) {
+      // One timer for the whole wait: a seek meanwhile replaces the source
+      // without starting the wait over.
+      waitTimerRef.current ??= setTimeout(
+        () => setWaiting(playerRef.current?.pending() ?? false),
+        WAITING_NOTICE_MS,
+      )
+      return
+    }
+    if (waitTimerRef.current !== null) clearTimeout(waitTimerRef.current)
+    waitTimerRef.current = null
+    setWaiting(false)
+  }
   // The audio last given, null while the next one loads. A section changes
   // the player only together with it, so a section given for audio still
   // loading never moves the one the player has.
@@ -94,16 +122,19 @@ export function useSectionPlayer(
     const current = playerRef.current
     if (current) {
       current.switchAudio(audio, section)
-      setPlaying(current.playing())
+      syncPlayback()
       return
     }
     const player = createSectionPlayer(audio, {
       createContext: openAudioContext,
-      onStop: () => setPlaying(false),
-      onError: () => {
-        setPlaying(false)
+      onStop: syncPlayback,
+      onChange: syncPlayback,
+      onError: (diagnostic) => {
+        syncPlayback()
         setFailedAudio(loadedRef.current)
+        setFailureCount((count) => count + 1)
         notifySeek()
+        reportPlaybackDiagnostic(diagnostic)
       },
       repeat,
       volume: muted ? 0 : volume,
@@ -123,7 +154,7 @@ export function useSectionPlayer(
       const player = playerRef.current
       if (player?.playing()) {
         player.pause()
-        setPlaying(false)
+        syncPlayback()
       }
     }
     notifySeek()
@@ -141,7 +172,10 @@ export function useSectionPlayer(
     () => () => {
       playerRef.current?.dispose()
       playerRef.current = null
-      setPlaying(false)
+      if (waitTimerRef.current !== null) clearTimeout(waitTimerRef.current)
+      waitTimerRef.current = null
+      setScheduled(false)
+      setWaiting(false)
     },
     [],
   )
@@ -158,8 +192,10 @@ export function useSectionPlayer(
     available,
     // Before the audio loads, the section as chosen.
     length: lengthOf(buffer ? playable : requested),
-    playing,
+    playing: scheduled && !waiting,
+    pending: waiting,
     failed: failedAudio !== null && failedAudio === buffer && available,
+    failureCount,
     repeat,
     volume,
     muted,
@@ -171,7 +207,7 @@ export function useSectionPlayer(
         setFailedAudio(null)
         player.play()
       }
-      setPlaying(player.playing())
+      syncPlayback()
     },
     restart() {
       const player = playerRef.current

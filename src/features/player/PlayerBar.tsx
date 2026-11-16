@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { formatSectionTime } from '../new-section/sectionTime.ts'
+import { Icon } from '../../shared/ui/Icon.tsx'
 import {
   PauseIcon,
   PlayIcon,
@@ -16,6 +17,7 @@ import {
 } from './PlayerIcons.tsx'
 import type { SectionPlayback } from './useSectionPlayer.ts'
 import styles from './PlayerBar.module.css'
+import noticeStyles from './PlayerNotice.module.css'
 
 export interface SourceOption {
   readonly id: string
@@ -92,7 +94,9 @@ export function PlayerBar({ playback, source, notice }: Props) {
     available,
     length,
     playing,
+    pending,
     failed,
+    failureCount,
     repeat,
     volume,
     muted,
@@ -125,13 +129,28 @@ export function PlayerBar({ playback, source, notice }: Props) {
 
   return (
     <section className={styles.bar} aria-label="구간 재생">
-      {(notice || failed) && (
+      {(notice || failed || pending) && (
         <div className={styles.notice}>
           {notice}
           {failed && (
-            <p className={styles.failure} role="alert">
-              음원을 재생하지 못했어요. 재생 버튼을 눌러 다시 시도해 주세요.
-            </p>
+            <div
+              key={failureCount}
+              className={noticeStyles.notice}
+              role="alert"
+            >
+              <Icon name="alertTriangle" />
+              <p>
+                음원을 재생하지 못했어요. 재생 버튼을 눌러 다시 시도해 주세요.
+              </p>
+            </div>
+          )}
+          {pending && (
+            <div className={noticeStyles.notice} role="status">
+              <Icon name="clock" />
+              <p>
+                재생 시작을 기다리고 있어요. 취소한 뒤 다시 시도할 수 있어요.
+              </p>
+            </div>
           )}
         </div>
       )}
@@ -149,11 +168,19 @@ export function PlayerBar({ playback, source, notice }: Props) {
           <button
             type="button"
             className={styles.play}
-            aria-label={playing ? '일시정지' : '재생'}
+            aria-label={
+              pending ? '재생 시작 취소' : playing ? '일시정지' : '재생'
+            }
             aria-disabled={!available}
             onClick={() => playback.toggle()}
           >
-            {playing ? <PauseIcon /> : <PlayIcon />}
+            {pending ? (
+              <Icon name="stop" />
+            ) : playing ? (
+              <PauseIcon />
+            ) : (
+              <PlayIcon />
+            )}
           </button>
           <button
             type="button"
