@@ -5,10 +5,10 @@
 1. 구현 전에 기능 구현 또는 버그 리포트 양식으로 이슈를 등록한다. 작업 범위, 완료 조건, 참고 Figma·기능 ID와 선행 결정을 적는다.
 2. 이슈 번호가 포함된 작업 브랜치를 만든다. 일반 기능·버그 수정은 `develop`에서 분기하고, 운영 배포의 긴급 수정만 `main`에서 hotfix로 분기한다.
 3. 작은 검증 가능한 단위로 구현하고 `npm run check`를 실행한다.
-4. 아래 GitFlow 표에 맞는 대상 브랜치로 PR을 열고 관련 이슈, 변경 사항, 검증 결과를 작성한다. `develop` 대상 PR에는 `Refs #번호`를 적고, 필요하면 Development에서 이슈와 PR을 수동 연결한다.
+4. 아래 GitFlow 표에 맞는 대상 브랜치로 PR을 열고 관련 이슈, 변경 사항, 검증 결과를 작성한다. `develop` 대상 PR에는 `Refs #번호`로 이슈를 참조한다.
 5. 리뷰와 CI 통과 후 병합하고, 담당자가 완료 조건을 확인해 이슈를 닫는다. Release·hotfix는 `develop` 반영까지 추적한다.
 
-기본 브랜치는 `main`이므로 `develop` 대상 PR의 `Closes #번호`만으로는 이슈가 자동 종료되지 않는다. `main` 대상 PR에서 이슈를 최종 완료할 때는 `Closes #번호`로 병합 시 자동 종료할 수 있다.
+GitHub 기본 브랜치는 `develop`이며 `main`은 배포 기준 브랜치다. GitHub의 종료 키워드(`Closes` 등)는 기본 브랜치 대상 PR에서 적용되고, Development에서 연결한 이슈도 기본 브랜치 병합 시 자동 종료될 수 있다. 이 저장소는 후속 검증·계약이 남은 이슈를 조기에 닫지 않도록 PR 본문의 `Refs #번호`를 사용하고, 병합 후 담당자가 전체 완료 조건을 확인해 수동으로 종료한다. 현재 `main` 대상 PR의 `Closes`만으로 자동 종료를 기대하지 않는다. [GitHub 이슈 연결 규칙](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)
 
 이슈·PR 양식은 `mio` 프로젝트의 구조를 바탕으로 FE 화면, API/목업, 브라우저 검증에 맞췄다. 저장소에 존재하는 라벨에 맞춰 기능 이슈에는 `enhancement`, 버그에는 `bug`를 붙인다.
 
