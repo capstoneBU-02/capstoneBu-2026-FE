@@ -144,6 +144,9 @@ export const mediaControls = {
   failOutputStart(fail: boolean) {
     failOutputStart = fail
   },
+  async suspendOutput() {
+    await audioContexts.at(-1)?.suspend()
+  },
   async holdOutputResume() {
     await audioContexts.at(-1)?.suspend()
     holdOutput = true

@@ -747,6 +747,57 @@ for (const success of [true, false]) {
   })
 }
 
+// Each of these replaces the source. A report between the old source and the
+// new one would say the wait had ended.
+for (const [name, move] of [
+  ['seeking', (player) => player.seek(1)],
+  ['going back to the start', (player) => player.restart()],
+  ['changing repeat', (player) => player.setRepeat(false)],
+  [
+    'a range that leaves the position behind',
+    (player) => player.setRange({ start: 20, end: 22 }),
+  ],
+  [
+    'switching audio',
+    (player) => player.switchAudio({ duration: 252 }, { start: 10, end: 12 }),
+  ],
+]) {
+  test(`${name} while the resume is pending reports no break in the wait`, () => {
+    const changes = []
+    const state = setup({
+      onChange: () =>
+        changes.push([state.player.playing(), state.player.pending()]),
+    })
+    const { player, contexts, sources } = state
+    player.play()
+    player.pause()
+    holdResume(contexts[0])
+    player.play()
+    changes.length = 0
+    move(player)
+    assert.equal(sources.length, 3)
+    assert.equal(player.pending(), true)
+    assert.deepEqual(changes, [[true, true]])
+  })
+}
+
+test('switching to audio without the section while pending reports the stop once', () => {
+  const changes = []
+  const state = setup({
+    onChange: () =>
+      changes.push([state.player.playing(), state.player.pending()]),
+  })
+  const { player, contexts, stops } = state
+  player.play()
+  player.pause()
+  holdResume(contexts[0])
+  player.play()
+  changes.length = 0
+  player.switchAudio({ duration: 5 }, { start: 10, end: 12 })
+  assert.deepEqual(changes, [[false, false]])
+  assert.deepEqual(stops, ['stop'])
+})
+
 test('a failed resume reports only its stage and classified reason', async () => {
   const { player, contexts, diagnostics } = setup()
   player.play()

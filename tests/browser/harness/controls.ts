@@ -10,6 +10,8 @@ import type {
 // provides its part; harness.tsx puts them together.
 export interface TestControls {
   failOutputStart(fail: boolean): void
+  // Suspends the output; the next play resumes it at the browser's own pace.
+  suspendOutput(): Promise<void>
   holdOutputResume(): Promise<void>
   settleOutputResume(success: boolean): void
   pendingOutputResumes(): number

@@ -6,6 +6,8 @@ const player = (page: Page) =>
   main(page).getByRole('region', { name: '구간 재생' })
 const play = (page: Page) =>
   player(page).getByRole('button', { name: '재생', exact: true })
+const pause = (page: Page) =>
+  player(page).getByRole('button', { name: '일시정지' })
 const cancel = (page: Page) =>
   player(page).getByRole('button', { name: '재생 시작 취소', exact: true })
 const outputFailure = (page: Page) =>
@@ -62,6 +64,33 @@ for (const screen of ['task', 'editor'] as const) {
     await expect(player(page).getByTestId('elapsed')).not.toHaveText(held!)
   })
 }
+
+// WebKit opens a new output suspended, so even an ordinary first play resumes
+// it; that takes milliseconds and is not a wait to tell the user about.
+test('an output that resumes at once never shows the waiting state', async ({
+  page,
+}) => {
+  await openPlayer(page)
+  await page.evaluate(() => window.workspaceTest.suspendOutput())
+  const shown = await page.evaluateHandle(() => {
+    const region = document.querySelector(
+      '#workspace-content [aria-label="구간 재생"]',
+    )!
+    const seen: string[] = []
+    new MutationObserver(() => {
+      if (region.querySelector('[role="status"]')) seen.push('notice')
+      if (region.querySelector('[aria-label="재생 시작 취소"]'))
+        seen.push('cancel')
+    }).observe(region, { subtree: true, childList: true, attributes: true })
+    return seen
+  })
+  await play(page).click()
+  await expect(pause(page)).toBeVisible()
+  await expect
+    .poll(() => page.evaluate(() => window.workspaceTest.audioContexts()))
+    .toEqual(['running'])
+  expect(await shown.jsonValue()).toEqual([])
+})
 
 test('successful resume clears the waiting notice and starts the clock', async ({
   page,
