@@ -9,6 +9,7 @@ import type {
 // What browser tests call on window.workspaceTest. Each harness module
 // provides its part; harness.tsx puts them together.
 export interface TestControls {
+  failOutputStart(fail: boolean): void
   holdOutputResume(): Promise<void>
   settleOutputResume(success: boolean): void
   pendingOutputResumes(): number

@@ -101,6 +101,7 @@ const audioSources: AudioBufferSourceNode[] = []
 const sourceOffsets = new WeakMap<AudioBufferSourceNode, number>()
 const audioGains: GainNode[] = []
 let holdOutput = false
+let failOutputStart = false
 const pendingResumes: Array<{ resolve(): void; reject(): void }> = []
 const NativeAudioContext = window.AudioContext
 window.AudioContext = class RecordedAudioContext extends NativeAudioContext {
@@ -125,6 +126,8 @@ window.AudioContext = class RecordedAudioContext extends NativeAudioContext {
     audioSources.push(source)
     const start = source.start.bind(source)
     source.start = (when?: number, offset?: number, duration?: number) => {
+      if (failOutputStart)
+        throw new TypeError('private-song.mp3 https://private.invalid/audio')
       sourceOffsets.set(source, offset ?? 0)
       start(when, offset, duration)
     }
@@ -138,6 +141,9 @@ window.AudioContext = class RecordedAudioContext extends NativeAudioContext {
 }
 
 export const mediaControls = {
+  failOutputStart(fail: boolean) {
+    failOutputStart = fail
+  },
   async holdOutputResume() {
     await audioContexts.at(-1)?.suspend()
     holdOutput = true

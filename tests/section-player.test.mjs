@@ -79,19 +79,28 @@ function fakeAudio() {
 
 const buffer = { duration: 252 }
 
-function setup({ repeat = true, range = { start: 10, end: 12 } } = {}) {
+function setup({
+  repeat = true,
+  range = { start: 10, end: 12 },
+  onChange,
+} = {}) {
   const audio = fakeAudio()
   const stops = []
   const errors = []
+  const diagnostics = []
   const player = createSectionPlayer(buffer, {
     createContext: audio.createContext,
     onStop: () => stops.push('stop'),
-    onError: () => errors.push('error'),
+    onError: (diagnostic) => {
+      errors.push('error')
+      diagnostics.push(diagnostic)
+    },
+    onChange,
     repeat,
     volume: 0.5,
   })
   player.setRange(range)
-  return { ...audio, player, stops, errors }
+  return { ...audio, player, stops, errors, diagnostics }
 }
 
 test('the position wraps inside the section only while repeating', () => {
@@ -678,3 +687,146 @@ test('a source that cannot start after a seek keeps the sought position', () => 
   player.play()
   assert.equal(sources.at(-1).started.offset, 11.5)
 })
+
+test('a pending resume is observable and cancellation keeps the position', async () => {
+  const changes = []
+  const state = setup({ onChange: () => changes.push(state.player.pending()) })
+  const { player, contexts } = state
+  player.play()
+  contexts[0].currentTime = 0.5
+  player.pause()
+  const held = holdResume(contexts[0])
+  changes.length = 0
+  player.play()
+  assert.equal(player.pending(), true)
+  assert.equal(changes.at(-1), true)
+  player.pause()
+  assert.equal(player.pending(), false)
+  assert.equal(player.position(), 10.5)
+  const count = changes.length
+  held.resolve()
+  await settleOutput()
+  assert.equal(changes.length, count)
+  assert.equal(player.playing(), false)
+})
+
+test('successful resume reports the end of the pending state', async () => {
+  const changes = []
+  const state = setup({ onChange: () => changes.push(state.player.pending()) })
+  const { player, contexts } = state
+  player.play()
+  player.pause()
+  const held = holdResume(contexts[0])
+  player.play()
+  assert.equal(player.pending(), true)
+  held.resolve()
+  await settleOutput()
+  assert.equal(player.pending(), false)
+  assert.equal(player.playing(), true)
+  assert.equal(changes.at(-1), false)
+})
+
+for (const success of [true, false]) {
+  test(`a retired resume (${success}) cannot settle the new pending attempt`, async () => {
+    const { player, contexts, errors } = setup()
+    player.play()
+    player.pause()
+    const first = holdResume(contexts[0])
+    player.play()
+    player.pause()
+    const second = holdResume(contexts[0])
+    player.play()
+    first[success ? 'resolve' : 'reject']()
+    await settleOutput()
+    assert.equal(player.pending(), true)
+    assert.deepEqual(errors, [])
+    second.resolve()
+    await settleOutput()
+    assert.equal(player.pending(), false)
+    assert.equal(player.playing(), true)
+  })
+}
+
+test('a failed resume reports only its stage and classified reason', async () => {
+  const { player, contexts, diagnostics } = setup()
+  player.play()
+  player.pause()
+  contexts[0].state = 'suspended'
+  contexts[0].resume = () =>
+    Promise.reject(
+      new DOMException(
+        'private-song.mp3 https://private.invalid',
+        'NotAllowedError',
+      ),
+    )
+  player.play()
+  await settleOutput()
+  assert.deepEqual(diagnostics, [
+    { stage: 'resume', reason: 'NotAllowedError' },
+  ])
+  assert.equal(player.pending(), false)
+})
+
+for (const stage of ['context', 'source', 'start', 'resume']) {
+  test(`a synchronous ${stage} failure is classified without its private message`, () => {
+    const audio = fakeAudio()
+    const diagnostics = []
+    const failure = new TypeError('private-song.mp3 https://private.invalid')
+    const player = createSectionPlayer(buffer, {
+      createContext() {
+        if (stage === 'context') throw failure
+        const context = audio.createContext()
+        const create = context.createBufferSource
+        context.createBufferSource = () => {
+          if (stage === 'source') throw failure
+          const node = create()
+          if (stage === 'start')
+            node.start = () => {
+              throw failure
+            }
+          return node
+        }
+        if (stage === 'resume')
+          context.resume = () => {
+            throw failure
+          }
+        return context
+      },
+      onStop() {},
+      onError: (diagnostic) => diagnostics.push(diagnostic),
+      repeat: true,
+      volume: 0.5,
+    })
+    player.setRange({ start: 10, end: 12 })
+    player.play()
+    assert.deepEqual(diagnostics, [{ stage, reason: 'TypeError' }])
+    assert.equal(player.playing(), false)
+    assert.equal(player.pending(), false)
+  })
+}
+
+for (const failure of [
+  new Error('private-song.mp3'),
+  { name: 'private-song.mp3', message: 'private' },
+  Object.defineProperty(new Error(), 'name', {
+    get() {
+      throw new Error('private')
+    },
+  }),
+]) {
+  test('unclassified output errors do not expose arbitrary names or break recovery', () => {
+    const diagnostics = []
+    const player = createSectionPlayer(buffer, {
+      createContext() {
+        throw failure
+      },
+      onStop() {},
+      onError: (diagnostic) => diagnostics.push(diagnostic),
+      repeat: true,
+      volume: 0.5,
+    })
+    player.setRange({ start: 10, end: 12 })
+    assert.doesNotThrow(() => player.play())
+    assert.deepEqual(diagnostics, [{ stage: 'context', reason: 'unknown' }])
+  })
+}
