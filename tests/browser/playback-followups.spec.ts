@@ -92,6 +92,44 @@ test('an output that resumes at once never shows the waiting state', async ({
   expect(await shown.jsonValue()).toEqual([])
 })
 
+test('pausing before the waiting notice is due gives the start up for good', async ({
+  page,
+}) => {
+  await openPlayer(page)
+  const held = await player(page).getByTestId('elapsed').textContent()
+  await page.evaluate(() => window.workspaceTest.holdOutputResume())
+  await play(page).click()
+  // Whichever the button says by now, pressing it cancels the start.
+  await player(page)
+    .getByRole('button', { name: /^(일시정지|재생 시작 취소)$/ })
+    .click()
+  await expect(play(page)).toBeFocused()
+  await page.evaluate(() => window.workspaceTest.settleOutputResume(true))
+  // Longer than the notice waits.
+  await page.waitForTimeout(700)
+  await expect(player(page).getByRole('status')).toHaveCount(0)
+  await expect(play(page)).toBeVisible()
+  await expect(player(page).getByTestId('elapsed')).toHaveText(held!)
+})
+
+test('going back to the start while waiting keeps the same waiting notice', async ({
+  page,
+}) => {
+  await openPlayer(page)
+  await page.evaluate(() => window.workspaceTest.holdOutputResume())
+  await play(page).click()
+  const notice = await player(page).getByRole('status').elementHandle()
+  await player(page).getByRole('button', { name: '구간 처음으로' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.workspaceTest.pendingOutputResumes()),
+    )
+    .toBe(2)
+  expect(await notice!.evaluate((element) => element.isConnected)).toBe(true)
+  await expect(cancel(page)).toBeVisible()
+  await expect(player(page).getByRole('status')).toHaveCount(1)
+})
+
 test('successful resume clears the waiting notice and starts the clock', async ({
   page,
 }) => {

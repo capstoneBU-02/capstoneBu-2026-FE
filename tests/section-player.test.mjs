@@ -688,6 +688,24 @@ test('a source that cannot start after a seek keeps the sought position', () => 
   assert.equal(sources.at(-1).started.offset, 11.5)
 })
 
+test('a source that cannot start after a seek reports that playing stopped', () => {
+  const changes = []
+  const state = setup({ onChange: () => changes.push(state.player.playing()) })
+  const { player, contexts } = state
+  player.play()
+  const create = contexts[0].createBufferSource
+  contexts[0].createBufferSource = () => {
+    const node = create()
+    node.start = () => {
+      throw new Error('Cannot start output')
+    }
+    return node
+  }
+  changes.length = 0
+  player.seek(1.5)
+  assert.deepEqual(changes, [false])
+})
+
 test('a pending resume is observable and cancellation keeps the position', async () => {
   const changes = []
   const state = setup({ onChange: () => changes.push(state.player.pending()) })
