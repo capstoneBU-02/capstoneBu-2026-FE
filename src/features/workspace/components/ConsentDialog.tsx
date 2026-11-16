@@ -133,6 +133,11 @@ export function ConsentDialog({
         </button>
       </div>
       <div className={styles.dialogBody}>
+        {(consent.errorMessage || localError) && (
+          <p className={styles.errorMessage} role="alert">
+            {consent.errorMessage || localError}
+          </p>
+        )}
         <ConsentDescription
           id={descriptionId}
           className={styles.consentDescription}
@@ -143,11 +148,6 @@ export function ConsentDialog({
           <p className={styles.currentChoice}>
             현재 선택:{' '}
             {consent.choice === 'accepted' ? '동의' : '동의하지 않음'}
-          </p>
-        )}
-        {(consent.errorMessage || localError) && (
-          <p className={styles.errorMessage} role="alert">
-            {consent.errorMessage || localError}
           </p>
         )}
         <span className={styles.srOnly} role="status">
