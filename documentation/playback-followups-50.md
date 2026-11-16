@@ -10,7 +10,7 @@
 
 ## 반복 오류와 진단
 
-같은 음원의 동기 실패도 회차마다 alert 인스턴스를 바꾼다. 알림 때문에 키보드 초점을 이동시키지 않으며 실패 안내는 성공적인 새 시도나 해당 음원 이탈 전까지 유지한다. [WAI alert 패턴](https://www.w3.org/WAI/ARIA/apg/patterns/alert/)을 따른 구조 보완이며 DOM 교체만으로 VoiceOver/NVDA의 실제 재낭독을 보증하지 않는다.
+같은 음원의 동기 실패도 회차마다 alert 인스턴스를 바꾼다. 알림 때문에 키보드 초점을 이동시키지 않는다. 안내는 타이머로 자동 삭제하지 않고 다음 재생 시도·재생 대상 변경에 맞춰 갱신한다. [WAI alert 패턴](https://www.w3.org/WAI/ARIA/apg/patterns/alert/)을 따른 구조 보완이며 DOM 교체만으로 VoiceOver/NVDA의 실제 재낭독을 보증하지 않는다.
 
 진단에는 `context`·`source`·`start`·`resume` 단계와 허용 목록의 오류 이름만 전달한다. 목록 밖 이름이나 읽을 수 없는 예외는 `unknown`이다. 로컬 콘솔의 `[earmark:audio-output]` 기록에는 원문 메시지·스택·파일명·URL·음원·작업 ID를 넣지 않는다. 진단 출력이 실패해도 사용자 복구를 방해하지 않는다. 원격 수집이나 저장 인프라는 이번 범위가 아니다.
 
