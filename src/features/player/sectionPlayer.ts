@@ -22,6 +22,8 @@ export interface SectionPlayerOptions {
   // The output could not start; play can be tried again from the same time.
   onError: (diagnostic: PlaybackDiagnostic) => void
   // Source or resume state changed, including an asynchronous resume result.
+  // Moving within one call replaces the source and is reported once, as it
+  // ends up: no stop in between.
   onChange?: () => void
   repeat: boolean
   // Output gain, 0 to 1.
@@ -138,14 +140,21 @@ export function createSectionPlayer(
     return output
   }
 
-  // Stops the current source without reporting it.
-  function release(): void {
+  // Stops the current source, for a caller that starts the next one or
+  // reports the stop itself.
+  function detach(): void {
     if (!source) return
     source.onended = null
     source.stop()
     source.disconnect()
     source = null
     resuming = false
+  }
+
+  // Stops the current source without calling onStop.
+  function release(): void {
+    if (!source) return
+    detach()
     options.onChange?.()
   }
 
@@ -204,12 +213,14 @@ export function createSectionPlayer(
       options.onChange?.()
     } catch (error) {
       rest = at
-      if (source && source === prepared) release()
+      if (source && source === prepared) detach()
       else if (prepared) {
         // A source whose start threw cannot be stopped, but can be detached.
         prepared.onended = null
         prepared.disconnect()
       }
+      // Also for the source a caller stopped to start this one.
+      options.onChange?.()
       onError(playbackDiagnostic(stage, error))
     }
   }
@@ -233,7 +244,7 @@ export function createSectionPlayer(
       return
     }
     if (!within(at, target)) {
-      release()
+      detach()
       startAt(target.start)
       return
     }
@@ -255,12 +266,15 @@ export function createSectionPlayer(
     if (disposed) return
     const playing = source !== null
     const elapsed = offset()
-    release()
+    detach()
     audio = next
     range = playableRange(nextRange, next.duration)
     if (!range) {
       rest = null
-      if (playing) onStop()
+      if (playing) {
+        options.onChange?.()
+        onStop()
+      }
       return
     }
     const at = elapsed === null ? null : range.start + elapsed
@@ -285,7 +299,7 @@ export function createSectionPlayer(
         rest = null
         return
       }
-      release()
+      detach()
       startAt(range.start)
     },
     seek(elapsed) {
@@ -299,7 +313,7 @@ export function createSectionPlayer(
         rest = at
         return
       }
-      release()
+      detach()
       startAt(at)
     },
     switchAudio,
@@ -309,7 +323,7 @@ export function createSectionPlayer(
       const at = position()
       repeat = next
       if (!source || !range) return
-      release()
+      detach()
       startAt(resumeAt(at, range))
     },
     setVolume(next) {
