@@ -153,6 +153,7 @@ export function WorkspacePage({
     workspaceId: string
   } | null>(null)
   const [consentOpening, setConsentOpening] = useState(0)
+  const consentReturnFocusRef = useRef<HTMLElement | null>(null)
   const supportReturnFocusRef = useRef<HTMLElement | null>(null)
   const [addSong, setAddSong] = useState<AddSongRequest | null>(null)
   const addSongReturnFocusRef = useRef<HTMLElement | null>(null)
@@ -258,9 +259,10 @@ export function WorkspacePage({
     setConsentWorkspaceId(null)
   }
 
-  function openConsent() {
+  function openConsent(returnFocus: HTMLElement | null) {
     // A request can fail after a view change or native dialog close. Keep that
     // result until the user retries or dismisses the dialog after seeing it.
+    consentReturnFocusRef.current = returnFocus
     setConsentWorkspaceId(workspaceId)
     setConsentOpening((previous) => previous + 1)
   }
@@ -269,14 +271,9 @@ export function WorkspacePage({
     setConsentWorkspaceId(null)
     workspace.clearConsentError()
   }
-  function openSupport(topic: SupportTopic, returnFocus?: HTMLElement | null) {
+  function openSupport(topic: SupportTopic, returnFocus: HTMLElement | null) {
     if (!workspaceId) return
-    supportReturnFocusRef.current =
-      returnFocus === undefined
-        ? document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null
-        : returnFocus
+    supportReturnFocusRef.current = returnFocus
     setSupport({ topic, workspaceId })
   }
   function openAddSong(
@@ -384,7 +381,7 @@ export function WorkspacePage({
     workspace.consent.errorMessage && (
       <div className="consent-feedback">
         <p role="alert">AI 학습 활용: {workspace.consent.errorMessage}</p>
-        <Button compact onClick={openConsent}>
+        <Button compact onClick={(event) => openConsent(event.currentTarget)}>
           AI 학습 활용 다시 선택
         </Button>
       </div>
@@ -650,7 +647,10 @@ export function WorkspacePage({
                     정하지 않으면 쓰지 않아요.
                   </p>
                 </div>
-                <Button compact onClick={openConsent}>
+                <Button
+                  compact
+                  onClick={(event) => openConsent(event.currentTarget)}
+                >
                   선택하기
                 </Button>
               </div>
@@ -712,6 +712,7 @@ export function WorkspacePage({
           consent={workspace.consent}
           onSave={workspace.saveConsent}
           onClose={closeConsent}
+          returnFocusRef={consentReturnFocusRef}
           fallbackFocusRef={mainContentRef}
         />
       )}

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react'
 import { Button } from '../../../shared/ui/Button.tsx'
+import { restoreFocus } from '../../../shared/ui/dialogFocus.ts'
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import type { UseWorkspaceResult } from '../useWorkspace.ts'
 import styles from '../WorkspacePage.module.css'
@@ -9,6 +10,7 @@ type Props = {
   consent: UseWorkspaceResult['consent']
   onSave: UseWorkspaceResult['saveConsent']
   onClose: () => void
+  returnFocusRef: RefObject<HTMLElement | null>
   fallbackFocusRef: RefObject<HTMLElement | null>
 }
 
@@ -16,6 +18,7 @@ export function ConsentDialog({
   consent,
   onSave,
   onClose,
+  returnFocusRef,
   fallbackFocusRef,
 }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -28,25 +31,15 @@ export function ConsentDialog({
   const busy = consent.status === 'saving'
 
   useEffect(() => {
-    const previousFocus = document.activeElement
     const dialog = dialogRef.current
-    const fallbackFocus = fallbackFocusRef.current
+    const target = returnFocusRef.current
+    const fallback = fallbackFocusRef.current
     dialog?.showModal()
     return () => {
       dialog?.close()
-      const canRestoreFocus =
-        previousFocus instanceof HTMLElement &&
-        previousFocus.isConnected &&
-        !previousFocus.matches(':disabled') &&
-        previousFocus.getClientRects().length > 0
-      if (canRestoreFocus) {
-        previousFocus.focus({ preventScroll: true })
-      }
-      if (!canRestoreFocus || document.activeElement !== previousFocus) {
-        fallbackFocus?.focus({ preventScroll: true })
-      }
+      restoreFocus(target, fallback)
     }
-  }, [fallbackFocusRef])
+  }, [returnFocusRef, fallbackFocusRef])
 
   async function choose(choice: 'accepted' | 'declined') {
     if (saveInFlight.current || busy) return
