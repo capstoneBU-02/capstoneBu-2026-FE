@@ -44,7 +44,7 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-Playwright가 `127.0.0.1:4174`에 테스트용 Vite 서버를 실행하고 Chromium 한 종류로 검증한다. 이미 설치한 Chrome을 쓰려면 `PLAYWRIGHT_CHANNEL=chrome npm run test:browser`로 실행할 수 있다. CI는 `npx playwright install --with-deps chromium` 후 같은 테스트 명령을 사용한다.
+Playwright가 `127.0.0.1:4174`에 테스트용 Vite 서버를 실행하고 Chromium 한 종류로 검증한다. 이미 설치한 Chrome을 쓰려면 `PLAYWRIGHT_CHANNEL=chrome npm run test:browser`로 실행할 수 있다. CI는 `npx playwright install --with-deps chromium` 후 같은 테스트 명령을 사용한다. WebKit 확인은 `npx playwright install webkit` 후 `npm run test:browser:webkit`으로 직접 실행하며 CI에는 포함하지 않는다. 터치 입력 7개는 Chromium 전용 도구를 사용하므로 WebKit에서 건너뛴다.
 
 `tests/browser/`는 실제 `App`과 `useWorkspace`·`WorkspacePage`를 StrictMode에서 렌더하고 저장소 응답 시점만 제어한다. 코드 진입·온보딩 세 선택·재방문·다른 코드의 작업 격리, 미완료 안내 재개, 만료 복구, 제출·저장 중복과 늦은 응답을 검증한다. 설정과 목록의 동의 공유·필터 보존, 뒤로/앞으로 이동, 나가기 후 기록 격리, 도움말 키보드·포커스, 읽기 전용 안내와 작업 불가 상태도 확인한다. 기존 동의 창의 오류 초기화·네이티브 닫기·포커스 복귀·텍스트 드래그 회귀도 유지한다. 곡 추가는 파일 형식·길이 판정을 가짜 검사기로 제어한다. Playwright의 Chromium에는 MP4 코덱이 없을 수 있기 때문이다. 실제 `<audio>` 검사는 `tests/fixtures/media/tone-2s.mp3`(2초 사인파, ffmpeg로 생성)와 손상 파일로만 확인한다. 새 구간은 입력 검증·경계값, 생성 중 잠금·실패 후 재시도·만료, 작성 중 행의 유지·삭제, 파일 바꾸기 확인과 입력 유지 범위를 검증한다. 테스트 화면은 개발 서버 전용이며 배포 빌드에 포함되지 않는다. 실패 스크린샷·trace는 `test-results/`, HTML 결과는 `playwright-report/`에 생성된다.
 
