@@ -151,16 +151,22 @@ export function WorkspaceSidebar({
   // takes Escape for itself.
   useEffect(() => {
     if (!navigationOpen) return
+    // The page may have scrolled past the control, and WebKit does not always
+    // scroll to a focused button by itself.
+    function focusInView(target: HTMLElement | null) {
+      target?.focus({ preventScroll: true })
+      target?.scrollIntoView({ block: 'nearest' })
+    }
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       if (document.querySelector('dialog[open]')) return
       if (helpOpen) {
         setHelpOpen(false)
-        helpTriggerRef.current?.focus({ preventScroll: true })
+        focusInView(helpTriggerRef.current)
         return
       }
       setNavigationOpen(false)
-      mobileMenuRef.current?.focus({ preventScroll: true })
+      focusInView(mobileMenuRef.current)
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
