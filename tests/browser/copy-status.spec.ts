@@ -72,7 +72,7 @@ test('the box shows the value being saved and takes no more input', async ({
   page,
 }) => {
   await openFromHome(page, /^벌스 1/, '?scenario=pending-copy')
-  await copied(page).click()
+  await copied(page).press('Space')
   await expect(toMark(page)).not.toBeChecked()
   await expect(toMark(page)).toHaveAttribute('aria-disabled', 'true')
   await expect(toMark(page)).toBeFocused()
@@ -93,7 +93,7 @@ test('a failed save goes back to the saved value and says so', async ({
   page,
 }) => {
   await openFromHome(page, /^벌스 1/, '?scenario=pending-copy')
-  await copied(page).click()
+  await copied(page).press('Space')
   await expect(toMark(page)).not.toBeChecked()
 
   await page.evaluate(() => window.workspaceTest.failCopy('copy-status-failed'))

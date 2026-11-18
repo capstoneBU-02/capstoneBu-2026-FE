@@ -42,7 +42,7 @@ for (const screen of ['task', 'editor'] as const) {
     await openPlayer(page, screen)
     const held = await player(page).getByTestId('elapsed').textContent()
     await page.evaluate(() => window.workspaceTest.holdOutputResume())
-    await play(page).click()
+    await play(page).press('Enter')
     await expect(cancel(page)).toBeFocused()
     await expect(player(page).getByRole('status')).toHaveText(
       '재생 시작을 기다리고 있어요. 취소한 뒤 다시 시도할 수 있어요.',
@@ -50,7 +50,7 @@ for (const screen of ['task', 'editor'] as const) {
     await expect(
       player(page).getByRole('button', { name: '일시정지' }),
     ).toHaveCount(0)
-    await cancel(page).click()
+    await cancel(page).press('Enter')
     await expect(play(page)).toBeFocused()
     await expect(player(page).getByRole('status')).toHaveCount(0)
     await page.evaluate(() => window.workspaceTest.settleOutputResume(true))
@@ -98,11 +98,11 @@ test('pausing before the waiting notice is due gives the start up for good', asy
   await openPlayer(page)
   const held = await player(page).getByTestId('elapsed').textContent()
   await page.evaluate(() => window.workspaceTest.holdOutputResume())
-  await play(page).click()
+  await play(page).press('Enter')
   // Whichever the button says by now, pressing it cancels the start.
   await player(page)
     .getByRole('button', { name: /^(일시정지|재생 시작 취소)$/ })
-    .click()
+    .press('Enter')
   await expect(play(page)).toBeFocused()
   await page.evaluate(() => window.workspaceTest.settleOutputResume(true))
   // Longer than the notice waits.
@@ -135,7 +135,7 @@ test('successful resume clears the waiting notice and starts the clock', async (
 }) => {
   await openPlayer(page)
   await page.evaluate(() => window.workspaceTest.holdOutputResume())
-  await play(page).click()
+  await play(page).press('Enter')
   await expect(cancel(page)).toBeVisible()
   const held = await player(page).getByTestId('elapsed').textContent()
   await page.evaluate(() => window.workspaceTest.settleOutputResume(true))

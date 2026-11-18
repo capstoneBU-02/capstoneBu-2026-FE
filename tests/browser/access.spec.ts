@@ -112,7 +112,7 @@ test('returning workspace skips onboarding, retains changed consent, and is isol
     name: '진행 중 1',
     exact: true,
   })
-  await processing.click()
+  await processing.press('Enter')
   await expect(page.locator('tbody tr')).toHaveCount(1)
   await expect(processing).toBeFocused()
   await page.getByRole('button', { name: '전체 4', exact: true }).click()
@@ -350,7 +350,10 @@ test('duplicate consent and a stale save cannot complete a replacement workspace
 
 test('expired workspace preview recovers to code entry and mobile onboarding stays keyboard accessible', async ({
   page,
+  browserName,
 }) => {
+  // Safari's default Tab skips buttons; Option+Tab reaches them.
+  const nextControl = browserName === 'webkit' ? 'Alt+Tab' : 'Tab'
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/?demo=expired')
   await page.getByRole('button', { name: '코드 다시 입력' }).click()
@@ -358,11 +361,11 @@ test('expired workspace preview recovers to code entry and mobile onboarding sta
   await input(page).fill(DEMO_ACCESS_CODES.newWorkspace)
   await page.keyboard.press('Enter')
   await expect(notice(page)).toBeFocused()
-  await page.keyboard.press('Tab')
+  await page.keyboard.press(nextControl)
   await expect(page.getByRole('button', { name: '확인했어요' })).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(consent(page)).toBeFocused()
-  await page.keyboard.press('Tab')
+  await page.keyboard.press(nextControl)
   await expect(
     page.getByRole('button', { name: '나중에 정할게요' }),
   ).toBeFocused()

@@ -73,7 +73,7 @@ test('the bar shows the section length and plays from its start', async ({
   await expect(repeatButton(page)).toHaveAttribute('aria-pressed', 'true')
   expect(await audioContexts(page)).toEqual([])
 
-  await playButton(page).click()
+  await playButton(page).press('Enter')
   await expect(pauseButton(page)).toBeFocused()
   await expect.poll(() => elapsedTenths(page)).toBeGreaterThan(3)
 
@@ -304,18 +304,21 @@ test('keyboard focus in the form stays clear of the bar', async ({ page }) => {
   await page.evaluate(() => window.scrollTo(0, 0))
   await main(page).getByRole('button', { name: '파일 바꾸기' }).focus()
 
-  let checked = 0
-  for (let step = 0; step < 20; step += 1) {
-    await page.keyboard.press('Tab')
-    const clearance = await player(page).evaluate((bar) => {
+  const clearance = () =>
+    player(page).evaluate((bar) => {
       const active = document.activeElement
       if (!active || !active.closest('form')) return null
       return (
         bar.getBoundingClientRect().top - active.getBoundingClientRect().bottom
       )
     })
-    if (clearance === null) break
-    expect(clearance).toBeGreaterThanOrEqual(0)
+
+  let checked = 0
+  for (let step = 0; step < 20; step += 1) {
+    await page.keyboard.press('Tab')
+    if ((await clearance()) === null) break
+    // WebKit may scroll to the focused field just after the key press.
+    await expect.poll(clearance).toBeGreaterThanOrEqual(0)
     checked += 1
   }
   expect(checked).toBeGreaterThan(5)
