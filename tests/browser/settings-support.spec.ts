@@ -425,3 +425,83 @@ test('expiry from settings closes overlays and old history cannot bypass renewed
   await expect(page.locator('tbody tr')).toHaveCount(4)
   await expect(main(page)).toBeFocused()
 })
+
+// WebKit gives a clicked button no focus. These tests click the same way on
+// every engine: the event arrives and focus stays where it was.
+test('Esc closes the navigation that a click without focus opened', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/?demo=workspace')
+  const open = page.getByRole('button', { name: '탐색 메뉴 열기' })
+  await open.dispatchEvent('click')
+  await expect(
+    page.getByRole('button', { name: '탐색 메뉴 닫기' }),
+  ).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(open).toBeFocused()
+})
+
+test('Esc closes only the help menu while the navigation stays open', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/?demo=workspace')
+  await page.getByRole('button', { name: '탐색 메뉴 열기' }).click()
+  await help(page).click()
+  await expect(page.getByRole('menu')).toBeVisible()
+  // The menu's own handler is out of reach once focus has left it.
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur())
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(help(page)).toBeFocused()
+  await expect(
+    page.getByRole('button', { name: '탐색 메뉴 닫기' }),
+  ).toBeVisible()
+})
+
+test('Esc in a dialog over the open navigation closes only the dialog', async ({
+  page,
+}) => {
+  await startHarness(page)
+  await openSettings(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: '탐색 메뉴 열기' }).click()
+  await page
+    .getByRole('button', { name: /^(선택|변경)하기$/ })
+    .dispatchEvent('click')
+  await expect(consentDialog(page)).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(consentDialog(page)).toHaveCount(0)
+  await expect(
+    page.getByRole('button', { name: '탐색 메뉴 닫기' }),
+  ).toBeVisible()
+})
+
+test('the consent dialog returns to the button a click without focus opened it from', async ({
+  page,
+}) => {
+  await startHarness(page)
+  await openSettings(page)
+  const change = page.getByRole('button', { name: /^(선택|변경)하기$/ })
+  await change.dispatchEvent('click')
+  await expect(consentDialog(page)).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(consentDialog(page)).toHaveCount(0)
+  await expect(change).toBeFocused()
+})
+
+for (const name of ['이용 안내 보기', '문의하기', '요청 방법 보기']) {
+  test(`the dialog from ${name} returns to it after a click without focus`, async ({
+    page,
+  }) => {
+    await startHarness(page)
+    await openSettings(page)
+    const trigger = main(page).getByRole('button', { name, exact: true })
+    await trigger.dispatchEvent('click')
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+  })
+}
