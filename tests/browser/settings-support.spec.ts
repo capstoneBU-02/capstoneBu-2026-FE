@@ -442,6 +442,41 @@ test('Esc closes the navigation that a click without focus opened', async ({
   await expect(open).toBeFocused()
 })
 
+test('Esc brings the focused control back into view on a scrolled page', async ({
+  page,
+}) => {
+  await startHarness(page)
+  await openSettings(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  const open = page.getByRole('button', { name: '탐색 메뉴 열기' })
+  await open.click()
+  const close = page.getByRole('button', { name: '탐색 메뉴 닫기' })
+  await help(page).click()
+  await expect(page.getByRole('menu')).toBeVisible()
+
+  const leaveAndScroll = () =>
+    page.evaluate(() => {
+      ;(document.activeElement as HTMLElement | null)?.blur()
+      window.scrollTo(0, document.documentElement.scrollHeight)
+    })
+
+  await leaveAndScroll()
+  await expect(help(page)).not.toBeInViewport()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(help(page)).toBeFocused()
+  await expect(help(page)).toBeInViewport()
+
+  await leaveAndScroll()
+  await expect(close).not.toBeInViewport()
+  await page.keyboard.press('Escape')
+  await expect(open).toBeFocused()
+  await expect(open).toBeInViewport()
+  // The focus ring reaches 5px outside the button.
+  const top = await open.evaluate((el) => el.getBoundingClientRect().top)
+  expect(top).toBeGreaterThanOrEqual(5)
+})
+
 test('Esc closes only the help menu while the navigation stays open', async ({
   page,
 }) => {
