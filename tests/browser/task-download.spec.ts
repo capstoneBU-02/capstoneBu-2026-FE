@@ -2,6 +2,10 @@ import { readFile } from 'node:fs/promises'
 import { expect, test, type Download, type Page } from '@playwright/test'
 import type {} from './harness.tsx'
 
+// WebKit reports a Korean file name in decomposed form (NFD).
+const savedName = (download: Download) =>
+  download.suggestedFilename().normalize('NFC')
+
 const main = (page: Page) => page.locator('#workspace-content')
 const tracks = (page: Page) => main(page).getByRole('region', { name: '트랙' })
 const lane = (page: Page, label: string) =>
@@ -182,7 +186,7 @@ test('PNG saves the tab on screen at twice its size', async ({ page }) => {
   const height = Number(await staff(page).getAttribute('height'))
 
   const download = await downloadAs(page, 'PNG 이미지')
-  expect(download.suggestedFilename()).toBe('neon_harbor_live_벌스 1.png')
+  expect(savedName(download)).toBe('neon_harbor_live_벌스 1.png')
   const bytes = await bytesOf(download)
   expect(bytes.subarray(0, 8)).toEqual(
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -218,7 +222,7 @@ test('PDF saves the tab as vector pages with its font', async ({ page }) => {
   await expect(staff(page)).toHaveAccessibleName('타브 악보 90마디')
 
   const download = await downloadAs(page, 'PDF')
-  expect(download.suggestedFilename()).toBe('neon_harbor_live_벌스 1.pdf')
+  expect(savedName(download)).toBe('neon_harbor_live_벌스 1.pdf')
   const text = (await bytesOf(download)).toString('latin1')
   expect(text.startsWith('%PDF-')).toBe(true)
   const pages = text.match(/\/Type\s*\/Page(?!s)/g) ?? []
@@ -270,9 +274,9 @@ test('a failed download keeps the tab and can be tried again', async ({
 
   await page.unroute('**/*.ttf')
   const saved = page.waitForEvent('download', EXPORT_TIMEOUT)
-  await retry.click()
+  await retry.press('Enter')
   const download = await saved
-  expect(download.suggestedFilename()).toBe('neon_harbor_live_벌스 1.pdf')
+  expect(savedName(download)).toBe('neon_harbor_live_벌스 1.pdf')
   await expect(failure(page)).toHaveCount(0)
   // The notice goes with its button; focus returns to 내려받기.
   await expect(trigger(page)).toBeFocused()
@@ -349,10 +353,12 @@ test('a track that fails to play leaves the tab to read and download', async ({
   await expect(staff(page)).toBeVisible(STAFF_TIMEOUT)
 
   const download = await downloadAs(page, 'PNG 이미지')
-  expect(download.suggestedFilename()).toBe('neon_harbor_live_벌스 1.png')
+  expect(savedName(download)).toBe('neon_harbor_live_벌스 1.png')
 
   await page.evaluate(() => window.workspaceTest.healAudio())
-  await banner(page).getByRole('button', { name: '다시 불러오기' }).click()
+  await banner(page)
+    .getByRole('button', { name: '다시 불러오기' })
+    .press('Enter')
   await expect(guitar).toHaveAttribute('data-state', 'ready', AUDIO_TIMEOUT)
   await expect(banner(page)).toHaveCount(0)
   // The button goes with the banner; focus lands on the track it reloaded.

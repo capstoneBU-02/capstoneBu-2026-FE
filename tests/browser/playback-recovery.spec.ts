@@ -41,7 +41,7 @@ for (const screen of ['task', 'editor'] as const) {
     page.on('pageerror', (error) => errors.push(error.message))
     await openPlayer(page, screen)
     await page.evaluate(() => window.workspaceTest.holdOutputResume())
-    await play(page).click()
+    await play(page).press('Enter')
     await expect
       .poll(() =>
         page.evaluate(() => window.workspaceTest.pendingOutputResumes()),

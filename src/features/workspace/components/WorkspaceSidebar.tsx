@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { BrandLogo } from '../../../shared/ui/BrandLogo.tsx'
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import type { WorkspaceInfo, WorkspaceSong, WorkspaceTask } from '../model.ts'
@@ -146,6 +146,31 @@ export function WorkspaceSidebar({
     setHelpOpen(false)
   }
   if (helpOpen && !info) setHelpOpen(false)
+  // Listens on the document: Safari gives a clicked button no focus, so focus
+  // may be outside the sidebar while the navigation is open. An open dialog
+  // takes Escape for itself.
+  useEffect(() => {
+    if (!navigationOpen) return
+    // The page may have scrolled past the control, and WebKit does not always
+    // scroll to a focused button by itself.
+    function focusInView(target: HTMLElement | null) {
+      target?.focus({ preventScroll: true })
+      target?.scrollIntoView({ block: 'nearest' })
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (document.querySelector('dialog[open]')) return
+      if (helpOpen) {
+        setHelpOpen(false)
+        focusInView(helpTriggerRef.current)
+        return
+      }
+      setNavigationOpen(false)
+      focusInView(mobileMenuRef.current)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [navigationOpen, helpOpen])
   const navigationId = useId()
   // 구간 수정 keeps the edited task highlighted, but its row opens the task,
   // another page, so there it is the current item instead of the page.
@@ -159,16 +184,7 @@ export function WorkspaceSidebar({
   const newSectionSongId = view.name === 'new-section' ? view.songId : null
 
   return (
-    <aside
-      className={styles.sidebar}
-      aria-label="워크스페이스 탐색"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' && navigationOpen && !helpOpen) {
-          setNavigationOpen(false)
-          mobileMenuRef.current?.focus()
-        }
-      }}
-    >
+    <aside className={styles.sidebar} aria-label="워크스페이스 탐색">
       <div className={styles.sidebarHeader}>
         <BrandLogo />
         <button

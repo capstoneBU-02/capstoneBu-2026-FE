@@ -814,6 +814,12 @@
     padding: 12px 16px;
   }
 
+  /* Leaves room for the focus ring when Escape scrolls back to the control. */
+  .mobileMenu,
+  .footerRow {
+    scroll-margin-top: 8px;
+  }
+
   .mobileMenu {
     display: flex;
     width: 36px;

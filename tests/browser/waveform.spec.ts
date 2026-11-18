@@ -357,7 +357,7 @@ test('a song that cannot be decoded still takes typed times', async ({
     page.evaluate(() => window.workspaceTest.audioCalls().length)
   const before = await callCount()
   const retry = waveform(page).getByRole('button', { name: '다시 시도' })
-  await retry.click()
+  await retry.press('Enter')
   await expect.poll(callCount).toBeGreaterThan(before)
   await expect(waveform(page)).toHaveAttribute('data-state', 'failed', {
     timeout: 15_000,
@@ -498,6 +498,10 @@ test.describe('on a touch screen', () => {
   // Real touch input, so the browser decides whether the page scrolls. Each
   // offset is measured from where the finger went down.
   async function swipe(page: Page, from: Point, offsets: Point[]) {
+    test.skip(
+      page.context().browser()?.browserType().name() !== 'chromium',
+      'Touch input is sent over CDP, which only Chromium has.',
+    )
     const client = await page.context().newCDPSession(page)
     const touch = (
       type: 'touchStart' | 'touchMove' | 'touchEnd',

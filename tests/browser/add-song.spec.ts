@@ -116,7 +116,10 @@ test('valid MP3 and MP4 files show their length and size and allow 다음', asyn
   page,
 }) => {
   await openFromSidebar(page)
-  await choose(page, audio('neon_harbor_live.mp3', 'audio/mpeg'))
+  // By keyboard, so the drop area holds focus on every engine.
+  const chooser = page.waitForEvent('filechooser')
+  await dropzone(page).press('Enter')
+  await (await chooser).setFiles(audio('neon_harbor_live.mp3', 'audio/mpeg'))
   await expect(dialog(page).getByText('neon_harbor_live.mp3')).toBeVisible()
   await expect(dialog(page).getByText('04:12 · 1.5KB')).toBeVisible()
   // The drop area that held focus is replaced by the file card.

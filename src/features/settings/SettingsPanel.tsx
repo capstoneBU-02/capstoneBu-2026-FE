@@ -7,8 +7,12 @@ export type SettingsPanelProps = {
   maskedTesterCode: string
   consentChoice: ConsentChoice
   onLeave: () => void
-  onEditConsent: () => void
-  onOpenSupport: (topic: Exclude<SupportTopic, 'faq'>) => void
+  // Each receives the button that was pressed, for focus to return to.
+  onEditConsent: (returnFocus: HTMLElement) => void
+  onOpenSupport: (
+    topic: Exclude<SupportTopic, 'faq'>,
+    returnFocus: HTMLElement,
+  ) => void
 }
 
 const consentDescriptions: Record<ConsentChoice, string> = {
@@ -61,7 +65,10 @@ export function SettingsPanel({
             <h3>올린 음원을 AI 학습에 쓰기</h3>
             <p>{consentDescriptions[consentChoice]}</p>
           </div>
-          <Button compact onClick={onEditConsent}>
+          <Button
+            compact
+            onClick={(event) => onEditConsent(event.currentTarget)}
+          >
             {consentChoice === 'undecided' ? '선택하기' : '변경하기'}
           </Button>
         </div>
@@ -79,7 +86,7 @@ export function SettingsPanel({
           <button
             type="button"
             className="settings-text-button"
-            onClick={() => onOpenSupport('usage')}
+            onClick={(event) => onOpenSupport('usage', event.currentTarget)}
             aria-label="이용 안내 보기"
           >
             보기
@@ -106,7 +113,10 @@ export function SettingsPanel({
             <h3>문의하기</h3>
             <p>문의 방법과 채널 준비 상태를 확인해요.</p>
           </div>
-          <Button compact onClick={() => onOpenSupport('contact')}>
+          <Button
+            compact
+            onClick={(event) => onOpenSupport('contact', event.currentTarget)}
+          >
             문의하기
           </Button>
         </div>
@@ -118,7 +128,7 @@ export function SettingsPanel({
           <button
             type="button"
             className="settings-text-button"
-            onClick={() => onOpenSupport('deletion')}
+            onClick={(event) => onOpenSupport('deletion', event.currentTarget)}
           >
             요청 방법 보기
           </button>
