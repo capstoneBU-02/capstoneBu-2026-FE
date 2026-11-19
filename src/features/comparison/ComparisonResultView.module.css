@@ -1,0 +1,62 @@
+.result {
+  /* The yellow of Figma 32:66, which has no shared token. */
+  --region-fill: #ffea9b;
+  --region-soft: #fff3c8;
+  --region-hatch: repeating-linear-gradient(
+    135deg,
+    var(--border-strong) 0 1px,
+    transparent 1px 5px
+  );
+
+  min-width: 0;
+}
+
+.summary {
+  margin-bottom: 16px;
+}
+
+.summary h2 {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.summary p {
+  margin: 4px 0 0;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  word-break: keep-all;
+}
+
+.note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  word-break: keep-all;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-l);
+  background: var(--surface-default);
+}
+
+.board[data-has-list='true'] {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+@media (max-width: 1100px) {
+  .board[data-has-list='true'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

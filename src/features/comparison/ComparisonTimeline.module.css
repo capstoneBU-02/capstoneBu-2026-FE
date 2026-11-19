@@ -1,0 +1,148 @@
+.timeline {
+  --marker-row: 32px;
+  --lane-height: 72px;
+
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 64px minmax(0, 1fr);
+  /* The list beside the timeline can be the taller of the two. */
+  align-items: start;
+  column-gap: 12px;
+  padding: 12px 20px 20px;
+}
+
+.labels {
+  display: grid;
+  grid-template-rows: repeat(2, var(--lane-height));
+  padding-top: var(--marker-row);
+}
+
+.label {
+  align-self: center;
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  word-break: keep-all;
+}
+
+.label span {
+  display: block;
+  color: var(--ink-tertiary);
+}
+
+/* --played and --label-width are read by the play position over the lanes. */
+.track {
+  --played: 0;
+  --label-width: 0px;
+
+  position: relative;
+  min-width: 0;
+  padding-top: var(--marker-row);
+}
+
+/* A center line holds the place of the waveform while its sound loads. */
+.lane {
+  position: relative;
+  height: var(--lane-height);
+  overflow: hidden;
+  background: linear-gradient(var(--border-default), var(--border-default))
+    center / 100% 1px no-repeat;
+}
+
+.lane + .lane {
+  border-top: 1px solid var(--border-default);
+}
+
+.band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  background: var(--region-fill);
+}
+
+.band[data-kind='unavailable'] {
+  background: var(--region-hatch), var(--surface-subtle);
+}
+
+/* Over the bands, so a marked place still shows what was played there. */
+.wave {
+  --wave-bar: var(--ink-tertiary);
+
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* At least a 24px target, kept inside the track at either end. Above the play
+   position, which takes clicks everywhere else on the lanes. */
+.target {
+  --target: max(24px, var(--band));
+
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: clamp(
+    0px,
+    calc(var(--center) - var(--target) / 2),
+    calc(100% - var(--target))
+  );
+  width: var(--target);
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  background: transparent;
+}
+
+.target::after {
+  position: absolute;
+  inset: var(--marker-row) 0 0;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  content: '';
+}
+
+.target:hover::after {
+  border-color: var(--border-strong);
+}
+
+.target[aria-pressed='true']::after {
+  border-color: var(--ink-primary);
+}
+
+.marker {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--region-fill);
+  color: var(--ink-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  transform: translateX(-50%);
+}
+
+.marker[data-kind='unavailable'] {
+  border-radius: 4px;
+  background: var(--region-hatch), var(--surface-subtle);
+}
+
+.target[aria-pressed='true'] .marker {
+  background: var(--ink-primary);
+  color: var(--ink-inverse);
+}
+
+@media (max-width: 700px) {
+  .timeline {
+    grid-template-columns: 52px minmax(0, 1fr);
+    column-gap: 8px;
+    padding: 8px 14px 14px;
+  }
+}
