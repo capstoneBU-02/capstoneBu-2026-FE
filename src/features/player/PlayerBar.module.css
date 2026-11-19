@@ -1,7 +1,8 @@
-/* Stays in view at the bottom of the main column while the page scrolls. */
+/* Stays in view at the bottom of the main column while the page scrolls,
+   on top of the recording panel while one is open. */
 .bar {
   position: sticky;
-  bottom: 0;
+  bottom: var(--recording-panel-height, 0px);
   z-index: 2;
   flex-shrink: 0;
   background: var(--console-base);

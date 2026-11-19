@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../shared/ui/Button.tsx'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import { AddSongDialog } from '../add-song/AddSongDialog.tsx'
+import type { ComparisonRepository } from '../comparison/repository.ts'
 import {
   createMediaDurationProbe,
   type MediaDurationProbe,
@@ -38,6 +39,7 @@ import { useTaskDetail } from './useTaskDetail.ts'
 import { useTaskRecovery } from './useTaskRecovery.ts'
 import type { UseWorkspaceResult } from './useWorkspace.ts'
 import styles from './WorkspacePage.module.css'
+import { DiscardTakeDialog } from '../recording/DiscardTakeDialog.tsx'
 import { SettingsPanel } from '../settings/SettingsPanel.tsx'
 import { SupportDialog, type SupportTopic } from '../support/SupportDialog.tsx'
 import { TaskUnavailablePanel } from '../support/TaskUnavailablePanel.tsx'
@@ -93,6 +95,7 @@ function hasDraggedFiles(event: DragEvent) {
 export function WorkspacePage({
   workspace,
   repository,
+  comparisonRepository = null,
   onReenter,
   onLeave,
   focusOnEntry = false,
@@ -101,6 +104,8 @@ export function WorkspacePage({
 }: {
   workspace: UseWorkspaceResult
   repository: WorkspaceRepository
+  // Without one a finished task shows its tab alone.
+  comparisonRepository?: ComparisonRepository | null
   onReenter?: () => void
   onLeave?: () => void
   focusOnEntry?: boolean
@@ -110,7 +115,16 @@ export function WorkspacePage({
   refreshMs?: number | null
 }) {
   const [filter, setFilter] = useState<Filter>('all')
-  const { view, navigate, leave } = useWorkspaceNavigation()
+  const {
+    view,
+    navigate,
+    leave,
+    blockLeaving,
+    leaveAsked,
+    leaveOpenerRef,
+    confirmLeave,
+    cancelLeave,
+  } = useWorkspaceNavigation()
   const [consentWorkspaceId, setConsentWorkspaceId] = useState<string | null>(
     null,
   )
@@ -631,6 +645,9 @@ export function WorkspacePage({
             }}
             copy={copy}
             actions={taskActions}
+            comparison={comparisonRepository}
+            probeDuration={probeDuration}
+            onUnsavedTakeChange={blockLeaving}
           />
         )}
         {loadState === 'empty' && view.name === 'home' && (
@@ -749,6 +766,14 @@ export function WorkspacePage({
           }}
           onClose={() => setAddSong(null)}
           returnFocusRef={addSongReturnFocusRef}
+          fallbackFocusRef={mainContentRef}
+        />
+      )}
+      {leaveAsked && (
+        <DiscardTakeDialog
+          onConfirm={confirmLeave}
+          onClose={cancelLeave}
+          returnFocusRef={leaveOpenerRef}
           fallbackFocusRef={mainContentRef}
         />
       )}

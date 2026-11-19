@@ -1,6 +1,28 @@
-import { useEffect, useId, useState, type ReactNode, type Ref } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react'
 import { createPortal } from 'react-dom'
+import { Button } from '../../../shared/ui/Button.tsx'
 import { Icon } from '../../../shared/ui/Icon.tsx'
+import type { MediaDurationProbe } from '../../add-song/mediaDuration.ts'
+import type { ComparisonRepository } from '../../comparison/repository.ts'
+import {
+  TaskComparison,
+  type TakeEntry,
+} from '../../comparison/TaskComparison.tsx'
+import {
+  taskViewPanelId,
+  taskViewTabId,
+  type TaskView,
+} from '../../comparison/taskView.ts'
+import { TaskViewTabs } from '../../comparison/TaskViewTabs.tsx'
+import { useComparisonPlayer } from '../../comparison/useComparisonPlayer.ts'
+import { useComparisonSession } from '../../comparison/useComparisonSession.ts'
 import { PlayerBar } from '../../player/PlayerBar.tsx'
 import {
   useSectionPlayer,
@@ -121,6 +143,9 @@ function TaskWorkspace({
   recovery,
   copy,
   actions,
+  comparison,
+  probeDuration,
+  onUnsavedTakeChange,
 }: {
   detail: TaskDetail
   refreshFailed: boolean
@@ -128,9 +153,26 @@ function TaskWorkspace({
   recovery: TaskRecoveryActions
   copy: CopyStatus
   actions: HTMLElement | null
+  comparison: ComparisonRepository | null
+  probeDuration: MediaDurationProbe | undefined
+  onUnsavedTakeChange: ((unsaved: boolean) => void) | undefined
 }) {
   const { task, song, previousResults } = detail
   const previousId = useId()
+  const viewsId = useId()
+  // Only a finished task has a section to play against.
+  const comparable =
+    comparison !== null &&
+    probeDuration !== undefined &&
+    task.processingStatus === 'completed'
+  const session = useComparisonSession({
+    repository: comparable ? comparison : null,
+    taskId: comparable ? task.id : null,
+    onExpired: source.onExpired,
+  })
+  const [chosenView, setChosenView] = useState<TaskView>('tab')
+  const view = comparable ? chosenView : 'tab'
+  const [takeEntry, setTakeEntry] = useState<TakeEntry | null>(null)
   const announcement = useStatusAnnouncement(detail)
   const taskAudio = useTaskAudio(detail, source)
   const { tracks, playback, choices, onPlayingChange } = taskAudio
@@ -143,6 +185,33 @@ function TaskWorkspace({
   useEffect(() => {
     onPlayingChange(player.playing)
   }, [onPlayingChange, player.playing])
+  const listening = useComparisonPlayer({
+    repository: comparable ? comparison : null,
+    result: session.panel === 'result' ? session.state.result : null,
+    playback: session.state.playback,
+    performanceSeconds: session.selected?.durationSeconds ?? null,
+    sectionSeconds: task.rangeEndSeconds - task.rangeStartSeconds,
+    visible: view === 'comparison',
+    onExpired: source.onExpired,
+  })
+  // The bar plays the comparison while its result is on screen.
+  // A take being recorded keeps the section playing along with it.
+  const [capturing, setCapturing] = useState(false)
+  const listeningNow = view === 'comparison' && listening.active && !capturing
+  const pauseHidden = useEffectEvent(() => {
+    if (capturing) return
+    if (listeningNow) player.pause()
+    else listening.playback.pause()
+  })
+  useEffect(() => {
+    pauseHidden()
+  }, [listeningNow])
+  function playAlong(nextCapturing: boolean) {
+    setCapturing(nextCapturing)
+    listening.playback.pause()
+    if (nextCapturing) player.playOnce()
+    else player.pause()
+  }
   const tab = useTaskTab(task, source)
   // The tab drawn on screen. Its drawing code loads on its own and can fail,
   // so a loaded tab is not yet one to download.
@@ -199,72 +268,137 @@ function TaskWorkspace({
             <CopyToggle task={task} copy={copy} />
           )}
         </header>
-        {playbackFailed && (
-          <PlaybackFailure label={playbackTrack.label} audio={playbackAudio} />
+        {listeningNow
+          ? listening.failure && <PlaybackFailure {...listening.failure} />
+          : playbackFailed && (
+              <PlaybackFailure
+                label={playbackTrack.label}
+                audio={playbackAudio}
+              />
+            )}
+        {comparable && (
+          <TaskViewTabs
+            baseId={viewsId}
+            value={view}
+            comparedCount={session.comparedCount}
+            onChange={setChosenView}
+          />
         )}
-        <TaskTracks
-          task={task}
-          {...taskAudio}
-          player={player}
-          bannerTrack={playbackFailed ? playback : null}
-        />
-        <TaskBody
-          detail={detail}
-          refreshFailed={refreshFailed}
-          recovery={recovery}
-          tab={tab}
-          svgRef={setSvg}
-          player={player}
-          playback={playback}
-        />
-        {/* SEG-04: each kept result names the section it was made from. */}
-        {previousResults.length > 0 && (
-          <section className={styles.previous} aria-labelledby={previousId}>
-            <h2 id={previousId}>이전 결과</h2>
-            <p>구간을 바꾸기 전에 만든 결과예요. 최근 것부터 보여요.</p>
-            {/* Safari drops the list role when list-style is none. */}
-            <ul role="list">
-              {previousResults.map((result, index) => (
-                <li key={result.id} className={styles.meta}>
-                  <span>결과 {previousResults.length - index}</span>
-                  <span className={styles.previousName}>
-                    {result.sectionName}
-                  </span>
-                  <span className={styles.range}>
-                    {formatTaskRange(result)}
-                  </span>
-                  <span>{result.partLabel}</span>
-                  <span>{result.tuningLabel}</span>
-                  <span>비교 {result.comparisonCount}회</span>
-                  <span>
-                    {result.copyStatus === 'confirmed'
-                      ? '카피 완료'
-                      : result.copyStatus === 'needs-review'
-                        ? '확인 필요'
-                        : '카피 미확인'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
+        {comparable && (
+          <div
+            id={taskViewPanelId(viewsId, 'comparison')}
+            role="tabpanel"
+            aria-labelledby={taskViewTabId(viewsId, 'comparison')}
+            hidden={view !== 'comparison'}
+          >
+            <TaskComparison
+              session={session}
+              listening={listening}
+              section={task}
+              sectionName={task.sectionName}
+              probeDuration={probeDuration}
+              entry={takeEntry}
+              onEntryChange={setTakeEntry}
+              onCaptureChange={playAlong}
+              onUnsavedTakeChange={onUnsavedTakeChange}
+            />
+          </div>
         )}
+        {/* The tab stays drawn behind 비교, so 내려받기 keeps working. */}
+        <div
+          id={comparable ? taskViewPanelId(viewsId, 'tab') : undefined}
+          role={comparable ? 'tabpanel' : undefined}
+          aria-labelledby={
+            comparable ? taskViewTabId(viewsId, 'tab') : undefined
+          }
+          hidden={view !== 'tab'}
+        >
+          <TaskTracks
+            task={task}
+            {...taskAudio}
+            player={player}
+            bannerTrack={playbackFailed ? playback : null}
+          />
+          <TaskBody
+            detail={detail}
+            refreshFailed={refreshFailed}
+            recovery={recovery}
+            tab={tab}
+            svgRef={setSvg}
+            player={player}
+            playback={playback}
+          />
+          {/* SEG-04: each kept result names the section it was made from. */}
+          {previousResults.length > 0 && (
+            <section className={styles.previous} aria-labelledby={previousId}>
+              <h2 id={previousId}>이전 결과</h2>
+              <p>구간을 바꾸기 전에 만든 결과예요. 최근 것부터 보여요.</p>
+              {/* Safari drops the list role when list-style is none. */}
+              <ul role="list">
+                {previousResults.map((result, index) => (
+                  <li key={result.id} className={styles.meta}>
+                    <span>결과 {previousResults.length - index}</span>
+                    <span className={styles.previousName}>
+                      {result.sectionName}
+                    </span>
+                    <span className={styles.range}>
+                      {formatTaskRange(result)}
+                    </span>
+                    <span>{result.partLabel}</span>
+                    <span>{result.tuningLabel}</span>
+                    <span>비교 {result.comparisonCount}회</span>
+                    <span>
+                      {result.copyStatus === 'confirmed'
+                        ? '카피 완료'
+                        : result.copyStatus === 'needs-review'
+                          ? '확인 필요'
+                          : '카피 미확인'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
       </div>
       <PlayerBar
-        playback={player}
+        playback={listeningNow ? listening.playback : player}
         source={
-          choices.length > 0
-            ? { options: choices, value: playback, onChange: taskAudio.choose }
-            : playbackTrack?.label
+          listeningNow
+            ? listening.source
+            : choices.length > 0
+              ? {
+                  options: choices,
+                  value: playback,
+                  onChange: taskAudio.choose,
+                }
+              : playbackTrack?.label
         }
         notice={
           drawn &&
           download.failure && <TabDownloadFailure download={download} />
         }
       />
-      {/* 내려받기 sits in the page's top bar, beside 구간 수정. */}
-      {drawn &&
-        actions &&
-        createPortal(<TabDownloadMenu download={download} />, actions)}
+      {/* 내려받기 and 녹음 sit in the page's top bar, beside 구간 수정. */}
+      {actions &&
+        createPortal(
+          <>
+            {drawn && <TabDownloadMenu download={download} />}
+            {comparable && (
+              <Button
+                variant="primary"
+                compact
+                onClick={() => {
+                  setChosenView('comparison')
+                  setTakeEntry('record')
+                }}
+              >
+                녹음
+              </Button>
+            )}
+          </>,
+          actions,
+        )}
     </div>
   )
 }
@@ -282,6 +416,9 @@ type TaskPanelProps = {
       recovery?: never
       copy?: never
       actions?: never
+      comparison?: never
+      probeDuration?: never
+      onUnsavedTakeChange?: never
     }
   | {
       source: TaskSource
@@ -289,6 +426,10 @@ type TaskPanelProps = {
       copy: CopyStatus
       // Where the top bar keeps the task's actions, for 내려받기.
       actions: HTMLElement | null
+      // Without a repository a finished task shows its tab alone.
+      comparison?: ComparisonRepository | null
+      probeDuration?: MediaDurationProbe
+      onUnsavedTakeChange?: (unsaved: boolean) => void
       renderDetail?: never
     }
 )
@@ -302,6 +443,9 @@ export function TaskPanel({
   recovery,
   copy,
   actions,
+  comparison = null,
+  probeDuration,
+  onUnsavedTakeChange,
 }: TaskPanelProps) {
   switch (result.status) {
     case 'success':
@@ -317,6 +461,9 @@ export function TaskPanel({
           recovery={recovery}
           copy={copy}
           actions={actions}
+          comparison={comparison}
+          probeDuration={probeDuration}
+          onUnsavedTakeChange={onUnsavedTakeChange}
         />
       )
     case 'unavailable':

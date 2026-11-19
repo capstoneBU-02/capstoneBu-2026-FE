@@ -2,7 +2,10 @@ import { Profiler, StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { WorkspacePage } from '../../src/features/workspace/WorkspacePage.tsx'
 import { useWorkspace } from '../../src/features/workspace/useWorkspace.ts'
+import { RecorderEngineContext } from '../../src/features/recording/recorderEngine.ts'
+import { comparisonRepository } from './harness/comparison.ts'
 import { fakeProbe, mediaControls } from './harness/media.ts'
+import { harnessRecorderEngine } from './harness/recording.ts'
 import {
   repository,
   requestControls,
@@ -53,6 +56,7 @@ export function Harness() {
     <WorkspacePage
       workspace={workspace}
       repository={activeRepository}
+      comparisonRepository={comparisonRepository}
       probeDuration={scenario === 'real-probe' ? undefined : fakeProbe}
       refreshMs={refreshMs}
     />
@@ -67,7 +71,9 @@ createRoot(document.getElementById('root')!).render(
         commits += 1
       }}
     >
-      <Harness />
+      <RecorderEngineContext value={harnessRecorderEngine}>
+        <Harness />
+      </RecorderEngineContext>
     </Profiler>
   </StrictMode>,
 )
