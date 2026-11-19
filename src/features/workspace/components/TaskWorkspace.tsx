@@ -173,6 +173,11 @@ function TaskWorkspace({
   const [chosenView, setChosenView] = useState<TaskView>('tab')
   const view = comparable ? chosenView : 'tab'
   const [takeEntry, setTakeEntry] = useState<TakeEntry | null>(null)
+  // The recording panel stays on screen over 타브, but the upload opens in 비교.
+  function enterTake(entry: TakeEntry | null) {
+    if (entry !== null) setChosenView('comparison')
+    setTakeEntry(entry)
+  }
   const announcement = useStatusAnnouncement(detail)
   const taskAudio = useTaskAudio(detail, source)
   const { tracks, playback, choices, onPlayingChange } = taskAudio
@@ -298,7 +303,7 @@ function TaskWorkspace({
               sectionName={task.sectionName}
               probeDuration={probeDuration}
               entry={takeEntry}
-              onEntryChange={setTakeEntry}
+              onEntryChange={enterTake}
               onCaptureChange={playAlong}
               onUnsavedTakeChange={onUnsavedTakeChange}
             />
@@ -388,10 +393,7 @@ function TaskWorkspace({
               <Button
                 variant="primary"
                 compact
-                onClick={() => {
-                  setChosenView('comparison')
-                  setTakeEntry('record')
-                }}
+                onClick={() => enterTake('record')}
               >
                 녹음
               </Button>

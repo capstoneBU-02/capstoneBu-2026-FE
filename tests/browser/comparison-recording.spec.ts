@@ -648,6 +648,28 @@ test('the panel stays in view on the 타브 view', async ({ page }) => {
   await expect(inPanel(page, '정지')).toBeVisible()
 })
 
+test('파일 올리기 on the 타브 view opens the upload on 비교', async ({
+  page,
+}) => {
+  await openPanel(page, '&recording=denied')
+  await main(page)
+    .getByRole('tablist', { name: '작업 화면' })
+    .getByRole('tab', { name: /^타브/ })
+    .click()
+  await inPanel(page, '녹음 시작').click()
+
+  await inPanel(page, '파일 올리기').click()
+
+  await expect(
+    page.getByRole('dialog', { name: '연주 파일 올리기' }),
+  ).toBeVisible()
+  await expect(
+    main(page)
+      .getByRole('tablist', { name: '작업 화면' })
+      .getByRole('tab', { name: /^비교/ }),
+  ).toHaveAttribute('aria-selected', 'true')
+})
+
 test.describe('what the panel reports to the screen around it', () => {
   const capturePanel = (page: Page) =>
     page.getByRole('region', { name: '캡처 녹음', exact: true })
