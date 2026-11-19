@@ -127,6 +127,13 @@ test('the clock and waveform move without rendering the page', async ({
   page,
 }) => {
   await startRecording(page)
+  // The section starts playing along in a commit of its own, which can land
+  // after 녹음 중 shows. Once its time moves, the page has settled.
+  const bar = page.getByRole('region', { name: '구간 재생' })
+  await expect(
+    bar.getByRole('button', { name: '일시정지', exact: true }),
+  ).toBeVisible()
+  await expect(bar.getByTestId('elapsed')).not.toHaveText('00:00.0')
   const before = await page.evaluate(() => window.workspaceTest.commits())
 
   await advance(page, 14.6)
