@@ -29,6 +29,11 @@ export interface SectionPlayback {
   readonly volume: number
   readonly muted: boolean
   toggle(): void
+  // Stops the sound, wherever it came from, and keeps the time.
+  pause(): void
+  // The section once from its start, whatever the repeat button says, until
+  // it ends or pause() is called.
+  playOnce(): void
   restart(): void
   // To this many seconds after the section start.
   seek(elapsed: number): void
@@ -208,6 +213,23 @@ export function useSectionPlayer(
         player.play()
       }
       syncPlayback()
+    },
+    pause() {
+      const player = playerRef.current
+      if (!player) return
+      player.pause()
+      player.setRepeat(repeat)
+      syncPlayback()
+    },
+    playOnce() {
+      const player = playerRef.current
+      if (!player || !available) return
+      setFailedAudio(null)
+      player.setRepeat(false)
+      player.seek(0)
+      player.play()
+      syncPlayback()
+      notifySeek()
     },
     restart() {
       const player = playerRef.current
