@@ -137,6 +137,19 @@ test('bars take the loudest peak in their slice of the window', () => {
   )
 })
 
+test('bars can read the audio on a clock of its own', () => {
+  const peaks = {
+    peaksPerSecond: 10,
+    values: Float32Array.from([0.1, 0.5, 0.2, 0.9, 0.3, 0.4]),
+  }
+  // Each drawn second covers two seconds of audio, 0.1 seconds in.
+  const timeOf = (seconds) => seconds * 2 + 0.1
+  assert.deepEqual(
+    [...peakBars(peaks, { start: 0, end: 0.2 }, 2, timeOf)],
+    [0.5, 0.9].map(Math.fround),
+  )
+})
+
 test('times and positions convert both ways within a window', () => {
   const window = { start: 40, end: 70 }
   assert.equal(timeToRatio(55, window), 0.5)
