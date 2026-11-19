@@ -183,6 +183,16 @@ test('loading a failed take again keeps the sound being heard', async ({
   await expect(sound(page, '내 연주')).toBeEnabled(RESULT_TIMEOUT)
 })
 
+test('a take from an earlier section plays the range it was played on', async ({
+  page,
+}) => {
+  await openListening(page, '&comparison-seed-range=30,45')
+  await expect(bar(page)).toContainText('/ 00:15.0')
+
+  await sound(page, '원곡').click()
+  await expect(bar(page)).toContainText('/ 00:15.0')
+})
+
 test('leaving the comparison stops its sound and gives the bar back', async ({
   page,
 }) => {

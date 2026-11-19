@@ -178,6 +178,8 @@ function TaskWorkspace({
     if (entry !== null) setChosenView('comparison')
     setTakeEntry(entry)
   }
+  // A take keeps the section it was played on, even after the section moves.
+  const takeSection = session.selected ?? task
   const announcement = useStatusAnnouncement(detail)
   const taskAudio = useTaskAudio(detail, source)
   const { tracks, playback, choices, onPlayingChange } = taskAudio
@@ -195,7 +197,7 @@ function TaskWorkspace({
     result: session.panel === 'result' ? session.state.result : null,
     playback: session.state.playback,
     performanceSeconds: session.selected?.durationSeconds ?? null,
-    sectionSeconds: task.rangeEndSeconds - task.rangeStartSeconds,
+    sectionSeconds: takeSection.rangeEndSeconds - takeSection.rangeStartSeconds,
     visible: view === 'comparison',
     onExpired: source.onExpired,
   })

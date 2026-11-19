@@ -117,7 +117,7 @@ export function TaskComparison({
         <ComparisonResultView
           result={state.result}
           playback={state.playback}
-          section={section}
+          section={selected ?? section}
           listening={listening}
           onMarkRegion={session.markRegion}
         />

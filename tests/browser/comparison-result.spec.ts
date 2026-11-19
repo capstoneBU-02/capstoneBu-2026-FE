@@ -114,6 +114,19 @@ test('both lanes draw each place where it falls in the section', async ({
   }
 })
 
+test('a take from an earlier section is drawn on the range it was played on', async ({
+  page,
+}) => {
+  // Played on 00:30.0–00:45.0, before the section moved to 00:42.1–01:05.8.
+  await openResult(page, '&comparison-seed-range=30,45')
+
+  await expect(rows(page).first()).toContainText('00:32.3 – 00:33.2')
+  const laneBox = await page.locator('[data-lane="performance"]').boundingBox()
+  const bandBox = await bands(page, 'performance').first().boundingBox()
+  if (!laneBox || !bandBox) throw new Error('The lane is not drawn')
+  expect((bandBox.x - laneBox.x) / laneBox.width).toBeCloseTo(0.154, 2)
+})
+
 test('a band ends with the lanes however tall the list beside it is', async ({
   page,
 }) => {

@@ -15,14 +15,28 @@ import { taskDetail } from './server.ts'
 //   comparison-take-audio=fails-once  the take's sound fails to load once
 //   comparison-take-audio=fails-then-slow  and takes a while to load again
 //   comparison-save=hangs      saving a take never finishes
+//   comparison-seed-range=<start>,<end>  the seeded take was played on that
+//                              range, so it opens as a take from an earlier
+//                              section; its sound lasts as long as that range
 const query = new URLSearchParams(window.location.search)
 const takeSecondsAsked = query.get('comparison-take-seconds')
 const takeAudioAsked = query.get('comparison-take-audio')
 const saveHangs = query.get('comparison-save') === 'hangs'
+const seedRange = query.get('comparison-seed-range')?.split(',').map(Number)
 const SLOW_RELOAD_MS = 1_500
 let takeAudioFails =
   takeAudioAsked === 'fails-once' || takeAudioAsked === 'fails-then-slow'
 let takeAudioFailed = false
+// The task keeps the seeded range only while the seeded take is saved.
+let seeding = false
+
+type Ranged = { rangeStartSeconds: number; rangeEndSeconds: number }
+
+function seededRange<T extends Ranged>(task: T): T {
+  if (seedRange === undefined) return task
+  const [rangeStartSeconds, rangeEndSeconds] = seedRange
+  return { ...task, rangeStartSeconds, rangeEndSeconds }
+}
 
 function takeSeconds(sectionSeconds: number) {
   return takeSecondsAsked === null ? sectionSeconds : Number(takeSecondsAsked)
@@ -30,7 +44,9 @@ function takeSeconds(sectionSeconds: number) {
 
 function openTaskSeconds() {
   const task = taskDetail(query.get('task') ?? '')?.task
-  return task ? task.rangeEndSeconds - task.rangeStartSeconds : 1
+  if (!task) return 1
+  const { rangeStartSeconds, rangeEndSeconds } = seededRange(task)
+  return rangeEndSeconds - rangeStartSeconds
 }
 
 const RETRYABLE: ComparisonOutcome = {
@@ -92,7 +108,9 @@ function createHarnessRepository() {
     },
     findTask(taskId) {
       const detail = taskDetail(taskId)
-      return detail ? { task: detail.task, song: detail.song } : undefined
+      if (!detail) return undefined
+      const task = seeding ? seededRange(detail.task) : detail.task
+      return { task, song: detail.song }
     },
     timing: {
       queueMs: 20,
@@ -111,7 +129,7 @@ async function seedTake(repository: ComparisonRepository) {
   const detail = taskDetail(query.get('task') ?? '')
   if (seed === null || detail === null) return
   const { signal } = new AbortController()
-  const { task } = detail
+  const task = seededRange(detail.task)
   const take = await repository.savePerformance(
     {
       taskId: task.id,
@@ -128,7 +146,12 @@ async function seedTake(repository: ComparisonRepository) {
 
 async function harnessRepository() {
   const repository = createHarnessRepository()
-  await seedTake(repository)
+  seeding = true
+  try {
+    await seedTake(repository)
+  } finally {
+    seeding = false
+  }
   return repository
 }
 
