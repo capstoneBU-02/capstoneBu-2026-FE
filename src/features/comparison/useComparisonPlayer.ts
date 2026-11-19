@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { SourceSwitch } from '../player/PlayerBar.tsx'
 import {
   useSectionPlayer,
@@ -15,14 +7,12 @@ import {
 import type { AudioTimeOf, WaveformPeaks } from '../waveform/peaks.ts'
 import type { SongAudio } from '../waveform/useSongAudio.ts'
 import {
-  alternateTrack,
+  alternateTurnAt,
   baselineTrackKind,
   firstListenMode,
   listenClock,
   listenOptions,
-  nextListenPass,
   regionListenRange,
-  takeReaches,
   type ListenMode,
   type ListenTrack,
 } from './comparisonListening.ts'
@@ -34,6 +24,7 @@ import type {
 } from './model.ts'
 import type { ComparisonRepository } from './repository.ts'
 import { createTimeMap, type TimeMap } from './timeMap.ts'
+import { useAlternateTurns } from './useAlternateTurns.ts'
 import {
   useComparisonTracks,
   type ComparisonTrackAudio,
@@ -97,70 +88,6 @@ function useListenClock(
     () => listenClock(track, { start, end }, map, offsetSeconds),
     [track, start, end, map, offsetSeconds],
   )
-}
-
-// Swaps the two sounds while 번갈아 plays. The turn follows the position, so a
-// seek lands on the sound that belongs there.
-function useAlternateTurns({
-  active,
-  playback,
-  turn,
-  map,
-  rangeSeconds,
-  regionSelected,
-  resetKey,
-  onTurn,
-}: {
-  active: boolean
-  playback: SectionPlayback
-  turn: ListenTrack
-  map: TimeMap
-  rangeSeconds: number
-  regionSelected: boolean
-  resetKey: string
-  onTurn: (next: ListenTrack) => void
-}) {
-  const { playing, subscribeSeek } = playback
-  const passRef = useRef(0)
-  const lastRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    passRef.current = 0
-    lastRef.current = null
-  }, [active, resetKey])
-
-  useEffect(
-    () =>
-      subscribeSeek(() => {
-        lastRef.current = null
-      }),
-    [subscribeSeek],
-  )
-
-  const tick = useEffectEvent(() => {
-    const seconds = playback.elapsed()
-    passRef.current = nextListenPass(passRef.current, lastRef.current, seconds)
-    lastRef.current = seconds
-    const next =
-      regionSelected || takeReaches(map, seconds, rangeSeconds)
-        ? alternateTrack({
-            passIndex: passRef.current,
-            elapsedInRange: seconds,
-            rangeSeconds,
-            regionSelected,
-          })
-        : 'baseline'
-    if (next !== turn) onTurn(next)
-  })
-
-  useEffect(() => {
-    if (!active || !playing) return
-    let frame = requestAnimationFrame(function step() {
-      tick()
-      frame = requestAnimationFrame(step)
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [active, playing])
 }
 
 // Plays the sounds of an open comparison through one player, on one timeline.
@@ -291,18 +218,13 @@ export function useComparisonPlayer({
   )
 
   const rangeSeconds = rangeEnd - rangeStart
-  const listening: SectionPlayback = {
-    ...player,
-    length: player.available
-      ? Math.min(rangeSeconds, clock.toBaseline(player.length) - rangeStart)
-      : rangeSeconds,
-    elapsed,
-    seek: (seconds) => player.seek(clock.toPlayer(rangeStart + seconds)),
-  }
-
-  useAlternateTurns({
+  const turns = useAlternateTurns({
     active: mode === 'alternate',
-    playback: listening,
+    playback: {
+      playing: player.playing,
+      elapsed,
+      subscribeSeek: player.subscribeSeek,
+    },
     turn,
     map,
     rangeSeconds,
@@ -314,23 +236,61 @@ export function useComparisonPlayer({
     },
   })
 
+  // In 번갈아 a move lands straight on the sound whose turn it is there, so
+  // the one heard before never starts there first.
+  function moveTo(seconds: number, move: () => void) {
+    const next =
+      mode === 'alternate' && player.available ? turns.turnAt(seconds) : track
+    if (next === track) {
+      move()
+      return
+    }
+    landingRef.current = rangeStart + seconds
+    setTurn(next)
+  }
+
+  const listening: SectionPlayback = {
+    ...player,
+    length: player.available
+      ? Math.min(rangeSeconds, clock.toBaseline(player.length) - rangeStart)
+      : rangeSeconds,
+    elapsed,
+    restart: () => moveTo(0, player.restart),
+    seek: (seconds) =>
+      moveTo(seconds, () => player.seek(clock.toPlayer(rangeStart + seconds))),
+  }
+
   function chooseMode(id: string) {
     const next = listed.find((option) => option.id === id)?.id
     if (next === undefined || next === mode) return
-    const nextTrack = next === 'alternate' ? 'baseline' : next
-    if (nextTrack !== track) landingRef.current = position()
-    setTurn('baseline')
+    const at = position()
+    const nextTrack =
+      next === 'alternate' ? turns.turnAt(at - rangeStart) : next
+    if (nextTrack !== track) landingRef.current = at
+    if (next === 'alternate') setTurn(nextTrack)
     setChosenMode(next)
   }
 
   function selectRegion(regionId: string) {
     const next = regionId === selectedRegionId ? null : regionId
     const place = regions.find(({ id }) => id === next)
-    if (place)
+    if (place) {
+      // A place starts on its first pass, the baseline's.
       landingRef.current = regionListenRange(place, sectionSeconds).start
-    else if (track !== 'baseline' && mode === 'alternate')
-      landingRef.current = position()
-    setTurn('baseline')
+      setTurn('baseline')
+      setSelectedRegionId(next)
+      return
+    }
+    // Letting go keeps the place, on the section's turn there.
+    const at = position()
+    const nextTurn = alternateTurnAt(map, {
+      passIndex: 0,
+      elapsedInRange: at,
+      rangeSeconds: sectionSeconds,
+      regionSelected: false,
+    })
+    if (mode === 'alternate' && nextTurn !== track) landingRef.current = at
+    setTurn(nextTurn)
     setSelectedRegionId(next)
   }
 

@@ -23,7 +23,7 @@ export interface ListenRange {
   readonly end: number
 }
 
-interface AlternateTurn {
+export interface AlternateTurn {
   readonly passIndex: number
   readonly elapsedInRange: number
   readonly rangeSeconds: number
@@ -217,4 +217,16 @@ export function alternateTrack(input: AlternateTurn): ListenTrack {
   // Turns keep counting across passes: with an odd number per pass, restarting
   // the count would play the same sound twice in a row at the loop point.
   return trackOfTurn(pass * turnsPerPass + turnInPass)
+}
+
+// The sound to hear at a place of 번갈아: the turn there, unless the take has
+// no sound left for it.
+export function alternateTurnAt(
+  map: TimeMap,
+  turn: AlternateTurn,
+): ListenTrack {
+  return turn.regionSelected ||
+    takeReaches(map, turn.elapsedInRange, turn.rangeSeconds)
+    ? alternateTrack(turn)
+    : 'baseline'
 }

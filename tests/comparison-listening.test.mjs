@@ -5,6 +5,7 @@ import {
   ALTERNATE_TURN_SECONDS,
   REGION_LOOP_PADDING_SECONDS,
   alternateTrack,
+  alternateTurnAt,
   baselineElapsed,
   baselineTrackKind,
   firstListenMode,
@@ -463,4 +464,22 @@ test('a slower take with no place to go by still reaches the end', () => {
   const map = createTimeMap([], 30, 18)
 
   assert.equal(takeReaches(map, 29.99, 30), true)
+})
+
+test('the turn at a place gives the take only what it has sound for', () => {
+  const map = createTimeMap([region(10, 18, 10, 18)], 30, 18)
+  const at = (passIndex, elapsedInRange, regionSelected = false) =>
+    alternateTurnAt(map, {
+      passIndex,
+      elapsedInRange,
+      rangeSeconds: 30,
+      regionSelected,
+    })
+
+  assert.equal(at(0, 2), 'baseline')
+  assert.equal(at(0, 6), 'performance')
+  // 20 to 24 seconds is the take's turn, but the take stopped at 18.
+  assert.equal(at(0, 22), 'baseline')
+  // A chosen place counts passes alone.
+  assert.equal(at(1, 22, true), 'performance')
 })
