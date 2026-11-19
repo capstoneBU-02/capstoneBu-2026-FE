@@ -1,0 +1,185 @@
+.list {
+  min-width: 0;
+  border-left: 1px solid var(--border-default);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-default);
+  padding: 14px 20px;
+}
+
+.header h2 {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.count {
+  flex-shrink: 0;
+  color: var(--ink-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  border-bottom: 1px solid var(--border-default);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.row[data-selected='true'] {
+  background: var(--region-soft);
+}
+
+.select {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 10px;
+  border: 0;
+  padding: 12px 20px;
+  background: transparent;
+  text-align: left;
+}
+
+.select:hover {
+  background: var(--surface-subtle);
+}
+
+.row[data-selected='true'] .select:hover {
+  background: transparent;
+}
+
+/* The board clips anything drawn outside its rows. */
+.select:focus-visible {
+  outline-offset: -2px;
+}
+
+.number,
+.swatch {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+}
+
+.number {
+  border-radius: 50%;
+  background: var(--region-fill);
+  color: var(--ink-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.row[data-selected='true'] .number {
+  background: var(--ink-primary);
+  color: var(--ink-inverse);
+}
+
+.swatch {
+  border-radius: 4px;
+  background: var(--region-hatch), var(--surface-subtle);
+}
+
+.time {
+  min-width: 0;
+  color: var(--ink-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tag {
+  border-radius: 4px;
+  padding: 2px 6px;
+  background: var(--region-fill);
+  color: var(--ink-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.tag[data-kind='unavailable'] {
+  border: 1px dashed var(--border-strong);
+  padding: 1px 5px;
+  background: var(--surface-subtle);
+  color: var(--ink-secondary);
+}
+
+.reason {
+  grid-column: 1 / -1;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  word-break: keep-all;
+}
+
+.mark {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 0 52px;
+  padding-bottom: 12px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.box {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface-default) center / 12px no-repeat;
+  appearance: none;
+  cursor: inherit;
+}
+
+.box:checked {
+  border-color: var(--ink-primary);
+  background-color: var(--ink-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M10 3 4.5 8.5 2 6' stroke='%23fff' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+@media (max-width: 1100px) {
+  .list {
+    border-top: 1px solid var(--border-default);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .header {
+    padding: 12px 14px;
+  }
+
+  .select {
+    padding: 12px 14px;
+  }
+
+  .mark {
+    margin-left: 46px;
+  }
+}

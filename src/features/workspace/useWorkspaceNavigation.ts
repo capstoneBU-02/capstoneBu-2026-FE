@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   canonicalWorkspaceView,
   hasWorkspaceScope,
@@ -39,6 +39,17 @@ export function useWorkspaceNavigation() {
   // The last push, while its entry is still the current one. Moving through
   // history or replacing the entry forgets it.
   const lastPush = useRef<{ from: string; to: string } | null>(null)
+  // Set while the screen holds something that leaving it would lose.
+  const leaveBlocked = useRef(false)
+  const leaveOpenerRef = useRef<HTMLElement | null>(null)
+  // Back or Forward asked to leave, so going ahead retraces that step.
+  const leaveByHistory = useRef(false)
+  const [pendingLeave, setPendingLeave] = useState<WorkspaceView | null>(null)
+
+  const blockLeaving = useCallback((blocked: boolean) => {
+    leaveBlocked.current = blocked
+    if (!blocked) setPendingLeave(null)
+  }, [])
 
   useEffect(() => {
     function replace(next: WorkspaceView) {
@@ -55,6 +66,25 @@ export function useWorkspaceNavigation() {
         window.location.search,
         entry.scope,
       )
+      const moved =
+        workspaceViewKey(next) !== workspaceViewKey(currentView.current)
+      if (leaveBlocked.current && moved) {
+        // The browser has already moved, so step back onto this screen.
+        window.history.pushState(
+          { [WORKSPACE_SCOPE_KEY]: entry.scope },
+          '',
+          workspaceUrl(
+            entry.pathname,
+            entry.selectorSearch,
+            currentView.current,
+          ),
+        )
+        lastPush.current = null
+        leaveOpenerRef.current = document.activeElement as HTMLElement | null
+        leaveByHistory.current = true
+        setPendingLeave(next)
+        return
+      }
       replace(next)
       lastPush.current = null
       currentView.current = next
@@ -69,6 +99,12 @@ export function useWorkspaceNavigation() {
     const from = workspaceViewKey(currentView.current)
     const to = workspaceViewKey(next)
     if (from === to) return
+    if (leaveBlocked.current) {
+      leaveOpenerRef.current = document.activeElement as HTMLElement | null
+      leaveByHistory.current = false
+      setPendingLeave(next)
+      return
+    }
     window.history.pushState(
       { [WORKSPACE_SCOPE_KEY]: entry.scope },
       '',
@@ -103,5 +139,23 @@ export function useWorkspaceNavigation() {
     )
   }
 
-  return { view, navigate, leave }
+  function confirmLeave() {
+    const next = pendingLeave
+    blockLeaving(false)
+    if (!next) return
+    // This screen's entry was pushed right after the one asked for.
+    if (leaveByHistory.current) window.history.back()
+    else navigate(next)
+  }
+
+  return {
+    view,
+    navigate,
+    leave,
+    blockLeaving,
+    leaveAsked: pendingLeave !== null,
+    leaveOpenerRef,
+    confirmLeave,
+    cancelLeave: () => setPendingLeave(null),
+  }
 }

@@ -61,14 +61,16 @@ test('a list row opens a read-only task header and history reopens the same task
     'page',
   )
   // Unimplemented task actions are not offered as working controls; a
-  // finished task offers only 구간 수정 so far, beside the section player,
-  // and its one box is 카피 완료.
+  // finished task offers these beside the section player, and its one box
+  // is 카피 완료.
   await expect(
-    main(page).locator('button:not(section[aria-label="구간 재생"] button)'),
-  ).toHaveText(['구간 수정'])
+    main(page).locator(
+      'button:not(section[aria-label="구간 재생"] button):visible',
+    ),
+  ).toHaveText(['구간 수정', '내려받기', '녹음', '타브', /^비교/])
   await expect(page.getByRole('checkbox')).toHaveAccessibleName('카피 완료')
   await expect(page.getByRole('checkbox')).toBeChecked()
-  await expect(page.getByRole('tab')).toHaveCount(0)
+  await expect(page.getByRole('tab')).toHaveCount(2)
 
   await page.goBack()
   await expect(page.getByRole('heading', { name: '최근 작업' })).toBeVisible()

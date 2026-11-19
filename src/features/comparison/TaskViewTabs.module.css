@@ -1,0 +1,32 @@
+.tabs {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--border-default);
+  padding: 0 28px;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 10px 0 9px;
+  background: transparent;
+  color: var(--ink-tertiary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  border-bottom-color: var(--ink-primary);
+  color: var(--ink-primary);
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}

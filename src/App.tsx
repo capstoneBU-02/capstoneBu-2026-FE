@@ -4,6 +4,7 @@ import { AccessPage } from './features/access/AccessPage.tsx'
 import { createMockAccessRepository } from './features/access/mockRepository.ts'
 import type { AccessRepository } from './features/access/repository.ts'
 import { useAccess } from './features/access/useAccess.ts'
+import { useDemoComparisonRepository } from './features/comparison/demoComparison.ts'
 import { OnboardingPage } from './features/onboarding/OnboardingPage.tsx'
 import type { DemoScenario } from './features/workspace/model.ts'
 import { createMockWorkspaceRepository } from './features/workspace/mockRepository.ts'
@@ -26,10 +27,15 @@ function WorkspaceSession({
   focusOnEntry?: boolean
 }) {
   const workspace = useWorkspace(repository, scenario)
+  const comparisonRepository = useDemoComparisonRepository(
+    repository,
+    workspace,
+  )
   return (
     <WorkspacePage
       workspace={workspace}
       repository={repository}
+      comparisonRepository={comparisonRepository}
       onReenter={onReenter}
       onLeave={onLeave}
       focusOnEntry={focusOnEntry}

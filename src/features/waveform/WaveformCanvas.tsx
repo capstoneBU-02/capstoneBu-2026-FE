@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react'
-import { peakBars, type WaveformPeaks } from './peaks.ts'
+import { peakBars, type AudioTimeOf, type WaveformPeaks } from './peaks.ts'
 import type { SectionRange, TimeWindow } from './timeline.ts'
 import styles from './Waveform.module.css'
 
@@ -10,6 +10,9 @@ type Props = {
   over: boolean
   width: number
   height: number
+  // For audio that does not run on the window's clock. Keep it stable: a new
+  // function draws again.
+  timeOf?: AudioTimeOf
 }
 
 const BAR_WIDTH = 2
@@ -27,7 +30,7 @@ function colors(canvas: HTMLCanvasElement) {
 }
 
 function draw(canvas: HTMLCanvasElement, props: Props) {
-  const { peaks, window, range, over, width, height } = props
+  const { peaks, window, range, over, width, height, timeOf } = props
   const scale = globalThis.devicePixelRatio || 1
   canvas.width = Math.round(width * scale)
   canvas.height = Math.round(height * scale)
@@ -37,7 +40,7 @@ function draw(canvas: HTMLCanvasElement, props: Props) {
   context.clearRect(0, 0, width, height)
   const palette = colors(canvas)
   const count = Math.floor(width / BAR_PITCH)
-  const bars = peakBars(peaks, window, count)
+  const bars = peakBars(peaks, window, count, timeOf)
   // Spread the bars over the full width so each sits on its own time.
   const pitch = width / count
   const secondsPerBar = (window.end - window.start) / count
@@ -64,7 +67,7 @@ function draw(canvas: HTMLCanvasElement, props: Props) {
 // Bars inside the selection take the accent; the rest stay neutral.
 export function WaveformCanvas(props: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const { peaks, window, range, over, width, height } = props
+  const { peaks, window, range, over, width, height, timeOf } = props
   // Redraws only when a drawn value changes, not on every new object.
   const { start: windowStart, end: windowEnd } = window
   const startTenths = range?.startTenths ?? null
@@ -84,6 +87,7 @@ export function WaveformCanvas(props: Props) {
       over,
       width,
       height,
+      timeOf,
     })
   }, [
     peaks,
@@ -94,6 +98,7 @@ export function WaveformCanvas(props: Props) {
     over,
     width,
     height,
+    timeOf,
   ])
 
   return (

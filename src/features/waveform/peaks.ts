@@ -79,18 +79,24 @@ export async function computePeaks(
   return { peaksPerSecond, values }
 }
 
+// Where a drawn time falls in the audio, for audio on a clock of its own.
+export type AudioTimeOf = (seconds: number) => number
+
+const SAME_TIME: AudioTimeOf = (seconds) => seconds
+
 // One value per bar: the loudest bucket in the bar's slice of the window.
 export function peakBars(
   peaks: WaveformPeaks,
   window: TimeWindow,
   barCount: number,
+  timeOf: AudioTimeOf = SAME_TIME,
 ): Float32Array {
   const bars = new Float32Array(Math.max(0, barCount))
   const { values, peaksPerSecond } = peaks
   const secondsPerBar = (window.end - window.start) / barCount
   for (let bar = 0; bar < bars.length; bar += 1) {
-    const from = (window.start + bar * secondsPerBar) * peaksPerSecond
-    const to = (window.start + (bar + 1) * secondsPerBar) * peaksPerSecond
+    const from = timeOf(window.start + bar * secondsPerBar) * peaksPerSecond
+    const to = timeOf(window.start + (bar + 1) * secondsPerBar) * peaksPerSecond
     const first = Math.floor(from + 1e-9)
     const last = Math.max(first + 1, Math.ceil(to - 1e-9))
     let loudest = 0

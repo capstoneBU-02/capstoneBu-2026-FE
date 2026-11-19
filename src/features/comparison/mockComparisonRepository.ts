@@ -178,10 +178,13 @@ export function createMockComparisonRepository(
       kept.baseline === 'separated-input'
         ? ['stem', 'performance']
         : ['original', 'stem', 'performance']
+    // An uploaded guitar is the whole song; a separated one covers the section.
+    const wholeSong: PlaybackTrackKind =
+      kept.baseline === 'separated-input' ? 'stem' : 'original'
     return kinds.map((kind) => ({
       kind,
       available: !unavailableTracks.has(kind),
-      offsetSeconds: kind === 'original' ? performance.rangeStartSeconds : 0,
+      offsetSeconds: kind === wholeSong ? performance.rangeStartSeconds : 0,
     }))
   }
 

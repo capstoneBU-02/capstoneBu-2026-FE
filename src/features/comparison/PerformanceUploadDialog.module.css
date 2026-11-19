@@ -1,0 +1,64 @@
+/* The picker matches the song upload, so its rules stay in one place. */
+.body {
+  composes: body from '../add-song/AddSongDialog.module.css';
+}
+
+.guide {
+  composes: guide from '../add-song/AddSongDialog.module.css';
+}
+
+.picker {
+  composes: picker from '../add-song/AddSongDialog.module.css';
+}
+
+.dropzone {
+  composes: dropzone from '../add-song/AddSongDialog.module.css';
+}
+
+.dropTitle {
+  composes: dropTitle from '../add-song/AddSongDialog.module.css';
+}
+
+.dropHint {
+  composes: dropHint from '../add-song/AddSongDialog.module.css';
+}
+
+.fileCard {
+  composes: fileCard from '../add-song/AddSongDialog.module.css';
+}
+
+.fileIcon {
+  composes: fileIcon from '../add-song/AddSongDialog.module.css';
+}
+
+.fileText {
+  composes: fileText from '../add-song/AddSongDialog.module.css';
+}
+
+.fileName {
+  composes: fileName from '../add-song/AddSongDialog.module.css';
+}
+
+.fileMeta {
+  composes: fileMeta from '../add-song/AddSongDialog.module.css';
+}
+
+.replace {
+  composes: replace from '../add-song/AddSongDialog.module.css';
+}
+
+.spinner {
+  composes: spinner from '../add-song/AddSongDialog.module.css';
+}
+
+.footer {
+  composes: footer from '../add-song/AddSongDialog.module.css';
+}
+
+.footerNote {
+  composes: footerNote from '../add-song/AddSongDialog.module.css';
+}
+
+.compare {
+  composes: next from '../add-song/AddSongDialog.module.css';
+}
