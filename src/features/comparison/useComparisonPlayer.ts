@@ -249,17 +249,28 @@ export function useComparisonPlayer({
 
   const clock = useListenClock(track, rangeStart, rangeEnd, map, offset)
 
+  // Baseline seconds to land on once the next sound or range is in place.
+  const landingRef = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    landingRef.current = 0
+  }, [comparisonId])
+  // A sound that takes over by itself, as a take loaded again does, keeps the
+  // place in the music too. The place is read before the player below
+  // switches its audio, which can move a time that falls outside the new one.
+  const heardTrackRef = useRef(track)
+  const positionRef = useRef<() => number>(() => 0)
+  useLayoutEffect(() => {
+    if (heardTrackRef.current === track) return
+    heardTrackRef.current = track
+    landingRef.current ??= positionRef.current()
+  })
+
   const player = useSectionPlayer(
     readyOf(audio[track])?.buffer ?? null,
     clock.range,
   )
   const { elapsed: playerElapsed } = player
 
-  // Baseline seconds to land on once the next sound or range is in place.
-  const landingRef = useRef<number | null>(null)
-  useLayoutEffect(() => {
-    landingRef.current = 0
-  }, [comparisonId])
   useLayoutEffect(() => {
     const landing = landingRef.current
     if (landing === null || !player.available) return
@@ -271,6 +282,9 @@ export function useComparisonPlayer({
     () => clock.toBaseline(playerElapsed()),
     [clock, playerElapsed],
   )
+  useLayoutEffect(() => {
+    positionRef.current = position
+  })
   const elapsed = useCallback(
     () => Math.max(0, position() - rangeStart),
     [position, rangeStart],

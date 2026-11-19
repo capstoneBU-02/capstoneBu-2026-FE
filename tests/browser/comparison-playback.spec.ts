@@ -31,6 +31,12 @@ const lastOffset = (page: Page) =>
 const lastSource = (page: Page) =>
   page.evaluate(() => window.workspaceTest.audioSources().at(-1))
 
+async function elapsedTenths(page: Page) {
+  const text = (await bar(page).getByTestId('elapsed').textContent()) ?? ''
+  const [minutes, seconds] = text.split(':')
+  return Math.round((Number(minutes) * 60 + Number(seconds)) * 10)
+}
+
 async function openResult(page: Page, query = '') {
   await page.goto(
     `/tests/browser/harness.html?view=task&task=task-verse&comparison=1&comparison-seed=compared${query}`,
@@ -181,6 +187,33 @@ test('loading a failed take again keeps the sound being heard', async ({
   await retry.click()
   await expect(sound(page, '원곡')).toBeChecked({ timeout: 500 })
   await expect(sound(page, '내 연주')).toBeEnabled(RESULT_TIMEOUT)
+})
+
+test('a take that loads again takes over at the same place in the music', async ({
+  page,
+}) => {
+  // Nearly twice as long as the section, so a place sits nearly twice as far in.
+  await openResult(
+    page,
+    '&comparison-take-seconds=47&comparison-take-audio=fails-then-slow',
+  )
+  const retry = page.getByRole('button', { name: '다시 불러오기' })
+  await expect(retry).toBeVisible(RESULT_TIMEOUT)
+  await expect(sound(page, '원곡')).toBeChecked(RESULT_TIMEOUT)
+  await playButton(page).click()
+  await expect.poll(() => elapsedTenths(page)).toBeGreaterThan(30)
+  await pauseButton(page).click()
+  const held = await elapsedTenths(page)
+
+  await retry.click()
+  await expect(sound(page, '내 연주')).toBeChecked(RESULT_TIMEOUT)
+  await playButton(page).click()
+  await expect(pauseButton(page)).toBeVisible()
+  expect(await lastSourceSeconds(page)).toBeCloseTo(47, 0)
+  expect(await lastOffset(page)).toBeCloseTo(
+    (held / 10) * (47 / SECTION_SECONDS),
+    0,
+  )
 })
 
 test('a take from an earlier section plays the range it was played on', async ({
