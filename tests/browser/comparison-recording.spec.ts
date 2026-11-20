@@ -472,7 +472,7 @@ test('leaving the task during a take asks first and can be declined', async ({
   // Safari gives a clicked button no focus to return to.
   await otherTask(page).focus()
   await page.keyboard.press('Enter')
-  await expect(confirmation(page)).toContainText('녹음을 그만둘까요?')
+  await expect(confirmation(page)).toContainText('저장하지 않고 이동할까요?')
   await confirmation(page).getByRole('button', { name: '취소' }).click()
 
   await expect(confirmation(page)).toBeHidden()
@@ -489,7 +489,7 @@ test('confirming the leave releases the microphone and goes', async ({
   expect(await held(page)).toBe(1)
 
   await otherTask(page).click()
-  await confirmation(page).getByRole('button', { name: '그만두기' }).click()
+  await confirmation(page).getByRole('button', { name: '이동하기' }).click()
 
   await expect(taskTitle(page, '인트로')).toBeVisible()
   await expect(panel(page)).toBeHidden()
@@ -501,7 +501,7 @@ test('leaving the task with a take frees its preview', async ({ page }) => {
   await recordTake(page)
 
   await otherTask(page).click()
-  await confirmation(page).getByRole('button', { name: '그만두기' }).click()
+  await confirmation(page).getByRole('button', { name: '이동하기' }).click()
 
   await expect(panel(page)).toBeHidden()
   expect(await liveWavUrls(page)).toBe(0)
@@ -523,7 +523,7 @@ test('going back during a take asks before it leaves', async ({ page }) => {
   await expect(panel(page).getByText('녹음 중', { exact: true })).toBeVisible()
 
   await page.goBack()
-  await expect(confirmation(page)).toContainText('녹음을 그만둘까요?')
+  await expect(confirmation(page)).toContainText('저장하지 않고 이동할까요?')
   await confirmation(page).getByRole('button', { name: '취소' }).click()
   await expect(taskTitle(page, '벌스 1')).toBeVisible()
   expect(await held(page)).toBe(1)
@@ -531,7 +531,7 @@ test('going back during a take asks before it leaves', async ({ page }) => {
   await page.goBack()
   await expect(confirmation(page)).toBeVisible()
   const entries = await page.evaluate(() => history.length)
-  await confirmation(page).getByRole('button', { name: '그만두기' }).click()
+  await confirmation(page).getByRole('button', { name: '이동하기' }).click()
   await expect(taskTitle(page, '인트로')).toBeVisible()
   expect(await held(page)).toBe(0)
   // Going back again must not return to the screen just given up.
@@ -547,7 +547,7 @@ test('leaving while the take is being saved asks first', async ({ page }) => {
 
   expect(await pageCloseIsHeld(page)).toBe(true)
   await otherTask(page).click()
-  await expect(confirmation(page)).toContainText('녹음을 그만둘까요?')
+  await expect(confirmation(page)).toContainText('저장하지 않고 이동할까요?')
   await expect(taskTitle(page, '벌스 1')).toBeVisible()
 })
 
