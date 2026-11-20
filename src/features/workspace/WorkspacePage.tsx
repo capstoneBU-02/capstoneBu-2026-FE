@@ -20,6 +20,7 @@ import { ReplaceFileDialog } from '../new-section/ReplaceFileDialog.tsx'
 import type { SectionForm } from '../new-section/sectionForm.ts'
 import { useSectionDrafts } from '../new-section/useSectionDrafts.ts'
 import { ConsentDialog } from './components/ConsentDialog.tsx'
+import { ConfirmDialog } from './components/ConfirmDialog.tsx'
 import { EmptyWorkspace } from './components/EmptyWorkspace.tsx'
 import { LoadingState, ProblemState } from './components/StateMessage.tsx'
 import {
@@ -39,7 +40,6 @@ import { useTaskDetail } from './useTaskDetail.ts'
 import { useTaskRecovery } from './useTaskRecovery.ts'
 import type { UseWorkspaceResult } from './useWorkspace.ts'
 import styles from './WorkspacePage.module.css'
-import { DiscardTakeDialog } from '../recording/DiscardTakeDialog.tsx'
 import { SettingsPanel } from '../settings/SettingsPanel.tsx'
 import { SupportDialog, type SupportTopic } from '../support/SupportDialog.tsx'
 import { TaskUnavailablePanel } from '../support/TaskUnavailablePanel.tsx'
@@ -770,7 +770,10 @@ export function WorkspacePage({
         />
       )}
       {leaveAsked && (
-        <DiscardTakeDialog
+        <ConfirmDialog
+          title="저장하지 않고 이동할까요?"
+          description="저장하지 않은 연주가 사라질 수 있어요."
+          confirmLabel="이동하기"
           onConfirm={confirmLeave}
           onClose={cancelLeave}
           returnFocusRef={leaveOpenerRef}

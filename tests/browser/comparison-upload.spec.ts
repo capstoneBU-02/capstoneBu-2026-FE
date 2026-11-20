@@ -346,14 +346,14 @@ test('leaving while the file is being saved asks first', async ({ page }) => {
   expect(await pageCloseIsHeld(page)).toBe(true)
 
   await page.goBack()
-  await expect(confirmation(page)).toContainText('녹음을 그만둘까요?')
+  await expect(confirmation(page)).toContainText('저장하지 않고 이동할까요?')
   await confirmation(page).getByRole('button', { name: '취소' }).click()
   await expect(confirmation(page)).toBeHidden()
   await expect(dialog(page)).toBeVisible()
   await expect(taskTitle(page, '벌스 1')).toBeVisible()
 
   await page.goBack()
-  await confirmation(page).getByRole('button', { name: '그만두기' }).click()
+  await confirmation(page).getByRole('button', { name: '이동하기' }).click()
   await expect(taskTitle(page, '인트로')).toBeVisible()
   await expect(dialog(page)).toBeHidden()
   expect(await pageCloseIsHeld(page)).toBe(false)
@@ -405,7 +405,7 @@ test('a save that fails while leaving is asked about stays with its error', asyn
   )
 
   await page.goBack()
-  await expect(confirmation(page)).toContainText('녹음을 그만둘까요?')
+  await expect(confirmation(page)).toContainText('저장하지 않고 이동할까요?')
   await page.evaluate(() => {
     ;(globalThis as unknown as { releaseSave(): void }).releaseSave()
   })
