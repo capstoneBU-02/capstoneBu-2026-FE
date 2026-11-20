@@ -3,7 +3,10 @@ import { createRoot } from 'react-dom/client'
 import { WorkspacePage } from '../../src/features/workspace/WorkspacePage.tsx'
 import { useWorkspace } from '../../src/features/workspace/useWorkspace.ts'
 import { RecorderEngineContext } from '../../src/features/recording/recorderEngine.ts'
-import { comparisonRepository } from './harness/comparison.ts'
+import {
+  comparisonControls,
+  comparisonRepository,
+} from './harness/comparison.ts'
 import { fakeProbe, mediaControls } from './harness/media.ts'
 import { harnessRecorderEngine } from './harness/recording.ts'
 import {
@@ -33,6 +36,7 @@ window.workspaceTest = {
   ...serverControls,
   ...mediaControls,
   ...tabCopyControls,
+  ...comparisonControls,
   // Harness replaces these once it renders.
   switchWorkspace() {},
   saveTwice() {},

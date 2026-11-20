@@ -67,9 +67,10 @@ export function songAudio(songId: string, signal: AbortSignal): Promise<Blob> {
 }
 
 // The separated guitar is synthesized for the section alone. audio-error and
-// separated-error serve bytes no browser decodes; pending-separated never
-// answers.
+// separated-error serve bytes no browser decodes; pending-separated answers
+// only when releaseSeparated() is called.
 const separatedCalls: Array<{ taskId: string; signal: AbortSignal }> = []
+const heldSeparated: Array<() => void> = []
 let separatedBroken = scenario === 'separated-error'
 
 export function separatedAudio(
@@ -77,7 +78,14 @@ export function separatedAudio(
   signal: AbortSignal,
 ): Promise<Blob> {
   separatedCalls.push({ taskId, signal })
-  if (scenario === 'pending-separated') return new Promise(() => {})
+  if (scenario === 'pending-separated')
+    return new Promise((resolve) => {
+      heldSeparated.push(() => resolve(synthesizedGuitar(taskId, signal)))
+    })
+  return synthesizedGuitar(taskId, signal)
+}
+
+function synthesizedGuitar(taskId: string, signal: AbortSignal): Promise<Blob> {
   if (audioBroken || separatedBroken)
     return Promise.resolve(new Blob(['not audio'], { type: 'audio/wav' }))
   const task = findTask(taskId)
@@ -177,6 +185,9 @@ export const mediaControls = {
       taskId,
       aborted: signal.aborted,
     })),
+  releaseSeparated() {
+    heldSeparated.splice(0).forEach((release) => release())
+  },
   healAudio() {
     audioBroken = false
     separatedBroken = false

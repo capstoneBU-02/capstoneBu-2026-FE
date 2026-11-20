@@ -26,11 +26,14 @@ import {
 
 const SAVE_FAILED = '연주를 저장하지 못했어요. 다시 시도해 주세요.'
 
+// What plays along with a take needs only the seconds recorded so far.
+export type TakeClock = Pick<MicrophoneCapture, 'elapsedSeconds'>
+
 export interface RecorderOptions {
   readonly sectionSeconds: number
   readonly onSubmit: (take: NewTake) => Promise<SubmitTakeOutcome>
   readonly onSaved: () => void
-  readonly onCaptureChange?: (capturing: boolean) => void
+  readonly onCaptureChange?: (take: TakeClock | null) => void
 }
 
 export interface Recorder {
@@ -64,7 +67,7 @@ export function useRecorder(options: RecorderOptions): Recorder {
   function reportCapturing(next: boolean) {
     if (capturing.current === next) return
     capturing.current = next
-    latest.current.onCaptureChange?.(next)
+    latest.current.onCaptureChange?.(next ? active.current : null)
   }
 
   function releaseMicrophone() {

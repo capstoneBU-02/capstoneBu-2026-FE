@@ -5,6 +5,7 @@ import type {
 } from '../../../src/features/comparison/mockComparisonRun.ts'
 import type { ComparisonRepository } from '../../../src/features/comparison/repository.ts'
 import { createDemoSongAudio } from '../../../src/features/workspace/demoSongAudio.ts'
+import type { TestControls } from './controls.ts'
 import { separatedAudio, songAudio } from './media.ts'
 import { taskDetail } from './server.ts'
 
@@ -22,6 +23,8 @@ import { taskDetail } from './server.ts'
 //   comparison-take-audio=fails-once  the take's sound fails to load once
 //   comparison-take-audio=fails-then-slow  and takes a while to load again
 //   comparison-save=hangs      saving a take never finishes
+//   comparison-save=held       saving a take waits for releaseTakeSaves() or
+//                              failTakeSaves()
 //   comparison-seed-range=<start>,<end>  the seeded take was played on that
 //                              range, so it opens as a take from an earlier
 //                              section; its sound lasts as long as that range
@@ -90,14 +93,34 @@ const OUTCOMES: Readonly<Record<string, readonly ComparisonOutcome[]>> = {
   ],
 }
 
+// Saves that comparison-save=held keeps until releaseTakeSaves() or
+// failTakeSaves().
+const heldSaves: Array<(fail: boolean) => void> = []
+
+function savingAsAsked(
+  repository: ComparisonRepository,
+): ComparisonRepository['savePerformance'] {
+  if (saveHangs) return () => new Promise(() => {})
+  if (query.get('comparison-save') !== 'held') return repository.savePerformance
+  // The seeded take is saved before the test begins.
+  return (input, signal) =>
+    seeding
+      ? repository.savePerformance(input, signal)
+      : new Promise((resolve, reject) => {
+          heldSaves.push((fail) =>
+            fail
+              ? reject(new Error('The held save failed.'))
+              : resolve(repository.savePerformance(input, signal)),
+          )
+        })
+}
+
 // Takes added in a test hold bytes no browser decodes, so every take sounds
 // like the same synthesized line.
 function withTakeSound(repository: ComparisonRepository): ComparisonRepository {
   return {
     ...repository,
-    savePerformance: saveHangs
-      ? () => new Promise(() => {})
-      : repository.savePerformance,
+    savePerformance: savingAsAsked(repository),
     async loadTrackAudio(comparisonId, kind, signal) {
       if (kind !== 'performance')
         return repository.loadTrackAudio(comparisonId, kind, signal)
@@ -171,6 +194,15 @@ async function harnessRepository() {
   }
   return repository
 }
+
+export const comparisonControls = {
+  releaseTakeSaves() {
+    heldSaves.splice(0).forEach((release) => release(false))
+  },
+  failTakeSaves() {
+    heldSaves.splice(0).forEach((release) => release(true))
+  },
+} satisfies Partial<TestControls>
 
 export const comparisonRepository: ComparisonRepository | null = query.has(
   'comparison',
