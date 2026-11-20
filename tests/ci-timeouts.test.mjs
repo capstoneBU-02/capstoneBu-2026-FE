@@ -12,21 +12,21 @@ const SLOWEST_CI_RUN_SECONDS = 282
 // covers npm ci, so this mostly leaves room for a slower runner.
 const OTHER_STEPS_SECONDS = 180
 
-// The check job's own limit, not one of a step or another job.
-function checkJobMinutes() {
+// The browser job's own limit, not one of a step or another job.
+function browserJobMinutes() {
   const workflow = readFileSync(
     new URL('../.github/workflows/ci.yml', import.meta.url),
     'utf8',
   )
-  const job = workflow.match(/^ {2}check:\n((?:(?: {4}.*)?\n)*)/m)
-  assert.ok(job, 'ci.yml has no check job')
+  const job = workflow.match(/^ {2}browser:\n((?:(?: {4}.*)?\n)*)/m)
+  assert.ok(job, 'ci.yml has no browser job')
   const limit = job[1].match(/^ {4}timeout-minutes:\s*(\d+)/m)
-  assert.ok(limit, 'the check job has no timeout-minutes')
+  assert.ok(limit, 'the browser job has no timeout-minutes')
   return Number(limit[1])
 }
 
 const suiteSeconds = config.globalTimeout / 1000
-const jobSeconds = checkJobMinutes() * 60
+const jobSeconds = browserJobMinutes() * 60
 
 test('the browser suite may take twice its slowest CI run', () => {
   assert.ok(

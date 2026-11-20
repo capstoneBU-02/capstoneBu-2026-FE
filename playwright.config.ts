@@ -5,8 +5,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   timeout: 20_000,
-  // The whole suite, at least twice its slowest CI run (229 tests took 4.7 min,
-  // PR #40). The CI job's timeout-minutes leaves room for the failure report.
+  // One run, at least twice its slowest CI run (tests/ci-timeouts.test.mjs).
+  // CI runs the suite in two shards, each under this limit. The browser job's
+  // timeout-minutes leaves room for the failure report.
   globalTimeout: 600_000,
   workers: 2,
   reporter: [['list'], ['html', { open: 'never' }]],
