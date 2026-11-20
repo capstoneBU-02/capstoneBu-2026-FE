@@ -9,6 +9,7 @@ import {
   comparisonSessionReducer,
   initialComparisonSession,
   selectedPerformance,
+  sessionNotice,
   sessionPanel,
   type ComparisonSessionState,
   type SessionPanel,
@@ -40,6 +41,8 @@ export interface ComparisonSession {
   readonly panel: SessionPanel
   readonly selected: SavedPerformance | null
   readonly comparedCount: number
+  // Why the last action on the open take failed.
+  readonly notice: string | null
   select(performanceId: string): void
   submitTake(take: NewTake): Promise<SubmitTakeOutcome>
   requestSelected(): void
@@ -139,8 +142,8 @@ export function useComparisonSession({
           reportExpired()
           return 'stop'
         }
-        // A status that failed to load is asked for again; a finished
-        // comparison whose result failed waits for the user.
+        // A status that failed to load is asked for again; a comparison that
+        // is gone, or a finished one whose result failed, waits for the user.
         if (running && !hasCode(error, 'comparison-unavailable'))
           return 'continue'
         dispatch({ type: 'result-failed', comparisonId: id })
@@ -160,17 +163,23 @@ export function useComparisonSession({
     }
   }, [repository, comparisonId, state.follow, pollMs])
 
-  function failAction(error: unknown, fallback: string) {
+  // The notice goes to the take the action was for, which may no longer be
+  // the open one.
+  function failAction(error: unknown, fallback: string, performanceId: string) {
     if (lifetime.current?.signal.aborted) return
     if (hasCode(error, 'expired')) onExpired()
     else
-      dispatch({ type: 'action-failed', message: messageOf(error, fallback) })
+      dispatch({
+        type: 'action-failed',
+        performanceId,
+        message: messageOf(error, fallback),
+      })
   }
 
   async function requestComparison(performanceId: string) {
     const signal = lifetime.current?.signal
     if (!repository || !signal) return
-    dispatch({ type: 'action-started', action: 'requesting' })
+    dispatch({ type: 'action-started', action: 'requesting', performanceId })
     try {
       const comparison = await repository.requestComparison(
         performanceId,
@@ -179,7 +188,7 @@ export function useComparisonSession({
       if (!signal.aborted)
         dispatch({ type: 'comparison-started', performanceId, comparison })
     } catch (error) {
-      failAction(error, REQUEST_FAILED)
+      failAction(error, REQUEST_FAILED, performanceId)
     }
   }
 
@@ -206,19 +215,20 @@ export function useComparisonSession({
     const signal = lifetime.current?.signal
     const performanceId = state.selectedId
     if (!repository || !signal || !performanceId || !comparisonId) return
-    dispatch({ type: 'action-started', action: 'retrying' })
+    dispatch({ type: 'action-started', action: 'retrying', performanceId })
     try {
       const comparison = await repository.retry(comparisonId, signal)
       if (!signal.aborted)
         dispatch({ type: 'comparison-started', performanceId, comparison })
     } catch (error) {
-      failAction(error, REQUEST_FAILED)
+      failAction(error, REQUEST_FAILED, performanceId)
     }
   }
 
   async function markRegion(regionId: string, checked: boolean) {
     const signal = lifetime.current?.signal
-    if (!repository || !signal || !comparisonId) return
+    const performanceId = state.selectedId
+    if (!repository || !signal || !performanceId || !comparisonId) return
     const id = comparisonId
     const mark = (latestMarks.current.get(regionId) ?? 0) + 1
     latestMarks.current.set(regionId, mark)
@@ -233,7 +243,7 @@ export function useComparisonSession({
         regionId,
         checked: !checked,
       })
-      failAction(error, MARK_FAILED)
+      failAction(error, MARK_FAILED, performanceId)
     }
   }
 
@@ -242,6 +252,7 @@ export function useComparisonSession({
     panel: sessionPanel(state),
     selected: selectedPerformance(state),
     comparedCount: comparedTakeCount(state),
+    notice: sessionNotice(state),
     select: (performanceId) => dispatch({ type: 'select', performanceId }),
     submitTake,
     requestSelected() {

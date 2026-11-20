@@ -22,6 +22,16 @@ const resultLegend = (page: Page) =>
   comparison(page)
     .getByText(/^다르게 들림 \d+$/)
     .first()
+const notice = (page: Page) => comparison(page).getByRole('alert')
+// Newest first: index 0 is the take that opens.
+const chooseTake = (page: Page, index: number) =>
+  comparison(page)
+    .getByRole('combobox', { name: '연주' })
+    .selectOption({ index })
+const firstMark = (page: Page) =>
+  page
+    .getByRole('region', { name: '다시 들어볼 곳' })
+    .getByRole('checkbox', { name: /^1번 구간/ })
 
 async function openComparison(page: Page, query = '') {
   await page.goto(
@@ -49,29 +59,80 @@ async function stubTakeEntries(page: Page) {
   )
 }
 
-// The harness has no switch for these, so the mock answers with a failure for
-// as long as the page's flag stays up.
-async function failMockRequest(page: Page, method: string) {
-  await page.addInitScript(() => {
-    Object.assign(globalThis, { failComparisonMock: true })
-  })
-  await page.route('**/mockComparisonRepository.ts*', async (route) => {
+// Puts a statement first in one method of the mock, where its own error class
+// is in scope.
+function rewriteMockMethod(page: Page, method: string, statement: string) {
+  return page.route('**/mockComparisonRepository.ts*', async (route) => {
     const response = await route.fetch()
     const source = await response.text()
     const signature = `async ${method}(`
     expect(source).toContain(signature)
     const body = source.replace(
       new RegExp(`(async ${method}\\([^)]*\\) \\{)`),
-      `$1 if (globalThis.failComparisonMock) throw new Error('mock failure');`,
+      `$1 ${statement}`,
     )
     await route.fulfill({ response, body })
   })
+}
+
+// Without a code the screen falls back on its own wording.
+const mockError = (code?: string) =>
+  code
+    ? `new ComparisonRepositoryError('${code}')`
+    : `new Error('mock failure')`
+
+// The harness has no switch for these, so the mock answers with a failure for
+// as long as the page's flag stays up.
+async function failMockRequest(page: Page, method: string, code?: string) {
+  await page.addInitScript(() => {
+    Object.assign(globalThis, { failComparisonMock: true })
+  })
+  await rewriteMockMethod(
+    page,
+    method,
+    `if (globalThis.failComparisonMock) throw ${mockError(code)};`,
+  )
 }
 
 const recoverMockRequest = (page: Page) =>
   page.evaluate(() => {
     Object.assign(globalThis, { failComparisonMock: false })
   })
+
+// Every call fails, but only once the test lets it, so the screen can move on
+// while the request is still out.
+async function holdMockFailure(page: Page, method: string, code?: string) {
+  await page.addInitScript(() => {
+    const gate = new Promise((resolve) => {
+      Object.assign(globalThis, { releaseMockFailure: resolve })
+    })
+    Object.assign(globalThis, { mockFailureGate: gate, mockFailed: false })
+  })
+  await rewriteMockMethod(
+    page,
+    method,
+    `await globalThis.mockFailureGate; globalThis.mockFailed = true; throw ${mockError(code)};`,
+  )
+}
+
+// Returns once the failure has reached the screen.
+async function releaseMockFailure(page: Page) {
+  await page.evaluate(() => {
+    ;(
+      globalThis as unknown as { releaseMockFailure(): void }
+    ).releaseMockFailure()
+  })
+  await page.waitForFunction(
+    () => (globalThis as unknown as { mockFailed: boolean }).mockFailed,
+  )
+  // React renders what the failure changed within a frame or two.
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  )
+}
 
 // The harness ends a comparison within a fifth of a second, which a busy
 // machine can miss. Runs started from the flag's time on stay queued; an earlier
@@ -291,4 +352,101 @@ test('a result that failed to load can be asked for again', async ({
   await button(page, '다시 시도').click()
 
   await expect(resultLegend(page)).toBeVisible(SETTLED)
+})
+
+test('a comparison that is gone while it runs can be asked for again', async ({
+  page,
+}) => {
+  await holdComparisonRuns(page, 0)
+  await failMockRequest(page, 'loadStatus', 'comparison-unavailable')
+  await openComparison(page, '&comparison-seed=compared')
+
+  await expect(status(page)).toContainText(
+    '비교 결과를 불러오지 못했어요',
+    SETTLED,
+  )
+
+  await recoverMockRequest(page)
+  await button(page, '다시 시도').click()
+
+  await expect(status(page)).toContainText('비교하는 중')
+  await releaseRuns(page)
+  await expect(resultLegend(page)).toBeVisible(SETTLED)
+})
+
+test('a failed comparison that is gone before its details arrive can be asked for again', async ({
+  page,
+}) => {
+  await failMockRequest(page, 'loadStatus', 'comparison-unavailable')
+  await openComparison(
+    page,
+    '&comparison-seed=compared&comparison-outcome=failed&comparison-run=instant',
+  )
+
+  await expect(status(page)).toContainText(
+    '비교 결과를 불러오지 못했어요',
+    SETTLED,
+  )
+
+  await recoverMockRequest(page)
+  await button(page, '다시 시도').click()
+
+  await expect(status(page)).toContainText('비교를 끝내지 못했어요', SETTLED)
+})
+
+test('a request that fails after another take was chosen tells only its own take', async ({
+  page,
+}) => {
+  await holdMockFailure(page, 'requestComparison', 'stem-not-ready')
+  await openComparison(page, '&comparison-seed=saved&comparison-seed-count=2')
+  await expect(status(page)).toContainText('아직 비교하지 않은 연주예요')
+
+  await button(page, '비교하기').click()
+  await chooseTake(page, 1)
+  // The first take's request is still out, so this one waits its turn.
+  await expect(button(page, '비교하기')).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+
+  await releaseMockFailure(page)
+
+  await expect(button(page, '비교하기')).toHaveAttribute(
+    'aria-disabled',
+    'false',
+  )
+  await expect(notice(page)).toHaveCount(0)
+
+  await chooseTake(page, 0)
+  await expect(notice(page)).toHaveText(
+    '기타 음원이 준비되면 비교할 수 있어요.',
+  )
+})
+
+test('a mark that fails after another take was chosen tells only its own take', async ({
+  page,
+}) => {
+  await holdMockFailure(page, 'markRegion')
+  await openComparison(
+    page,
+    '&comparison-seed=compared&comparison-seed-count=2',
+  )
+  await expect(firstMark(page)).toBeVisible(SETTLED)
+
+  await firstMark(page).check()
+  await chooseTake(page, 1)
+  await expect(firstMark(page)).toBeVisible(SETTLED)
+  await expect(firstMark(page)).not.toBeChecked()
+
+  await releaseMockFailure(page)
+
+  await expect(notice(page)).toHaveCount(0)
+  await expect(firstMark(page)).not.toBeChecked()
+
+  await chooseTake(page, 0)
+  await expect(notice(page)).toHaveText(
+    '확인 표시를 저장하지 못했어요. 다시 시도해 주세요.',
+  )
+  await expect(firstMark(page)).toBeVisible(SETTLED)
+  await expect(firstMark(page)).not.toBeChecked()
 })

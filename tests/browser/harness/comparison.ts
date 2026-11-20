@@ -1,5 +1,8 @@
 import { createDemoComparisonRepository } from '../../../src/features/comparison/demoComparison.ts'
-import type { ComparisonOutcome } from '../../../src/features/comparison/mockComparisonRun.ts'
+import type {
+  ComparisonOutcome,
+  ComparisonTiming,
+} from '../../../src/features/comparison/mockComparisonRun.ts'
 import type { ComparisonRepository } from '../../../src/features/comparison/repository.ts'
 import { createDemoSongAudio } from '../../../src/features/workspace/demoSongAudio.ts'
 import { separatedAudio, songAudio } from './media.ts'
@@ -10,6 +13,10 @@ import { taskDetail } from './server.ts'
 //   comparison-outcome=<name>  how every take ends, from OUTCOMES below
 //   comparison-seed=saved      opens with one take that was never compared
 //   comparison-seed=compared   opens with one take already being compared
+//   comparison-seed-count=<n>  the seed saves that many takes instead, each
+//                              one compared under comparison-seed=compared
+//   comparison-run=instant     every comparison has ended by the time it is
+//                              first read
 //   comparison-partial=1       the baseline sound cannot be played
 //   comparison-take-seconds=<n> how long the seeded take and its sound last
 //   comparison-take-audio=fails-once  the take's sound fails to load once
@@ -23,7 +30,18 @@ const takeSecondsAsked = query.get('comparison-take-seconds')
 const takeAudioAsked = query.get('comparison-take-audio')
 const saveHangs = query.get('comparison-save') === 'hangs'
 const seedRange = query.get('comparison-seed-range')?.split(',').map(Number)
+const seedCount = Number(query.get('comparison-seed-count') ?? 1)
 const SLOW_RELOAD_MS = 1_500
+const FAST_TIMING: ComparisonTiming = {
+  queueMs: 20,
+  stageQueueMs: 20,
+  stageMs: { align: 40, transcription: 40, compare: 40 },
+}
+const INSTANT_TIMING: ComparisonTiming = {
+  queueMs: 0,
+  stageQueueMs: 0,
+  stageMs: { align: 0, transcription: 0, compare: 0 },
+}
 let takeAudioFails =
   takeAudioAsked === 'fails-once' || takeAudioAsked === 'fails-then-slow'
 let takeAudioFailed = false
@@ -112,11 +130,8 @@ function createHarnessRepository() {
       const task = seeding ? seededRange(detail.task) : detail.task
       return { task, song: detail.song }
     },
-    timing: {
-      queueMs: 20,
-      stageQueueMs: 20,
-      stageMs: { align: 40, transcription: 40, compare: 40 },
-    },
+    timing:
+      query.get('comparison-run') === 'instant' ? INSTANT_TIMING : FAST_TIMING,
     requestDelayMs: 0,
     outcomesFor: outcomes && (() => outcomes),
     unavailableTracks: query.has('comparison-partial') ? ['original'] : [],
@@ -130,18 +145,20 @@ async function seedTake(repository: ComparisonRepository) {
   if (seed === null || detail === null) return
   const { signal } = new AbortController()
   const task = seededRange(detail.task)
-  const take = await repository.savePerformance(
-    {
-      taskId: task.id,
-      source: 'upload',
-      audio: new Blob([new Uint8Array(44)], { type: 'audio/wav' }),
-      durationSeconds: takeSeconds(
-        task.rangeEndSeconds - task.rangeStartSeconds,
-      ),
-    },
-    signal,
-  )
-  if (seed === 'compared') await repository.requestComparison(take.id, signal)
+  for (let saved = 0; saved < seedCount; saved += 1) {
+    const take = await repository.savePerformance(
+      {
+        taskId: task.id,
+        source: 'upload',
+        audio: new Blob([new Uint8Array(44)], { type: 'audio/wav' }),
+        durationSeconds: takeSeconds(
+          task.rangeEndSeconds - task.rangeStartSeconds,
+        ),
+      },
+      signal,
+    )
+    if (seed === 'compared') await repository.requestComparison(take.id, signal)
+  }
 }
 
 async function harnessRepository() {

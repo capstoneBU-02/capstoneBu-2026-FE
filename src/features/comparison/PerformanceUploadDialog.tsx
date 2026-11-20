@@ -35,6 +35,8 @@ export interface PerformanceUploadDialogProps {
   // Closes the dialog once the take is saved; a refused save keeps it open.
   readonly onSubmit: (take: NewTake) => Promise<SubmitTakeOutcome>
   readonly onClose: () => void
+  // True while leaving the screen would lose the take being saved.
+  readonly onUnsavedChange?: (unsaved: boolean) => void
 }
 
 const TITLE = '연주 파일 올리기'
@@ -237,6 +239,7 @@ export function PerformanceUploadDialog({
   probeDuration,
   onSubmit,
   onClose,
+  onUnsavedChange,
 }: PerformanceUploadDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const dropzoneRef = useRef<HTMLButtonElement>(null)
@@ -277,6 +280,21 @@ export function PerformanceUploadDialog({
       )
     }
   }, [])
+
+  // A save under way ends with the screen; a file only chosen can be chosen
+  // again, so it is not worth asking about.
+  useEffect(() => {
+    if (!submitting) return
+    function askBrowser(event: BeforeUnloadEvent) {
+      event.preventDefault()
+    }
+    onUnsavedChange?.(true)
+    window.addEventListener('beforeunload', askBrowser)
+    return () => {
+      window.removeEventListener('beforeunload', askBrowser)
+      onUnsavedChange?.(false)
+    }
+  }, [submitting, onUnsavedChange])
 
   function choose(files: readonly File[]) {
     if (files.length === 0 || submittingRef.current) return

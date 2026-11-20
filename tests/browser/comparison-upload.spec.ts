@@ -35,6 +35,18 @@ const dropzone = (page: Page) =>
 const replace = (page: Page) =>
   dialog(page).getByRole('button', { name: '파일 바꾸기', exact: true })
 const alertText = (page: Page) => dialog(page).getByRole('alert')
+const confirmation = (page: Page) => page.getByRole('alertdialog')
+const sidebarTask = (page: Page, name: string | RegExp) =>
+  page.getByRole('complementary').getByRole('button', { name, exact: true })
+const taskTitle = (page: Page, name: string) =>
+  page.getByRole('heading', { level: 1, name, exact: true })
+// Whether the page asks the browser to confirm before it closes.
+const pageCloseIsHeld = (page: Page) =>
+  page.evaluate(() => {
+    const closing = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(closing)
+    return closing.defaultPrevented
+  })
 
 // 1.5KB of zeros; the harness probe decides each file's length by name, and
 // slow.mp3 waits for the length a test gives it.
@@ -308,6 +320,43 @@ test('the dialog cannot be closed while the take is being saved', async ({
   // Saving this file fails, so a close that was let through would show here.
   await expect(alertText(page)).toHaveText(REFUSED)
   await expect(dialog(page)).toBeVisible()
+})
+
+test('leaving while the file is being saved asks first', async ({ page }) => {
+  // Back needs an earlier screen of the workspace to return to. No take is
+  // seeded, since a seed would hang on the same save.
+  await page.goto(
+    '/tests/browser/harness.html?view=task&task=task-verse&comparison=1&comparison-save=hangs',
+  )
+  await sidebarTask(page, '인트로').click()
+  await expect(taskTitle(page, '인트로')).toBeVisible()
+  await sidebarTask(page, /^벌스 1/).click()
+  await main(page).getByRole('tab', { name: /^비교/ }).click()
+  await expect(opener(page)).toBeVisible({ timeout: 15_000 })
+  await pressOpener(page)
+  await chooseLength(page, 24.1)
+  await expect(compare(page)).toHaveAttribute('aria-disabled', 'false')
+  // A file that was only chosen is not worth asking about.
+  expect(await pageCloseIsHeld(page)).toBe(false)
+
+  await compare(page).click()
+  await expect(dialog(page).getByRole('status')).toHaveText(
+    '연주를 저장하고 있어요.',
+  )
+  expect(await pageCloseIsHeld(page)).toBe(true)
+
+  await page.goBack()
+  await expect(confirmation(page)).toContainText('녹음을 그만둘까요?')
+  await confirmation(page).getByRole('button', { name: '취소' }).click()
+  await expect(confirmation(page)).toBeHidden()
+  await expect(dialog(page)).toBeVisible()
+  await expect(taskTitle(page, '벌스 1')).toBeVisible()
+
+  await page.goBack()
+  await confirmation(page).getByRole('button', { name: '그만두기' }).click()
+  await expect(taskTitle(page, '인트로')).toBeVisible()
+  await expect(dialog(page)).toBeHidden()
+  expect(await pageCloseIsHeld(page)).toBe(false)
 })
 
 test('Esc closes the dialog, returns focus and forgets the file', async ({

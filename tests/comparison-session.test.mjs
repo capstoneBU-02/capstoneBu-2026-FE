@@ -5,6 +5,7 @@ import {
   comparisonSessionReducer,
   initialComparisonSession,
   selectedPerformance,
+  sessionNotice,
   sessionPanel,
 } from '../src/features/comparison/comparisonSession.ts'
 
@@ -293,6 +294,32 @@ test('a result that failed to load can be asked for again', () => {
   assert.notEqual(again.follow, failed.follow)
 })
 
+for (const [name, events] of [
+  ['as the list knew it', []],
+  [
+    'after its status arrived',
+    [{ type: 'status-loaded', status: status('c-1', 'processing') }],
+  ],
+]) {
+  test(`a running comparison that can no longer be read asks again, ${name}`, () => {
+    const state = run(
+      [...events, { type: 'result-failed', comparisonId: 'c-1' }],
+      loaded([performance('p-1', { id: 'c-1', state: 'queued' })]),
+    )
+    assert.equal(sessionPanel(state), 'result-failed')
+    const again = comparisonSessionReducer(state, { type: 'reload-result' })
+    assert.equal(sessionPanel(again), 'running')
+  })
+}
+
+test('a kept failure that can no longer be read asks again', () => {
+  const state = run(
+    [{ type: 'result-failed', comparisonId: 'c-1' }],
+    loaded([performance('p-1', { id: 'c-1', state: 'failed' })]),
+  )
+  assert.equal(sessionPanel(state), 'result-failed')
+})
+
 test('a running comparison hides a result kept from its last attempt', () => {
   const state = run(
     [
@@ -309,26 +336,80 @@ test('a running comparison hides a result kept from its last attempt', () => {
 test('a failed action keeps the screen and says why', () => {
   const state = run(
     [
-      { type: 'action-started', action: 'requesting' },
-      { type: 'action-failed', message: '비교를 시작하지 못했어요.' },
+      { type: 'action-started', action: 'requesting', performanceId: 'p-1' },
+      {
+        type: 'action-failed',
+        performanceId: 'p-1',
+        message: '비교를 시작하지 못했어요.',
+      },
     ],
     loaded([performance('p-1')]),
   )
   assert.equal(state.pending, null)
-  assert.equal(state.notice, '비교를 시작하지 못했어요.')
+  assert.equal(sessionNotice(state), '비교를 시작하지 못했어요.')
   assert.equal(sessionPanel(state), 'not-requested')
 })
 
 test('starting an action clears the last notice', () => {
   const state = run(
     [
-      { type: 'action-failed', message: '실패' },
-      { type: 'action-started', action: 'retrying' },
+      { type: 'action-failed', performanceId: 'p-1', message: '실패' },
+      { type: 'action-started', action: 'retrying', performanceId: 'p-1' },
     ],
     loaded([performance('p-1')]),
   )
-  assert.equal(state.notice, null)
+  assert.equal(sessionNotice(state), null)
   assert.equal(state.pending, 'retrying')
+})
+
+test('a failure that arrives after another take was chosen stays with its own take', () => {
+  const state = run(
+    [
+      { type: 'action-started', action: 'requesting', performanceId: 'p-2' },
+      { type: 'select', performanceId: 'p-1' },
+      { type: 'action-failed', performanceId: 'p-2', message: '실패' },
+    ],
+    loaded([performance('p-2'), performance('p-1')]),
+  )
+  assert.equal(state.pending, null)
+  assert.equal(sessionNotice(state), null)
+  const back = comparisonSessionReducer(state, {
+    type: 'select',
+    performanceId: 'p-2',
+  })
+  assert.equal(sessionNotice(back), '실패')
+})
+
+test('starting an action on one take keeps the notice of another', () => {
+  const state = run(
+    [
+      { type: 'action-failed', performanceId: 'p-2', message: '실패' },
+      { type: 'select', performanceId: 'p-1' },
+      { type: 'action-started', action: 'requesting', performanceId: 'p-1' },
+      { type: 'select', performanceId: 'p-2' },
+    ],
+    loaded([performance('p-2'), performance('p-1')]),
+  )
+  assert.equal(sessionNotice(state), '실패')
+})
+
+test('marking again clears the notice of the last failed mark', () => {
+  const opened = run(
+    [
+      { type: 'status-loaded', status: status('c-1', 'success') },
+      { type: 'result-loaded', result: result('c-1'), playback: null },
+      { type: 'action-failed', performanceId: 'p-1', message: '실패' },
+    ],
+    loaded([performance('p-1', { id: 'c-1', state: 'success' })]),
+  )
+  assert.equal(sessionNotice(opened), '실패')
+  const state = comparisonSessionReducer(opened, {
+    type: 'region-marked',
+    comparisonId: 'c-1',
+    regionId: 'region-1',
+    checked: true,
+  })
+  assert.equal(sessionNotice(state), null)
 })
 
 test('marking a place updates the open result without touching the old one', () => {
