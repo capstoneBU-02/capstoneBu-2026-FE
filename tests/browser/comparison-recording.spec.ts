@@ -126,7 +126,20 @@ test('녹음 시작 asks once and shows the take under way', async ({ page }) =>
 test('the clock and waveform move without rendering the page', async ({
   page,
 }) => {
-  await startRecording(page)
+  await openPanel(page)
+  // The hidden original track and lazy tab can finish after the separated
+  // guitar has started playing. Finish those unrelated loads before measuring
+  // whether recording progress itself renders the page.
+  await expect(
+    main(page)
+      .getByRole('region', { name: '트랙', includeHidden: true })
+      .locator('[data-state="ready"]'),
+  ).toHaveCount(2, { timeout: 15_000 })
+  await expect(
+    main(page).getByRole('img', { name: /타브 악보/, includeHidden: true }),
+  ).toBeAttached()
+  await inPanel(page, '녹음 시작').click()
+  await expect(panel(page).getByText('녹음 중', { exact: true })).toBeVisible()
   // The section starts playing along in a commit of its own, which can land
   // after 녹음 중 shows. Once its time moves, the page has settled.
   const bar = page.getByRole('region', { name: '구간 재생' })
