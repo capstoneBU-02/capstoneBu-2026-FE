@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react'
 import { tabFileName } from '../tab/export/fileName.ts'
 import { saveFile } from '../tab/export/saveFile.ts'
 import type { TabSource } from '../tab/TabPanel.tsx'
@@ -21,6 +27,12 @@ export interface TabDownload {
   readonly triggerRef: RefObject<HTMLButtonElement | null>
   // The failure notice.
   readonly noticeRef: RefObject<HTMLDivElement | null>
+  // Told by the menu and the notice as they go while holding focus, which
+  // happens when the tab they were for loads again.
+  dropFocus(): void
+  // Asked by the tab as it mounts: whether to take focus dropped in the same
+  // commit, which would otherwise fall to the page.
+  takeFocus(): boolean
   start(format: TabFormat): void
 }
 
@@ -43,10 +55,11 @@ async function makeFile(
   format: TabFormat,
   tab: Extract<TabSource, { readonly status: 'ready' }>,
   svg: SVGSVGElement,
+  signal: AbortSignal,
 ): Promise<Blob> {
   if (format === 'pdf') {
     const { tabPdf } = await import('../tab/export/tabPdf.tsx')
-    return tabPdf(tab.score)
+    return tabPdf(tab.score, signal)
   }
   const { tabPng } = await import('../tab/export/tabPng.ts')
   return tabPng(svg)
@@ -54,7 +67,7 @@ async function makeFile(
 
 // Saves the tab on screen as a file, one at a time. A failure stays until a
 // download succeeds or the tab changes; the tab on screen stays either way.
-// `key` names the tab: a new one drops the failure and any file still being
+// `key` names the tab: a new one drops the failure and stops any file being
 // made for the old one. `svg` is the tab drawn on screen, null until then.
 export function useTabDownload({
   tab,
@@ -74,25 +87,38 @@ export function useTabDownload({
   if (current !== state) setState(current)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const noticeRef = useRef<HTMLDivElement>(null)
-  // Bumped by every download and every change of tab; a file made under an
-  // older value is dropped.
-  const run = useRef(0)
-  useEffect(
-    () => () => {
-      run.current += 1
-    },
-    [key],
-  )
+  // The file being made. A change of tab, or leaving the screen, aborts it:
+  // its result is dropped and a PDF stops before its next page. A layout
+  // cleanup aborts within the commit, before a page could slip in after it.
+  const making = useRef<AbortController | null>(null)
+  useLayoutEffect(() => () => making.current?.abort(), [key])
+  const focusDropped = useRef(false)
+  const dropFocus = useCallback(() => {
+    focusDropped.current = true
+  }, [])
+  const takeFocus = useCallback(() => {
+    const dropped = focusDropped.current
+    focusDropped.current = false
+    return dropped
+  }, [])
+  // Runs after the tab's own layout effects: a drop no tab took is stale.
+  // This holds because the menu and the notice are rendered by the component
+  // calling this hook, and the tab sits inside it, so a drop happens only in
+  // a commit that reaches this effect.
+  useLayoutEffect(() => {
+    focusDropped.current = false
+  })
 
   function start(format: TabFormat) {
     if (current.busy !== null || tab.status !== 'ready' || svg === null) return
-    run.current += 1
-    const mine = run.current
+    const controller = new AbortController()
+    making.current = controller
+    const { signal } = controller
     const name = tabFileName(songName, sectionName, format)
     setState({ ...current, busy: format, saved: false })
-    makeFile(format, tab, svg).then(
+    makeFile(format, tab, svg, signal).then(
       (blob) => {
-        if (run.current !== mine) return
+        if (signal.aborted) return
         saveFile(blob, name)
         // The notice goes; its button should not take focus with it.
         if (noticeRef.current?.contains(document.activeElement))
@@ -105,7 +131,7 @@ export function useTabDownload({
         }))
       },
       () => {
-        if (run.current !== mine) return
+        if (signal.aborted) return
         setState((previous) => ({
           ...previous,
           busy: null,
@@ -121,6 +147,8 @@ export function useTabDownload({
     failure: current.failure,
     triggerRef,
     noticeRef,
+    dropFocus,
+    takeFocus,
     start,
   }
 }

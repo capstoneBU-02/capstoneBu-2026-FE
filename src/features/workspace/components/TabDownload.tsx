@@ -1,4 +1,11 @@
-import { useCallback, useId, useState } from 'react'
+import {
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react'
 import fileIcon from '../../../assets/figma/support/file-16.svg'
 import { Button } from '../../../shared/ui/Button.tsx'
 import { Icon } from '../../../shared/ui/Icon.tsx'
@@ -26,20 +33,36 @@ function progressText({ busy, saved }: Pick<TabDownload, 'busy' | 'saved'>) {
   return saved ? '타브를 내려받았어요.' : ''
 }
 
+// Reports going away with focus inside, which would leave focus on the page.
+// A layout cleanup runs while the element is still there to ask.
+function useFocusDrop(ref: RefObject<HTMLElement | null>, onDrop: () => void) {
+  useLayoutEffect(
+    () => () => {
+      if (ref.current?.contains(document.activeElement)) onDrop()
+    },
+    [ref, onDrop],
+  )
+}
+
 // 내려받기 and its menu of file kinds. While a file is being made the button
 // says so and opens nothing. A failure has a notice of its own; the status
 // line reads out the rest.
 export function TabDownloadMenu({
   download,
 }: {
-  download: Pick<TabDownload, 'busy' | 'saved' | 'triggerRef' | 'start'>
+  download: Pick<
+    TabDownload,
+    'busy' | 'saved' | 'triggerRef' | 'dropFocus' | 'start'
+  >
 }) {
-  const { busy, triggerRef, start } = download
+  const { busy, triggerRef, dropFocus, start } = download
   const [open, setOpen] = useState(false)
   const id = useId()
   const close = useCallback(() => setOpen(false), [])
+  const anchorRef = useRef<HTMLDivElement>(null)
+  useFocusDrop(anchorRef, dropFocus)
   return (
-    <div className={styles.anchor}>
+    <div ref={anchorRef} className={styles.anchor}>
       <Button
         ref={triggerRef}
         compact
@@ -110,9 +133,13 @@ export function TabDownloadMenu({
 export function TabDownloadFailure({
   download,
 }: {
-  download: Pick<TabDownload, 'busy' | 'failure' | 'noticeRef' | 'start'>
+  download: Pick<
+    TabDownload,
+    'busy' | 'failure' | 'noticeRef' | 'dropFocus' | 'start'
+  >
 }) {
-  const { busy, failure, noticeRef, start } = download
+  const { busy, failure, noticeRef, dropFocus, start } = download
+  useFocusDrop(noticeRef, dropFocus)
   if (failure === null) return null
   return (
     <div ref={noticeRef} className={noticeStyles.notice} role="alert">

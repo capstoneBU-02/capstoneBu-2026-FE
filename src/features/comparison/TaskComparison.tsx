@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Button } from '../../shared/ui/Button.tsx'
 import type { MediaDurationProbe } from '../add-song/mediaDuration.ts'
 import { RecordingPanel } from '../recording/RecordingPanel.tsx'
+import type { TakeClock } from '../recording/useRecorder.ts'
 import { isFromPreviousSection } from './comparisonRules.ts'
 import {
   performanceOptions,
@@ -37,7 +38,7 @@ export function TaskComparison({
   probeDuration: MediaDurationProbe
   entry: TakeEntry | null
   onEntryChange: (entry: TakeEntry | null) => void
-  onCaptureChange: (capturing: boolean) => void
+  onCaptureChange: (take: TakeClock | null) => void
   onUnsavedTakeChange?: (unsaved: boolean) => void
 }) {
   const takeSelectId = useId()
@@ -108,9 +109,9 @@ export function TaskComparison({
           </div>
         </div>
       )}
-      {state.notice && (
+      {session.notice && (
         <p className={styles.notice} role="alert">
-          {state.notice}
+          {session.notice}
         </p>
       )}
       {panel === 'result' && state.result ? (
@@ -137,6 +138,7 @@ export function TaskComparison({
           probeDuration={probeDuration}
           onSubmit={session.submitTake}
           onClose={() => onEntryChange(null)}
+          onUnsavedChange={onUnsavedTakeChange}
         />
       )}
       {entry === 'record' && (
