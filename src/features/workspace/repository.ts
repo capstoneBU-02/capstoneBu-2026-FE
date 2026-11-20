@@ -71,8 +71,13 @@ type RepositoryErrorCode =
 export class WorkspaceRepositoryError extends Error {
   readonly code: RepositoryErrorCode
 
-  constructor(code: RepositoryErrorCode, message: string) {
-    super(message)
+  // `cause` keeps the server failure (an ApiError) for diagnosis only.
+  constructor(
+    code: RepositoryErrorCode,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options)
     this.name = 'WorkspaceRepositoryError'
     this.code = code
   }

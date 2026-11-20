@@ -81,8 +81,9 @@ export type ComparisonRepositoryErrorCode = keyof typeof ERROR_MESSAGES
 export class ComparisonRepositoryError extends Error {
   readonly code: ComparisonRepositoryErrorCode
 
-  constructor(code: ComparisonRepositoryErrorCode) {
-    super(ERROR_MESSAGES[code])
+  // `cause` keeps the server failure (an ApiError) for diagnosis only.
+  constructor(code: ComparisonRepositoryErrorCode, options?: ErrorOptions) {
+    super(ERROR_MESSAGES[code], options)
     this.name = 'ComparisonRepositoryError'
     this.code = code
   }
