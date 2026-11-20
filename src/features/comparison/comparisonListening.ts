@@ -23,7 +23,7 @@ export interface ListenRange {
   readonly end: number
 }
 
-interface AlternateTurn {
+export interface AlternateTurn {
   readonly passIndex: number
   readonly elapsedInRange: number
   readonly rangeSeconds: number
@@ -39,6 +39,10 @@ const WRAP_TOLERANCE_SECONDS = 0.05
 
 // A take hands over this long before it runs out, ahead of the player's wrap.
 const TAKE_END_MARGIN_SECONDS = 0.1
+
+// A place chosen on a turn's edge can come back from the player's clock a
+// rounding error short of it, which would hand it to the turn before.
+const TURN_EDGE_TOLERANCE_SECONDS = 1e-6
 
 // One sound of a range, on the player's clock: seconds into `range`.
 export interface ListenClock {
@@ -211,10 +215,25 @@ export function alternateTrack(input: AlternateTurn): ListenTrack {
     Math.ceil(positiveOrZero(input.rangeSeconds) / ALTERNATE_TURN_SECONDS),
   )
   const turnInPass = Math.min(
-    Math.floor(positiveOrZero(input.elapsedInRange) / ALTERNATE_TURN_SECONDS),
+    Math.floor(
+      (positiveOrZero(input.elapsedInRange) + TURN_EDGE_TOLERANCE_SECONDS) /
+        ALTERNATE_TURN_SECONDS,
+    ),
     turnsPerPass - 1,
   )
   // Turns keep counting across passes: with an odd number per pass, restarting
   // the count would play the same sound twice in a row at the loop point.
   return trackOfTurn(pass * turnsPerPass + turnInPass)
+}
+
+// The sound to hear at a place of 번갈아: the turn there, unless the take has
+// no sound left for it.
+export function alternateTurnAt(
+  map: TimeMap,
+  turn: AlternateTurn,
+): ListenTrack {
+  return turn.regionSelected ||
+    takeReaches(map, turn.elapsedInRange, turn.rangeSeconds)
+    ? alternateTrack(turn)
+    : 'baseline'
 }
