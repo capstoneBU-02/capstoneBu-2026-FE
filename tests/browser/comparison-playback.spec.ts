@@ -2,6 +2,12 @@ import { expect, test, type Page } from '@playwright/test'
 import type {} from './harness.tsx'
 import type {} from './harness/recording.ts'
 
+declare global {
+  interface Window {
+    retryComparisonAudio(): void
+  }
+}
+
 // A status is asked for every 2.5 seconds, and both sounds decode after it.
 const RESULT_TIMEOUT = { timeout: 20_000 }
 
@@ -105,6 +111,53 @@ async function openListening(page: Page, query = '') {
   await openResult(page, query)
   await expect(sound(page, '번갈아')).toBeEnabled(RESULT_TIMEOUT)
 }
+
+test('restoring 번갈아 after an audio failure starts on the current turn', async ({
+  page,
+}) => {
+  // Expose the real loader's retry to simulate invalidating a decoded take.
+  await page.route('**/useComparisonTracks.ts*', async (route) => {
+    const response = await route.fetch()
+    const source = await response.text()
+    const returned = /return\s*\{\s*baseline,\s*performance\s*\};/
+    expect(source).toMatch(returned)
+    await route.fulfill({
+      response,
+      body: source.replace(
+        returned,
+        'window.retryComparisonAudio = () => performance?.retry(); $&',
+      ),
+    })
+  })
+  await openListening(page)
+  await sound(page, '번갈아').click()
+  await seekWithKeys(page, 60)
+  await playButton(page).click()
+  await expect
+    .poll(async () => isTake(await lastSourceSeconds(page)))
+    .toBe(true)
+  await page.evaluate(() => {
+    window.workspaceTest.failNextComparisonAudio()
+    window.retryComparisonAudio()
+  })
+  const retry = page.getByRole('button', { name: '다시 불러오기' })
+  await expect(retry).toBeVisible(RESULT_TIMEOUT)
+  await expect(sound(page, '원곡')).toBeChecked()
+  await pauseButton(page).click()
+  await seekWithKeys(page, 0)
+  await playButton(page).click()
+  const from = await sourceCount(page)
+  await retry.click()
+  await expect(sound(page, '번갈아')).toBeChecked(RESULT_TIMEOUT)
+  await expect(retry).toHaveCount(0)
+  await expect(pauseButton(page)).toBeVisible()
+  expect(isTake(await lastSourceSeconds(page))).toBe(false)
+  expect(
+    (await startsBefore(page, from, 4)).every(
+      (start) => start.sound === 'baseline',
+    ),
+  ).toBe(true)
+})
 
 test('a result opens on the take with every sound to choose', async ({
   page,

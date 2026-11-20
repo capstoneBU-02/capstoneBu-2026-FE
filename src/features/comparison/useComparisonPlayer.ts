@@ -154,7 +154,15 @@ export function useComparisonPlayer({
     usable.some((option) => option.id === chosenMode && option.enabled)
       ? chosenMode
       : fallback
-  const track: ListenTrack = mode === 'alternate' ? turn : mode
+  const [settledMode, setSettledMode] = useState(mode)
+  // A recovered sound restores 번갈아. Keep the current source until its
+  // turn is calculated; starting the remembered turn first makes it audible.
+  const restoring = mode === 'alternate' && settledMode !== mode
+  const track: ListenTrack = restoring
+    ? settledMode
+    : mode === 'alternate'
+      ? turn
+      : mode
 
   const takeBuffer = readyOf(audio.performance)?.buffer ?? null
   const takeSeconds = takeBuffer?.duration ?? performanceSeconds ?? 0
@@ -187,6 +195,22 @@ export function useComparisonPlayer({
   const heardTrackRef = useRef(track)
   const positionRef = useRef<() => number>(() => 0)
   useLayoutEffect(() => {
+    if (settledMode === mode) return
+    if (restoring) {
+      const at = landingRef.current ?? positionRef.current()
+      landingRef.current = at
+      setTurn(
+        alternateTurnAt(map, {
+          passIndex: 0,
+          elapsedInRange: at - rangeStart,
+          rangeSeconds: rangeEnd - rangeStart,
+          regionSelected: region !== null,
+        }),
+      )
+    }
+    setSettledMode(mode)
+  }, [mode, settledMode, restoring, map, rangeStart, rangeEnd, region])
+  useLayoutEffect(() => {
     if (heardTrackRef.current === track) return
     heardTrackRef.current = track
     landingRef.current ??= positionRef.current()
@@ -200,7 +224,7 @@ export function useComparisonPlayer({
 
   useLayoutEffect(() => {
     const landing = landingRef.current
-    if (landing === null || !player.available) return
+    if (restoring || landing === null || !player.available) return
     landingRef.current = null
     player.seek(clock.toPlayer(landing))
   })
@@ -219,7 +243,7 @@ export function useComparisonPlayer({
 
   const rangeSeconds = rangeEnd - rangeStart
   const turns = useAlternateTurns({
-    active: mode === 'alternate',
+    active: mode === 'alternate' && !restoring,
     playback: {
       playing: player.playing,
       elapsed,
