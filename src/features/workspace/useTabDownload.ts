@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -89,9 +88,10 @@ export function useTabDownload({
   const triggerRef = useRef<HTMLButtonElement>(null)
   const noticeRef = useRef<HTMLDivElement>(null)
   // The file being made. A change of tab, or leaving the screen, aborts it:
-  // its result is dropped and a PDF stops before its next page.
+  // its result is dropped and a PDF stops before its next page. A layout
+  // cleanup aborts within the commit, before a page could slip in after it.
   const making = useRef<AbortController | null>(null)
-  useEffect(() => () => making.current?.abort(), [key])
+  useLayoutEffect(() => () => making.current?.abort(), [key])
   const focusDropped = useRef(false)
   const dropFocus = useCallback(() => {
     focusDropped.current = true
@@ -102,6 +102,9 @@ export function useTabDownload({
     return dropped
   }, [])
   // Runs after the tab's own layout effects: a drop no tab took is stale.
+  // This holds because the menu and the notice are rendered by the component
+  // calling this hook, and the tab sits inside it, so a drop happens only in
+  // a commit that reaches this effect.
   useLayoutEffect(() => {
     focusDropped.current = false
   })

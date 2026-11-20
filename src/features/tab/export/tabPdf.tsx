@@ -88,6 +88,7 @@ export async function tabPdf(
   score: TabScore,
   signal: AbortSignal,
 ): Promise<Blob> {
+  signal.throwIfAborted()
   const [{ jsPDF }, { svg2pdf }, regular, bold] = await Promise.all([
     import('jspdf'),
     import('svg2pdf.js'),
@@ -127,5 +128,8 @@ export async function tabPdf(
       }),
     )
   }
+  // A tab of one page, or the last page, can still stop before the file is
+  // put together.
+  await nextPage(signal)
   return doc.output('blob')
 }

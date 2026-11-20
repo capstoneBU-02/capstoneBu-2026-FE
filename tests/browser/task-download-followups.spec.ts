@@ -193,3 +193,35 @@ test('focus in the download notice or menu stays in the tab as it loads again', 
   await expect(heading(page)).toBeFocused()
   await expect(staff(page)).toHaveAccessibleName('타브 악보 30마디')
 })
+
+test('focus lost while the task works again is not taken back when it is done', async ({
+  page,
+}) => {
+  await openVerse(page)
+  await trigger(page).click()
+  await expect(item(page, 'PNG 이미지')).toBeFocused()
+
+  // The menu goes with no tab to take its focus.
+  await page.evaluate(() =>
+    window.workspaceTest.updateTaskOnServer('task-verse', {
+      processingStatus: 'processing',
+      progressPercent: 40,
+    }),
+  )
+  await expect(menu(page)).toHaveCount(0)
+  await expect(panel(page)).toHaveCount(0)
+
+  // The user moves on while it works.
+  const intro = sidebarTask(page, /^인트로/)
+  await intro.focus()
+  await page.evaluate(() =>
+    window.workspaceTest.updateTaskOnServer('task-verse', {
+      processingStatus: 'completed',
+      progressPercent: null,
+      hasSeparatedAudio: true,
+    }),
+  )
+  await expect(staff(page)).toBeVisible(STAFF_TIMEOUT)
+  await expect(intro).toBeFocused()
+  await expect(heading(page)).not.toBeFocused()
+})
