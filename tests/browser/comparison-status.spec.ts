@@ -440,13 +440,16 @@ test('a mark that fails after another take was chosen tells only its own take', 
 
   await releaseMockFailure(page)
 
-  await expect(notice(page)).toHaveCount(0)
-  await expect(firstMark(page)).not.toBeChecked()
-
   await chooseTake(page, 0)
   await expect(notice(page)).toHaveText(
     '확인 표시를 저장하지 못했어요. 다시 시도해 주세요.',
   )
   await expect(firstMark(page)).toBeVisible(SETTLED)
+  await expect(firstMark(page)).not.toBeChecked()
+
+  // With the failure on screen, the other take shows none of it.
+  await chooseTake(page, 1)
+  await expect(firstMark(page)).toBeVisible(SETTLED)
+  await expect(notice(page)).toHaveCount(0)
   await expect(firstMark(page)).not.toBeChecked()
 })

@@ -175,7 +175,7 @@ test('a started comparison is followed from its first status', () => {
   const before = loaded([performance('p-1')])
   const state = run(
     [
-      { type: 'action-started', action: 'requesting' },
+      { type: 'action-started', action: 'requesting', performanceId: 'p-1' },
       {
         type: 'comparison-started',
         performanceId: 'p-1',
@@ -380,11 +380,12 @@ test('a failure that arrives after another take was chosen stays with its own ta
   assert.equal(sessionNotice(back), '실패')
 })
 
-test('starting an action on one take keeps the notice of another', () => {
+test('starting an action on one take keeps the notice waiting on another', () => {
   const state = run(
     [
-      { type: 'action-failed', performanceId: 'p-2', message: '실패' },
+      { type: 'action-started', action: 'requesting', performanceId: 'p-2' },
       { type: 'select', performanceId: 'p-1' },
+      { type: 'action-failed', performanceId: 'p-2', message: '실패' },
       { type: 'action-started', action: 'requesting', performanceId: 'p-1' },
       { type: 'select', performanceId: 'p-2' },
     ],
@@ -393,12 +394,57 @@ test('starting an action on one take keeps the notice of another', () => {
   assert.equal(sessionNotice(state), '실패')
 })
 
+test('a notice seen on its take is gone once the take is left', () => {
+  const left = run(
+    [
+      { type: 'action-failed', performanceId: 'p-2', message: '실패' },
+      { type: 'select', performanceId: 'p-1' },
+    ],
+    loaded([performance('p-2'), performance('p-1')]),
+  )
+  const back = comparisonSessionReducer(left, {
+    type: 'select',
+    performanceId: 'p-2',
+  })
+  assert.equal(sessionNotice(back), null)
+  const saved = run(
+    [
+      { type: 'action-failed', performanceId: 'p-1', message: '실패' },
+      { type: 'saved', performance: performance('p-2') },
+      { type: 'select', performanceId: 'p-1' },
+    ],
+    loaded([performance('p-1')]),
+  )
+  assert.equal(sessionNotice(saved), null)
+})
+
+test('a failed mark keeps a request under way on another take', () => {
+  const state = run(
+    [
+      { type: 'select', performanceId: 'p-2' },
+      { type: 'action-started', action: 'requesting', performanceId: 'p-2' },
+      { type: 'mark-failed', performanceId: 'p-1', message: '실패' },
+    ],
+    loaded([
+      performance('p-1', { id: 'c-1', state: 'success' }),
+      performance('p-2'),
+    ]),
+  )
+  assert.equal(state.pending, 'requesting')
+  assert.equal(sessionNotice(state), null)
+  const back = comparisonSessionReducer(state, {
+    type: 'select',
+    performanceId: 'p-1',
+  })
+  assert.equal(sessionNotice(back), '실패')
+})
+
 test('marking again clears the notice of the last failed mark', () => {
   const opened = run(
     [
       { type: 'status-loaded', status: status('c-1', 'success') },
       { type: 'result-loaded', result: result('c-1'), playback: null },
-      { type: 'action-failed', performanceId: 'p-1', message: '실패' },
+      { type: 'mark-failed', performanceId: 'p-1', message: '실패' },
     ],
     loaded([performance('p-1', { id: 'c-1', state: 'success' })]),
   )

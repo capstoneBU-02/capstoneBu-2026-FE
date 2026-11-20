@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useEffectEvent,
   useId,
   useLayoutEffect,
   useRef,
@@ -281,20 +282,26 @@ export function PerformanceUploadDialog({
     }
   }, [])
 
-  // A save under way ends with the screen; a file only chosen can be chosen
-  // again, so it is not worth asking about.
+  // A save under way ends with the screen, and a failed one would go unseen;
+  // a file only chosen can be chosen again, so it is not worth asking about.
+  const unsaved = submitting || submitError !== null
+  // Only a change of `unsaved` is reported: a new function from above must not
+  // read as the save ending and starting again.
+  const reportUnsaved = useEffectEvent((value: boolean) =>
+    onUnsavedChange?.(value),
+  )
   useEffect(() => {
-    if (!submitting) return
+    if (!unsaved) return
     function askBrowser(event: BeforeUnloadEvent) {
       event.preventDefault()
     }
-    onUnsavedChange?.(true)
+    reportUnsaved(true)
     window.addEventListener('beforeunload', askBrowser)
     return () => {
       window.removeEventListener('beforeunload', askBrowser)
-      onUnsavedChange?.(false)
+      reportUnsaved(false)
     }
-  }, [submitting, onUnsavedChange])
+  }, [unsaved])
 
   function choose(files: readonly File[]) {
     if (files.length === 0 || submittingRef.current) return

@@ -359,6 +359,81 @@ test('leaving while the file is being saved asks first', async ({ page }) => {
   expect(await pageCloseIsHeld(page)).toBe(false)
 })
 
+// Saving waits until the test lets it go, then runs as the mock does.
+async function holdSave(page: Page) {
+  await page.addInitScript(() => {
+    const gate = new Promise((resolve) => {
+      Object.assign(globalThis, { releaseSave: resolve })
+    })
+    Object.assign(globalThis, { saveGate: gate, saveReleased: false })
+  })
+  await page.route('**/mockComparisonRepository.ts*', async (route) => {
+    const response = await route.fetch()
+    const source = await response.text()
+    const signature = 'async savePerformance(input, signal) {'
+    const refusal = 'if (input.audio.size === 0)'
+    expect(source).toContain(signature)
+    expect(source.split(refusal)).toHaveLength(2)
+    // The flag goes up after the mock's own wait, as it decides the file.
+    const body = source
+      .replace(signature, `${signature} await globalThis.saveGate;`)
+      .replace(refusal, `globalThis.saveReleased = true; ${refusal}`)
+    await route.fulfill({ response, body })
+  })
+}
+
+test('a save that fails while leaving is asked about stays with its error', async ({
+  page,
+}) => {
+  await holdSave(page)
+  // Back needs an earlier screen of the workspace to return to.
+  await page.goto(
+    '/tests/browser/harness.html?view=task&task=task-verse&comparison=1',
+  )
+  await sidebarTask(page, '인트로').click()
+  await expect(taskTitle(page, '인트로')).toBeVisible()
+  await sidebarTask(page, /^벌스 1/).click()
+  await main(page).getByRole('tab', { name: /^비교/ }).click()
+  await expect(opener(page)).toBeVisible({ timeout: 15_000 })
+  await pressOpener(page)
+  // The mock refuses an empty file when it is saved.
+  await chooseLength(page, 24.1, 0)
+  await expect(compare(page)).toHaveAttribute('aria-disabled', 'false')
+  await compare(page).click()
+  await expect(dialog(page).getByRole('status')).toHaveText(
+    '연주를 저장하고 있어요.',
+  )
+
+  await page.goBack()
+  await expect(confirmation(page)).toContainText('녹음을 그만둘까요?')
+  await page.evaluate(() => {
+    ;(globalThis as unknown as { releaseSave(): void }).releaseSave()
+  })
+  await page.waitForFunction(
+    () => (globalThis as unknown as { saveReleased: boolean }).saveReleased,
+  )
+  // React renders what the failure changed within a frame or two.
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  )
+
+  // The question stays, and the failure waits behind it.
+  await expect(confirmation(page)).toBeVisible()
+  await confirmation(page).getByRole('button', { name: '취소' }).click()
+  await expect(confirmation(page)).toBeHidden()
+  await expect(alertText(page)).toHaveText(REFUSED)
+  await expect(taskTitle(page, '벌스 1')).toBeVisible()
+  expect(await pageCloseIsHeld(page)).toBe(true)
+
+  // Choosing again leaves nothing unsaved to ask about.
+  await choose(page, audio('slow.mp3'))
+  await expect(alertText(page)).toHaveCount(0)
+  expect(await pageCloseIsHeld(page)).toBe(false)
+})
+
 test('Esc closes the dialog, returns focus and forgets the file', async ({
   page,
 }) => {

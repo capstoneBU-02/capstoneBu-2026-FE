@@ -51,6 +51,12 @@ export type ComparisonSessionEvent =
       readonly performanceId: string
       readonly message: string
     }
+  // A mark runs beside a request or retry and leaves it pending.
+  | {
+      readonly type: 'mark-failed'
+      readonly performanceId: string
+      readonly message: string
+    }
   | {
       readonly type: 'comparison-started'
       readonly performanceId: string
@@ -128,6 +134,12 @@ function withoutNotice(
 ): ReadonlyMap<string, string> {
   if (performanceId === null || !notices.has(performanceId)) return notices
   return new Map([...notices].filter(([id]) => id !== performanceId))
+}
+
+// The open take's notice has been seen once the user moves on from it; a
+// failure that arrives after that stays for their return.
+function leavingTake(state: ComparisonSessionState): ComparisonSessionState {
+  return { ...state, notices: withoutNotice(state.notices, state.selectedId) }
 }
 
 function withLatestComparison(
@@ -215,12 +227,12 @@ export function comparisonSessionReducer(
         ({ id }) => id === event.performanceId,
       )
       if (!performance || performance.id === state.selectedId) return state
-      return openTake(state, performance)
+      return openTake(leavingTake(state), performance)
     }
     case 'saved':
       return openTake(
         {
-          ...state,
+          ...leavingTake(state),
           performances: [event.performance, ...state.performances],
         },
         event.performance,
@@ -235,6 +247,11 @@ export function comparisonSessionReducer(
       return {
         ...state,
         pending: null,
+        notices: withNotice(state.notices, event.performanceId, event.message),
+      }
+    case 'mark-failed':
+      return {
+        ...state,
         notices: withNotice(state.notices, event.performanceId, event.message),
       }
     case 'comparison-started':

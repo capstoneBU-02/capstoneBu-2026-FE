@@ -165,15 +165,15 @@ export function useComparisonSession({
 
   // The notice goes to the take the action was for, which may no longer be
   // the open one.
-  function failAction(error: unknown, fallback: string, performanceId: string) {
+  function failAction(
+    type: 'action-failed' | 'mark-failed',
+    error: unknown,
+    fallback: string,
+    performanceId: string,
+  ) {
     if (lifetime.current?.signal.aborted) return
     if (hasCode(error, 'expired')) onExpired()
-    else
-      dispatch({
-        type: 'action-failed',
-        performanceId,
-        message: messageOf(error, fallback),
-      })
+    else dispatch({ type, performanceId, message: messageOf(error, fallback) })
   }
 
   async function requestComparison(performanceId: string) {
@@ -188,7 +188,7 @@ export function useComparisonSession({
       if (!signal.aborted)
         dispatch({ type: 'comparison-started', performanceId, comparison })
     } catch (error) {
-      failAction(error, REQUEST_FAILED, performanceId)
+      failAction('action-failed', error, REQUEST_FAILED, performanceId)
     }
   }
 
@@ -221,7 +221,7 @@ export function useComparisonSession({
       if (!signal.aborted)
         dispatch({ type: 'comparison-started', performanceId, comparison })
     } catch (error) {
-      failAction(error, REQUEST_FAILED, performanceId)
+      failAction('action-failed', error, REQUEST_FAILED, performanceId)
     }
   }
 
@@ -243,7 +243,7 @@ export function useComparisonSession({
         regionId,
         checked: !checked,
       })
-      failAction(error, MARK_FAILED, performanceId)
+      failAction('mark-failed', error, MARK_FAILED, performanceId)
     }
   }
 
