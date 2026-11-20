@@ -87,6 +87,151 @@ async function countPages(page: Page, leave?: Locator) {
 const pagesDrawn = (page: Page) =>
   page.evaluate(() => Number(document.documentElement.dataset.pagesDrawn ?? 0))
 
+test('leaving aborts the PDF font requests', async ({ page }) => {
+  await page.addInitScript(() => {
+    const fetchFile = window.fetch
+    window.fetch = (input, init) => {
+      if (String(input).includes('.ttf')) {
+        document.body.dataset.fontsAsked = String(
+          Number(document.body.dataset.fontsAsked ?? 0) + 1,
+        )
+        init?.signal?.addEventListener('abort', () => {
+          document.body.dataset.fontsAborted = String(
+            Number(document.body.dataset.fontsAborted ?? 0) + 1,
+          )
+        })
+        return new Promise(() => {})
+      }
+      return fetchFile(input, init)
+    }
+  })
+  await openVerse(page)
+  await trigger(page).click()
+  await item(page, 'PDF').click()
+  await expect(page.locator('body')).toHaveAttribute('data-fonts-asked', '2')
+  await sidebarTask(page, /^솔로/).click()
+  await expect(page.locator('body')).toHaveAttribute('data-fonts-aborted', '2')
+})
+
+test('PDF cleanup preserves unrelated SVGs added while drawing', async ({
+  page,
+}) => {
+  await openVerse(page)
+  await page.evaluate(() => {
+    const getBBox = SVGGraphicsElement.prototype.getBBox
+    SVGGraphicsElement.prototype.getBBox = function (options) {
+      if (this.ownerSVGElement?.parentNode === document.body) {
+        const unrelated = document.createElementNS(
+          'http://www.w3.org/2000/svg',
+          'svg',
+        )
+        unrelated.id = 'unrelated-svg'
+        document.body.append(unrelated)
+        throw new Error('Drawing failed')
+      }
+      return getBBox.call(this, options)
+    }
+  })
+  await trigger(page).click()
+  await item(page, 'PDF').click()
+  await expect(failure(page)).toBeVisible(EXPORT_TIMEOUT)
+  await expect(page.locator('body > svg')).toHaveCount(1)
+  await expect(page.locator('#unrelated-svg')).toBeAttached()
+})
+
+test('successive tab replacements preserve heading and scroll focus', async ({
+  page,
+}) => {
+  await openVerse(page)
+  await heading(page).focus()
+  await changeSection(page, 50)
+  await expect(staff(page)).toHaveAccessibleName('타브 악보 25마디')
+  await expect(heading(page)).toBeFocused()
+  await page.addStyleTag({
+    content: '#workspace-content [class*="scroller"] { width: 100px }',
+  })
+  await panel(page).locator('[tabindex="0"]').first().focus()
+  await changeSection(page, 60)
+  await expect(staff(page)).toHaveAccessibleName('타브 악보 30마디')
+  await expect(heading(page)).toBeFocused()
+})
+
+test('hidden tab replacement returns download focus to visible content', async ({
+  page,
+}) => {
+  await page.goto(
+    '/tests/browser/harness.html?view=task&task=task-verse&refresh=150&comparison=1',
+  )
+  await expect(trigger(page)).toBeVisible(STAFF_TIMEOUT)
+  await page.getByRole('tab', { name: /^비교/ }).click()
+  await trigger(page).click()
+  await expect(item(page, 'PNG 이미지')).toBeFocused()
+  await changeSection(page, 50)
+  await expect(menu(page)).toHaveCount(0)
+  await expect(main(page)).toBeFocused()
+})
+
+test('a processing task receives focus from the tab it removes', async ({
+  page,
+}) => {
+  await openVerse(page)
+  await heading(page).focus()
+  await page.evaluate(() =>
+    window.workspaceTest.updateTaskOnServer('task-verse', {
+      processingStatus: 'processing',
+      progressPercent: 40,
+    }),
+  )
+  await expect(panel(page)).toHaveCount(0)
+  await expect(main(page)).toBeFocused()
+})
+
+test('a failed tab retry keeps focus when another result replaces it', async ({
+  page,
+}) => {
+  await page.goto(
+    '/tests/browser/harness.html?view=task&task=task-verse&scenario=pending-tab&refresh=150',
+  )
+  await expect(title(page)).toHaveText('벌스 1')
+  await expect
+    .poll(() => page.evaluate(() => window.workspaceTest.tabCalls().length))
+    .toBeGreaterThan(0)
+  await page.evaluate(() => window.workspaceTest.failTab('tab-unavailable'))
+  await panel(page)
+    .getByRole('button', { name: '다시 시도', exact: true })
+    .focus()
+  await changeSection(page, 50)
+  await expect(heading(page)).toBeFocused()
+  await page.evaluate(() => window.workspaceTest.resolveTab())
+  await expect(staff(page)).toHaveAccessibleName('타브 악보 25마디')
+  await expect(heading(page)).toBeFocused()
+})
+
+for (const width of [1280, 390, 320]) {
+  test(`loading the download action keeps the edit button in place at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(
+      '/tests/browser/harness.html?view=task&task=task-verse&scenario=pending-tab&comparison=1',
+    )
+    const edit = main(page).getByRole('button', {
+      name: '구간 수정',
+      exact: true,
+    })
+    await expect(
+      main(page).getByRole('button', { name: '녹음', exact: true }),
+    ).toBeVisible()
+    const before = await edit.boundingBox()
+    await page.evaluate(() => window.workspaceTest.resolveTab())
+    await expect(trigger(page)).toBeVisible(STAFF_TIMEOUT)
+    expect(await edit.boundingBox()).toEqual(before)
+    const box = await trigger(page).boundingBox()
+    expect(box!.x).toBeGreaterThanOrEqual(0)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width)
+  })
+}
+
 // Opens 벌스 1 again and saves its PDF; the number of pages in the file.
 async function pdfAgain(page: Page): Promise<number> {
   await sidebarTask(page, /^벌스 1/).click()

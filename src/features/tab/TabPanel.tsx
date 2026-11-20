@@ -8,6 +8,7 @@ import {
   type ComponentType,
 } from 'react'
 import type { TabScore } from './model.ts'
+import { restoreFocus } from '../../shared/ui/dialogFocus.ts'
 import { TabFailure } from './TabFailure.tsx'
 import { TAB_DRAW_FAILED, TabLoadBoundary } from './TabLoadBoundary.tsx'
 import styles from './TabPanel.module.css'
@@ -29,6 +30,7 @@ export interface TabPanelProps extends Omit<TabStaffProps, 'score'> {
   // Asked once as the panel mounts; true puts focus on its heading, for
   // controls that went away with the tab this panel replaces.
   readonly takeFocus?: () => boolean
+  readonly dropFocus?: () => void
 }
 
 interface StaffModule {
@@ -63,8 +65,14 @@ function Loading() {
 
 // The tab area of a completed task. The heading shows at once; the tab and
 // the drawing code arrive on their own.
-export function TabPanel({ tab, takeFocus, ...staff }: TabPanelProps) {
+export function TabPanel({
+  tab,
+  takeFocus,
+  dropFocus,
+  ...staff
+}: TabPanelProps) {
   const headingId = useId()
+  const panelRef = useRef<HTMLElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   // Remounting the boundary clears its failure and renders the fresh Staff.
   const [attempt, setAttempt] = useState(0)
@@ -75,8 +83,18 @@ export function TabPanel({ tab, takeFocus, ...staff }: TabPanelProps) {
   const takeFocusRef = useRef(takeFocus)
   useLayoutEffect(() => {
     if (takeFocusRef.current?.() === true)
-      headingRef.current?.focus({ preventScroll: true })
+      restoreFocus(
+        headingRef.current,
+        document.getElementById('workspace-content'),
+      )
   }, [])
+
+  useLayoutEffect(
+    () => () => {
+      if (panelRef.current?.contains(document.activeElement)) dropFocus?.()
+    },
+    [dropFocus],
+  )
 
   // The button goes away with the failure, so focus stays in the tab area.
   const retryWith = (retry: () => void) => () => {
@@ -85,7 +103,11 @@ export function TabPanel({ tab, takeFocus, ...staff }: TabPanelProps) {
   }
 
   return (
-    <section className={styles.panel} aria-labelledby={headingId}>
+    <section
+      ref={panelRef}
+      className={styles.panel}
+      aria-labelledby={headingId}
+    >
       <div className={styles.header}>
         <h2
           ref={headingRef}
