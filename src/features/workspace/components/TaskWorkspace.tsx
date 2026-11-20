@@ -2,6 +2,7 @@ import {
   useEffect,
   useEffectEvent,
   useId,
+  useRef,
   useState,
   type ReactNode,
   type Ref,
@@ -28,6 +29,7 @@ import {
   useSectionPlayer,
   type SectionPlayback,
 } from '../../player/useSectionPlayer.ts'
+import type { TakeClock } from '../../recording/useRecorder.ts'
 import { TaskUnavailablePanel } from '../../support/TaskUnavailablePanel.tsx'
 import type { TabSource } from '../../tab/TabPanel.tsx'
 import {
@@ -204,6 +206,8 @@ function TaskWorkspace({
   // The bar plays the comparison while its result is on screen.
   // A take being recorded keeps the section playing along with it.
   const [capturing, setCapturing] = useState(false)
+  // A take begun before the section's audio loaded, waiting for it.
+  const takeWaiting = useRef<TakeClock | null>(null)
   const listeningNow = view === 'comparison' && listening.active && !capturing
   const pauseHidden = useEffectEvent(() => {
     if (capturing) return
@@ -213,12 +217,25 @@ function TaskWorkspace({
   useEffect(() => {
     pauseHidden()
   }, [listeningNow])
-  function playAlong(nextCapturing: boolean) {
-    setCapturing(nextCapturing)
+  function playAlong(take: TakeClock | null) {
+    setCapturing(take !== null)
     listening.playback.pause()
-    if (nextCapturing) player.playOnce()
+    takeWaiting.current = take && !player.available ? take : null
+    if (take) player.playOnce()
     else player.pause()
   }
+  // Audio that loads during the take joins at the time already recorded, so
+  // the two stay together. A take already past the section stays on its own.
+  const joinTake = useEffectEvent(() => {
+    const take = takeWaiting.current
+    takeWaiting.current = null
+    if (!take) return
+    const recorded = take.elapsedSeconds()
+    if (recorded < player.length) player.playOnce(recorded)
+  })
+  useEffect(() => {
+    if (player.available) joinTake()
+  }, [player.available])
   const tab = useTaskTab(task, source)
   // The tab drawn on screen. Its drawing code loads on its own and can fail,
   // so a loaded tab is not yet one to download.

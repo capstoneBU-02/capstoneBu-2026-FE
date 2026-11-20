@@ -1,6 +1,10 @@
 import { createContext } from 'react'
+import {
+  CAPTURE_PROCESSOR_NAME,
+  CAPTURE_PROCESSOR_SOURCE,
+  receiveCapture,
+} from './captureWorklet.ts'
 import type { CapturedAudio } from './recordedTake.ts'
-import { measureLevel, mergeChunks } from './wavEncoder.ts'
 
 export interface MicrophoneCapture {
   readonly deviceLabel: string
@@ -32,9 +36,6 @@ export interface RecorderEngine {
   open(listeners: CaptureListeners): MicrophoneRequest
 }
 
-const PROCESSOR_NAME = 'earmark-capture'
-const BLOCK_FRAMES = 2048
-
 // Guitar processing would change the very sound being compared.
 const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: false,
@@ -42,46 +43,13 @@ const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   autoGainControl: false,
 }
 
-// Kept as text so the worklet needs no separate file for the bundler to place.
-const PROCESSOR_SOURCE = `
-class CaptureProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super()
-    this.block = new Float32Array(${BLOCK_FRAMES})
-    this.filled = 0
-  }
-
-  process(inputs) {
-    const input = inputs[0] && inputs[0][0]
-    if (!input) return true
-    let read = 0
-    while (read < input.length) {
-      const count = Math.min(
-        input.length - read,
-        this.block.length - this.filled,
-      )
-      this.block.set(input.subarray(read, read + count), this.filled)
-      this.filled += count
-      read += count
-      if (this.filled === this.block.length) {
-        this.port.postMessage(this.block, [this.block.buffer])
-        this.block = new Float32Array(${BLOCK_FRAMES})
-        this.filled = 0
-      }
-    }
-    return true
-  }
-}
-registerProcessor('${PROCESSOR_NAME}', CaptureProcessor)
-`
-
 function stopTracks(stream: MediaStream) {
   for (const track of stream.getTracks()) track.stop()
 }
 
 async function loadProcessor(context: AudioContext) {
   const url = URL.createObjectURL(
-    new Blob([PROCESSOR_SOURCE], { type: 'text/javascript' }),
+    new Blob([CAPTURE_PROCESSOR_SOURCE], { type: 'text/javascript' }),
   )
   try {
     await context.audioWorklet.addModule(url)
@@ -103,7 +71,7 @@ function listenToMicrophone(
   listeners: CaptureListeners,
 ): { capture: MicrophoneCapture; disconnect: () => void } {
   const source = context.createMediaStreamSource(stream)
-  const processor = new AudioWorkletNode(context, PROCESSOR_NAME, {
+  const processor = new AudioWorkletNode(context, CAPTURE_PROCESSOR_NAME, {
     channelCount: 1,
     channelCountMode: 'explicit',
     channelInterpretation: 'speakers',
@@ -114,19 +82,9 @@ function listenToMicrophone(
   mute.gain.value = 0
   source.connect(processor).connect(mute).connect(context.destination)
 
-  // Appended in place: copying per block would grow with the length of the take.
-  let blocks: Float32Array[] = []
-  let peaks: number[] = []
-  let frames = 0
-  let finished = false
-
-  processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
-    if (finished) return
-    blocks.push(event.data)
-    peaks.push(measureLevel(event.data).peak)
-    frames += event.data.length
-    listeners.onProgress(frames / context.sampleRate)
-  }
+  const received = receiveCapture(processor.port, (frames) =>
+    listeners.onProgress(frames / context.sampleRate),
+  )
 
   const onTrackEnded = () => listeners.onInterrupted()
   let hasRun = context.state === 'running'
@@ -141,20 +99,13 @@ function listenToMicrophone(
   return {
     capture: {
       deviceLabel: track.label,
-      elapsedSeconds: () => frames / context.sampleRate,
-      peaks: () => peaks,
-      restart() {
-        blocks = []
-        peaks = []
-        frames = 0
-      },
-      finish() {
-        finished = true
-        return {
-          samples: mergeChunks(blocks),
-          sampleRate: context.sampleRate,
-        }
-      },
+      elapsedSeconds: () => received.frames() / context.sampleRate,
+      peaks: received.peaks,
+      restart: received.restart,
+      finish: () => ({
+        samples: received.finish(),
+        sampleRate: context.sampleRate,
+      }),
     },
     disconnect() {
       track.removeEventListener('ended', onTrackEnded)

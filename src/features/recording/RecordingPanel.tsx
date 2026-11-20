@@ -20,7 +20,7 @@ import {
   UploadButton,
 } from './RecordingViews.tsx'
 import { DiscardTakeDialog } from './DiscardTakeDialog.tsx'
-import { useRecorder } from './useRecorder.ts'
+import { useRecorder, type TakeClock } from './useRecorder.ts'
 
 export interface RecordingPanelProps {
   readonly sectionName: string
@@ -28,9 +28,9 @@ export interface RecordingPanelProps {
   readonly onSubmit: (take: NewTake) => Promise<SubmitTakeOutcome>
   readonly onUploadInstead: () => void
   readonly onClose: () => void
-  // True while a take is being recorded, for whatever plays along with it.
-  // 처음부터 reports false and then true, because a new take begins.
-  readonly onCaptureChange?: (capturing: boolean) => void
+  // The take being recorded, for whatever plays along with it; null when
+  // there is none. 처음부터 reports null and then the take, which begins anew.
+  readonly onCaptureChange?: (take: TakeClock | null) => void
   // True while leaving the screen would lose a take.
   readonly onUnsavedChange?: (unsaved: boolean) => void
 }
@@ -137,6 +137,18 @@ export function RecordingPanel({
       focusCurrentStep(panel)
     }
   }, [state.phase])
+
+  // A take that ends behind the question takes away the button that opened
+  // it, and the effect above ran while focus was in the question. Focus then
+  // goes where the finished step would have put it.
+  const asked = useRef(false)
+  useEffect(() => {
+    const panel = panelRef.current
+    const wasAsked = asked.current
+    asked.current = closing
+    if (closing || !wasAsked || !panel) return
+    if (!panel.contains(document.activeElement)) focusCurrentStep(panel)
+  }, [closing])
 
   function leave() {
     recorder.cancel()
