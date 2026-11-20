@@ -362,12 +362,12 @@ test('a comparison that is gone while it runs can be asked for again', async ({
   await openComparison(page, '&comparison-seed=compared')
 
   await expect(status(page)).toContainText(
-    '비교 결과를 불러오지 못했어요',
+    '저장된 비교를 찾을 수 없어요',
     SETTLED,
   )
 
   await recoverMockRequest(page)
-  await button(page, '다시 시도').click()
+  await button(page, '다시 불러오기').click()
 
   await expect(status(page)).toContainText('비교하는 중')
   await releaseRuns(page)
@@ -384,12 +384,12 @@ test('a failed comparison that is gone before its details arrive can be asked fo
   )
 
   await expect(status(page)).toContainText(
-    '비교 결과를 불러오지 못했어요',
+    '저장된 비교를 찾을 수 없어요',
     SETTLED,
   )
 
   await recoverMockRequest(page)
-  await button(page, '다시 시도').click()
+  await button(page, '다시 불러오기').click()
 
   await expect(status(page)).toContainText('비교를 끝내지 못했어요', SETTLED)
 })

@@ -9,6 +9,7 @@ import type {
 // What browser tests call on window.workspaceTest. Each harness module
 // provides its part; harness.tsx puts them together.
 export interface TestControls {
+  failNextComparisonAudio(): void
   failOutputStart(fail: boolean): void
   // Suspends the output; the next play resumes it at the browser's own pace.
   suspendOutput(): Promise<void>

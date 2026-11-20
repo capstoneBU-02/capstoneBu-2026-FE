@@ -168,3 +168,15 @@
     margin: 0 16px 20px;
   }
 }
+.downloadSlot {
+  display: grid;
+}
+
+.downloadSlot > * {
+  grid-area: 1 / 1;
+}
+
+.downloadPlaceholder {
+  visibility: hidden;
+  pointer-events: none;
+}

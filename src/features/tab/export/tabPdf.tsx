@@ -70,14 +70,23 @@ async function nextPage(signal: AbortSignal): Promise<void> {
 }
 
 // svg2pdf.js measures text in a hidden svg it adds to the body, and takes it
-// away only when the page draws without an error. Whatever is left goes.
+// away only when the page draws without an error. Match that measurement
+// node's shape (svg2pdf.js 2.9), preserving unrelated SVGs added meanwhile.
 async function leavingNoSvg(draw: () => Promise<unknown>): Promise<void> {
   const before = new Set(document.body.children)
   try {
     await draw()
   } finally {
     for (const child of [...document.body.children])
-      if (child instanceof SVGSVGElement && !before.has(child)) child.remove()
+      if (
+        child instanceof SVGSVGElement &&
+        !before.has(child) &&
+        child.style.position === 'absolute' &&
+        child.style.visibility === 'hidden' &&
+        child.children.length === 1 &&
+        child.firstElementChild?.localName === 'text'
+      )
+        child.remove()
   }
 }
 
@@ -92,8 +101,8 @@ export async function tabPdf(
   const [{ jsPDF }, { svg2pdf }, regular, bold] = await Promise.all([
     import('jspdf'),
     import('svg2pdf.js'),
-    base64Of(regularUrl),
-    base64Of(boldUrl),
+    base64Of(regularUrl, signal),
+    base64Of(boldUrl, signal),
   ])
   // The code and fonts take longest; the tab may be gone by now.
   signal.throwIfAborted()

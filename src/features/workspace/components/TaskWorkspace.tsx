@@ -110,6 +110,7 @@ function TaskBody({
   player,
   playback,
   takeFocus,
+  dropFocus,
 }: {
   detail: TaskDetail
   refreshFailed: boolean
@@ -119,6 +120,7 @@ function TaskBody({
   player: SectionPlayback
   playback: TrackId
   takeFocus: () => boolean
+  dropFocus: () => void
 }) {
   const { task } = detail
   if (isTaskInProgress(task))
@@ -137,6 +139,7 @@ function TaskBody({
       player={player}
       lead={trackLead(playback, task)}
       takeFocus={takeFocus}
+      dropFocus={dropFocus}
     />
   )
 }
@@ -173,6 +176,7 @@ function TaskWorkspace({
   const session = useComparisonSession({
     repository: comparable ? comparison : null,
     taskId: comparable ? task.id : null,
+    sectionName: task.sectionName,
     onExpired: source.onExpired,
   })
   const [chosenView, setChosenView] = useState<TaskView>('tab')
@@ -355,6 +359,7 @@ function TaskWorkspace({
             player={player}
             playback={playback}
             takeFocus={download.takeFocus}
+            dropFocus={download.dropFocus}
           />
           {/* SEG-04: each kept result names the section it was made from. */}
           {previousResults.length > 0 && (
@@ -411,7 +416,21 @@ function TaskWorkspace({
       {actions &&
         createPortal(
           <>
-            {drawn && <TabDownloadMenu download={download} />}
+            {task.processingStatus === 'completed' && (
+              <div className={styles.downloadSlot}>
+                <Button
+                  compact
+                  disabled
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  className={styles.downloadPlaceholder}
+                >
+                  <Icon name="download" />
+                  내려받는 중…
+                </Button>
+                {drawn && <TabDownloadMenu download={download} />}
+              </div>
+            )}
             {comparable && (
               <Button
                 variant="primary"

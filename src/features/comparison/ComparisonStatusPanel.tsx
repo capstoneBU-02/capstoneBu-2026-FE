@@ -60,7 +60,17 @@ function panelMessage(
   session: ComparisonSession,
   canRequest: boolean,
 ): PanelMessage {
-  const { status, result } = session.state
+  const { status, result, pending, pendingPerformanceId, selectedId } =
+    session.state
+  if (
+    panel === 'not-requested' &&
+    pending === 'requesting' &&
+    pendingPerformanceId === selectedId
+  )
+    return {
+      title: '비교를 요청하고 있어요',
+      description: '연주는 저장되어 있어요.',
+    }
   switch (panel) {
     case 'loading':
       return { title: '연주 기록을 불러오고 있어요', description: null }
@@ -99,6 +109,13 @@ function panelMessage(
       return LOADING_RESULT
     case 'result-failed':
       return { title: '비교 결과를 불러오지 못했어요', description: TRY_LATER }
+    case 'result-missing':
+      return {
+        title: '저장된 비교를 찾을 수 없어요',
+        description: canRequest
+          ? '연주는 저장되어 있어요. 다시 불러오거나 새로 비교해 주세요.'
+          : '이전 구간의 연주라 새로 비교할 수 없어요. 비교를 다시 불러오거나 현재 구간을 녹음해 주세요.',
+      }
   }
 }
 
@@ -113,6 +130,14 @@ function panelAction(
       return { ...retry, run: session.reloadList, sendsRequest: false }
     case 'result-failed':
       return { ...retry, run: session.reloadResult, sendsRequest: false }
+    case 'result-missing':
+      return canRequest
+        ? {
+            label: '새로 비교하기',
+            run: session.requestSelected,
+            sendsRequest: true,
+          }
+        : null
     case 'failed':
       return comparisonFailureCopy(session.state.status?.failure ?? null)
         .canRetry
@@ -209,6 +234,18 @@ export function ComparisonStatusPanel({
             {action.label}
           </Button>
         </div>
+      )}
+      {panel === 'result-missing' && (
+        <Button
+          compact
+          onClick={() => {
+            acted.current = true
+            session.reloadResult()
+          }}
+          disabled={session.state.pending !== null}
+        >
+          다시 불러오기
+        </Button>
       )}
     </section>
   )

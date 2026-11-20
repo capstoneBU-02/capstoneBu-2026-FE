@@ -1,6 +1,9 @@
 // A font file's bytes in base64, as jsPDF and a data URL take them.
-export async function base64Of(url: string): Promise<string> {
-  const response = await fetch(url)
+export async function base64Of(
+  url: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const response = await fetch(url, { signal })
   if (!response.ok) throw new Error(`Font request failed: ${response.status}`)
   const bytes = new Uint8Array(await response.arrayBuffer())
   // In slices: one call with every byte overflows the argument limit.

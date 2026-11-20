@@ -101,11 +101,16 @@ export function useTabDownload({
     focusDropped.current = false
     return dropped
   }, [])
-  // Runs after the tab's own layout effects: a drop no tab took is stale.
+  // Runs after the tab's own layout effects: if processing removed the tab,
+  // keep the dropped focus in the visible workspace, then consume the handoff.
   // This holds because the menu and the notice are rendered by the component
   // calling this hook, and the tab sits inside it, so a drop happens only in
   // a commit that reaches this effect.
   useLayoutEffect(() => {
+    if (focusDropped.current)
+      document
+        .getElementById('workspace-content')
+        ?.focus({ preventScroll: true })
     focusDropped.current = false
   })
 

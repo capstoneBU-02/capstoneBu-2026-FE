@@ -25,7 +25,9 @@ export interface ComparisonSessionState {
   readonly result: ComparisonResult | null
   readonly playback: ComparisonPlayback | null
   readonly resultFailed: boolean
+  readonly resultMissing: boolean
   readonly pending: ComparisonAction | null
+  readonly pendingPerformanceId: string | null
   // Why the last action on a take failed, kept with that take.
   readonly notices: ReadonlyMap<string, string>
   // Changes whenever the open comparison has to be read from the start.
@@ -51,6 +53,7 @@ export type ComparisonSessionEvent =
       readonly performanceId: string
       readonly message: string
     }
+  | { readonly type: 'action-finished'; readonly performanceId: string }
   // A mark runs beside a request or retry and leaves it pending.
   | {
       readonly type: 'mark-failed'
@@ -68,7 +71,11 @@ export type ComparisonSessionEvent =
       readonly result: ComparisonResult
       readonly playback: ComparisonPlayback | null
     }
-  | { readonly type: 'result-failed'; readonly comparisonId: string }
+  | {
+      readonly type: 'result-failed'
+      readonly comparisonId: string
+      readonly missing?: boolean
+    }
   | { readonly type: 'reload-result' }
   | {
       readonly type: 'region-marked'
@@ -86,7 +93,9 @@ export const initialComparisonSession: ComparisonSessionState = {
   result: null,
   playback: null,
   resultFailed: false,
+  resultMissing: false,
   pending: null,
+  pendingPerformanceId: null,
   notices: new Map(),
   follow: 0,
 }
@@ -116,6 +125,7 @@ function openTake(
     result: null,
     playback: null,
     resultFailed: false,
+    resultMissing: false,
     follow: state.follow + 1,
   }
 }
@@ -198,7 +208,7 @@ function afterComparisonStarted(
     performanceId,
     comparison,
   )
-  const updated = { ...state, performances, pending: null }
+  const updated = { ...finishAction(state, performanceId), performances }
   if (state.selectedId !== performanceId) return updated
   return {
     ...updated,
@@ -207,8 +217,18 @@ function afterComparisonStarted(
     result: null,
     playback: null,
     resultFailed: false,
+    resultMissing: false,
     follow: state.follow + 1,
   }
+}
+
+function finishAction(
+  state: ComparisonSessionState,
+  performanceId: string,
+): ComparisonSessionState {
+  return state.pendingPerformanceId === performanceId
+    ? { ...state, pending: null, pendingPerformanceId: null }
+    : state
 }
 
 export function comparisonSessionReducer(
@@ -241,14 +261,16 @@ export function comparisonSessionReducer(
       return {
         ...state,
         pending: event.action,
+        pendingPerformanceId: event.performanceId,
         notices: withoutNotice(state.notices, event.performanceId),
       }
     case 'action-failed':
       return {
-        ...state,
-        pending: null,
+        ...finishAction(state, event.performanceId),
         notices: withNotice(state.notices, event.performanceId, event.message),
       }
+    case 'action-finished':
+      return finishAction(state, event.performanceId)
     case 'mark-failed':
       return {
         ...state,
@@ -269,12 +291,22 @@ export function comparisonSessionReducer(
         result: event.result,
         playback: event.playback,
         resultFailed: false,
+        resultMissing: false,
       }
     case 'result-failed':
       if (state.status?.id !== event.comparisonId) return state
-      return { ...state, resultFailed: true }
+      return {
+        ...state,
+        resultFailed: true,
+        resultMissing: event.missing ?? false,
+      }
     case 'reload-result':
-      return { ...state, resultFailed: false, follow: state.follow + 1 }
+      return {
+        ...state,
+        resultFailed: false,
+        resultMissing: false,
+        follow: state.follow + 1,
+      }
     case 'region-marked':
       if (state.result?.comparisonId !== event.comparisonId) return state
       // A new mark makes the failure of the last one old news.
@@ -310,6 +342,7 @@ export type SessionPanel =
   | 'list-failed'
   | 'not-requested'
   | 'result-failed'
+  | 'result-missing'
 
 export function sessionPanel(state: ComparisonSessionState): SessionPanel {
   if (state.selectedId === null) {
@@ -320,7 +353,8 @@ export function sessionPanel(state: ComparisonSessionState): SessionPanel {
   if (status === null) return 'not-requested'
   // A comparison that could not be read, even one still running or not yet
   // settled, waits for the user to ask again.
-  if (state.resultFailed && result === null) return 'result-failed'
+  if (state.resultFailed && result === null)
+    return state.resultMissing ? 'result-missing' : 'result-failed'
   // The list cannot say whether a failure may be retried.
   if (status.state === 'failed' && !state.statusSettled) return 'loading-result'
   const panel = comparisonPanel(status, result)

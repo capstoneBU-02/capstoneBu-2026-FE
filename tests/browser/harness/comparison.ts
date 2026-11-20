@@ -196,6 +196,9 @@ async function harnessRepository() {
 }
 
 export const comparisonControls = {
+  failNextComparisonAudio() {
+    takeAudioFails = true
+  },
   releaseTakeSaves() {
     heldSaves.splice(0).forEach((release) => release(false))
   },
