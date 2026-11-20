@@ -1,0 +1,11 @@
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_INPUT",
+    "message": "잘못된 입력입니다.",
+    "details": [
+      { "field": "name", "message": "String should have at most 50 characters" }
+    ]
+  },
+  "meta": { "trace_id": "a41e07d29c35b816" }
+}

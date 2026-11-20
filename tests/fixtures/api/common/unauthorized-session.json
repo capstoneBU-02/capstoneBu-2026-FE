@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED_SESSION",
+    "message": "워크스페이스 세션이 없거나 만료되었습니다."
+  },
+  "meta": { "trace_id": "5f0c2a9e41b7d3c8" }
+}

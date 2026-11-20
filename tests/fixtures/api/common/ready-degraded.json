@@ -1,0 +1,8 @@
+{
+  "success": true,
+  "data": {
+    "database": "ok",
+    "redis": "error: ConnectionError",
+    "storage": "ok"
+  }
+}

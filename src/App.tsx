@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react'
-import { readAppMode } from './app/demoConfig.ts'
+import type { AppRepositories } from './app/repositories.ts'
 import { AccessPage } from './features/access/AccessPage.tsx'
-import { createMockAccessRepository } from './features/access/mockRepository.ts'
-import type { AccessRepository } from './features/access/repository.ts'
 import { useAccess } from './features/access/useAccess.ts'
 import { useDemoComparisonRepository } from './features/comparison/demoComparison.ts'
 import { OnboardingPage } from './features/onboarding/OnboardingPage.tsx'
 import type { DemoScenario } from './features/workspace/model.ts'
-import { createMockWorkspaceRepository } from './features/workspace/mockRepository.ts'
 import type { WorkspaceRepository } from './features/workspace/repository.ts'
 import { useWorkspace } from './features/workspace/useWorkspace.ts'
 import { WorkspacePage } from './features/workspace/WorkspacePage.tsx'
@@ -27,6 +24,7 @@ function WorkspaceSession({
   focusOnEntry?: boolean
 }) {
   const workspace = useWorkspace(repository, scenario)
+  // Mock comparisons over this workspace until the comparison API is wired.
   const comparisonRepository = useDemoComparisonRepository(
     repository,
     workspace,
@@ -43,69 +41,41 @@ function WorkspaceSession({
   )
 }
 
-function App({
-  accessRepository,
-}: { accessRepository?: AccessRepository } = {}) {
-  const [configuration] = useState(() => {
-    const mode = readAppMode(window.location.search)
-    return {
-      mode,
-      entrySearch:
-        mode.kind === 'access' && mode.scenario !== 'default'
-          ? `?access=${mode.scenario}`
-          : '',
-      accessRepository: createMockAccessRepository(
-        mode.kind === 'access' ? mode.scenario : 'default',
-      ),
-      previewRepository:
-        mode.kind === 'workspace'
-          ? createMockWorkspaceRepository(mode.scenario)
-          : null,
-    }
-  })
-  const [previewActive, setPreviewActive] = useState(
-    configuration.mode.kind === 'workspace',
-  )
+// Repositories come from main.tsx (src/app/repositories.ts) or a test
+// harness, so App never decides between mock and real data.
+function App({ repositories }: { repositories: AppRepositories }) {
+  const { entrySearch, preview } = repositories
+  const [previewActive, setPreviewActive] = useState(preview !== null)
   const [focusAccessOnEntry, setFocusAccessOnEntry] = useState(false)
-  const access = useAccess(
-    accessRepository ?? configuration.accessRepository,
-    configuration.mode.kind === 'access' &&
-      configuration.mode.scenario === 'session-expired'
-      ? 'expired'
-      : null,
-  )
+  const access = useAccess(repositories.access, repositories.entryNotice)
 
   function reenter() {
     setFocusAccessOnEntry(true)
-    clearWorkspaceHistory(configuration.entrySearch)
+    clearWorkspaceHistory(entrySearch)
     setPreviewActive(false)
     access.returnToEntry('expired')
   }
 
   function leave() {
     setFocusAccessOnEntry(true)
-    clearWorkspaceHistory(configuration.entrySearch)
+    clearWorkspaceHistory(entrySearch)
     setPreviewActive(false)
     access.returnToEntry()
   }
 
   useEffect(() => {
     if (previewActive || access.stage === 'workspace') return
-    const clearHistory = () => clearWorkspaceHistory(configuration.entrySearch)
+    const clearHistory = () => clearWorkspaceHistory(entrySearch)
     clearHistory()
     window.addEventListener('popstate', clearHistory)
     return () => window.removeEventListener('popstate', clearHistory)
-  }, [previewActive, access.stage, configuration.entrySearch])
+  }, [previewActive, access.stage, entrySearch])
 
-  if (
-    previewActive &&
-    configuration.previewRepository &&
-    configuration.mode.kind === 'workspace'
-  ) {
+  if (previewActive && preview) {
     return (
       <WorkspaceSession
-        repository={configuration.previewRepository}
-        scenario={configuration.mode.scenario}
+        repository={preview.repository}
+        scenario={preview.scenario}
         onReenter={reenter}
         onLeave={leave}
       />

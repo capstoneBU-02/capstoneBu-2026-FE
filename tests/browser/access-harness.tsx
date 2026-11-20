@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from '../../src/App.tsx'
+import { createMockRepositories } from '../../src/app/mockRepositories.ts'
 import { createMockAccessRepository } from '../../src/features/access/mockRepository.ts'
 import type { AccessResult } from '../../src/features/access/model.ts'
 import type { AccessRepository } from '../../src/features/access/repository.ts'
@@ -246,13 +247,18 @@ window.accessTest = {
   }),
 }
 
+// Same entry settings production would read from this address.
+const entryRepositories = createMockRepositories(window.location.search)
+
 export function Harness() {
   const [activeRepository, setActiveRepository] = useState(repository)
   useEffect(() => {
     window.accessTest.replaceRepository = () =>
       setActiveRepository(createMockAccessRepository())
   }, [])
-  return <App accessRepository={activeRepository} />
+  return (
+    <App repositories={{ ...entryRepositories, access: activeRepository }} />
+  )
 }
 
 createRoot(document.getElementById('root')!).render(

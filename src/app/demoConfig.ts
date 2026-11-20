@@ -1,3 +1,4 @@
+import { apiConfig, type ApiMode } from '../api/config.ts'
 import type { DemoScenario } from '../features/workspace/model.ts'
 import type { AccessScenario } from '../features/access/model.ts'
 
@@ -18,7 +19,15 @@ export type AppMode =
   | { readonly kind: 'workspace'; readonly scenario: DemoScenario }
   | { readonly kind: 'access'; readonly scenario: AccessScenario }
 
-export function readAppMode(search: string): AppMode {
+const ENTRY_MODE: AppMode = { kind: 'access', scenario: 'default' }
+
+// Demo and access selectors exist only on mock repositories; against the real
+// API an address cannot open a mock screen.
+export function readAppMode(
+  search: string,
+  apiMode: ApiMode = apiConfig().mode,
+): AppMode {
+  if (apiMode !== 'mock') return ENTRY_MODE
   const params = new URLSearchParams(search)
   const demo = params.get('demo')
   if (
@@ -43,7 +52,7 @@ export function readAppMode(search: string): AppMode {
     case 'consent-error':
       return { kind: 'access', scenario: access }
     default:
-      return { kind: 'access', scenario: 'default' }
+      return ENTRY_MODE
   }
 }
 

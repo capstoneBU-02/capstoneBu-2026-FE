@@ -16,8 +16,9 @@ export interface AccessRepository {
 export class AccessRepositoryError extends Error {
   readonly code: AccessFailure
 
-  constructor(code: AccessFailure, message: string) {
-    super(message)
+  // `cause` keeps the server failure (an ApiError) for diagnosis only.
+  constructor(code: AccessFailure, message: string, options?: ErrorOptions) {
+    super(message, options)
     this.name = 'AccessRepositoryError'
     this.code = code
   }
