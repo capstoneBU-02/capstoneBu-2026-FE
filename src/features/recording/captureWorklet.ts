@@ -105,7 +105,11 @@ export function receiveCapture(
     },
     finish() {
       finished = true
-      return mergeChunks(blocks)
+      // The take is one buffer from here on; the blocks need not wait for the
+      // port to be let go.
+      const merged = mergeChunks(blocks)
+      blocks = []
+      return merged
     },
   }
 }

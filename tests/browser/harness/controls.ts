@@ -100,6 +100,8 @@ export interface TestControls {
   releaseSeparated(): void
   // comparison-save=held finishes the take saves waiting so far.
   releaseTakeSaves(): void
+  // comparison-save=held fails the take saves waiting so far.
+  failTakeSaves(): void
   // audio-error and separated-error serve playable audio from here on.
   healAudio(): void
   // The state of every playback output opened so far.

@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { restoreFocus } from '../../shared/ui/dialogFocus.ts'
 import { Icon } from '../../shared/ui/Icon.tsx'
@@ -92,18 +98,24 @@ export function RecordingPanel({
   // A take that ended on its own leaves nothing to ask about.
   if (closing && !unsaved) setClosing(false)
 
+  // Only a change of `unsaved` is reported: reporting false lets a leave that
+  // is being asked about go ahead, so a new function from above must not read
+  // as the take being saved.
+  const reportUnsaved = useEffectEvent((value: boolean) =>
+    onUnsavedChange?.(value),
+  )
   useEffect(() => {
     if (!unsaved) return
     function askBrowser(event: BeforeUnloadEvent) {
       event.preventDefault()
     }
-    onUnsavedChange?.(true)
+    reportUnsaved(true)
     window.addEventListener('beforeunload', askBrowser)
     return () => {
       window.removeEventListener('beforeunload', askBrowser)
-      onUnsavedChange?.(false)
+      reportUnsaved(false)
     }
-  }, [unsaved, onUnsavedChange])
+  }, [unsaved])
 
   useLayoutEffect(() => {
     const panel = panelRef.current

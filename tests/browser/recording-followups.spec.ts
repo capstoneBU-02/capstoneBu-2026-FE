@@ -50,6 +50,17 @@ const saving = (page: Page) =>
   )
 const releaseTakeSaves = (page: Page) =>
   page.evaluate(() => window.workspaceTest.releaseTakeSaves())
+const failTakeSaves = (page: Page) =>
+  page.evaluate(() => window.workspaceTest.failTakeSaves())
+// Lets the effects of what just rendered run, so a test that expects nothing
+// to happen does not look before it could have.
+const settle = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  )
 
 async function openPanel(page: Page, query = '') {
   await page.goto(
@@ -172,6 +183,44 @@ test.describe('a leave asked about while the take stops needing it', () => {
     await expect(confirmation(page)).toBeHidden()
     expect(await held(page)).toBe(0)
   })
+
+  test('stays when the leave was declined before the save ended', async ({
+    page,
+  }) => {
+    await recordTake(page, '&comparison-save=held')
+    await inPanel(page, '비교하기').click()
+    await saving(page)
+    await otherTask(page).click()
+    await expect(confirmation(page)).toBeVisible()
+    await confirmation(page).getByRole('button', { name: '취소' }).click()
+    await expect(confirmation(page)).toBeHidden()
+
+    await releaseTakeSaves(page)
+
+    // The saved take closes the panel; the leave declined earlier stays so.
+    await expect(panel(page)).toBeHidden()
+    await settle(page)
+    await expect(taskTitle(page, '벌스 1')).toBeVisible()
+    await expect(confirmation(page)).toBeHidden()
+  })
+
+  test('stays asked about when the save fails', async ({ page }) => {
+    await recordTake(page, '&comparison-save=held')
+    await inPanel(page, '비교하기').click()
+    await saving(page)
+    await otherTask(page).click()
+    await expect(confirmation(page)).toBeVisible()
+
+    await failTakeSaves(page)
+
+    // The take is still unsaved, so the question still guards it.
+    await expect(
+      panel(page).getByText('연주를 저장하지 못했어요. 다시 시도해 주세요.'),
+    ).toBeVisible()
+    await settle(page)
+    await expect(confirmation(page)).toBeVisible()
+    await expect(taskTitle(page, '벌스 1')).toBeVisible()
+  })
 })
 
 test.describe('a take begun before the section loaded', () => {
@@ -224,6 +273,7 @@ test.describe('a take begun before the section loaded', () => {
     await releaseGuitar(page)
 
     await loaded(page)
+    await settle(page)
     await expect(inPanel(page, '정지')).toBeVisible()
     expect(await offsets(page)).toEqual([])
   })
@@ -234,6 +284,7 @@ test.describe('a take begun before the section loaded', () => {
     await releaseGuitar(page)
 
     await loaded(page)
+    await settle(page)
     expect(await offsets(page)).toEqual([])
   })
 
@@ -247,6 +298,7 @@ test.describe('a take begun before the section loaded', () => {
     await releaseGuitar(page)
 
     await loaded(page)
+    await settle(page)
     expect(await offsets(page)).toEqual([])
   })
 

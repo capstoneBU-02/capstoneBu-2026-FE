@@ -16,7 +16,8 @@ import { taskDetail } from './server.ts'
 //   comparison-take-audio=fails-once  the take's sound fails to load once
 //   comparison-take-audio=fails-then-slow  and takes a while to load again
 //   comparison-save=hangs      saving a take never finishes
-//   comparison-save=held       saving a take waits for releaseTakeSaves()
+//   comparison-save=held       saving a take waits for releaseTakeSaves() or
+//                              failTakeSaves()
 //   comparison-seed-range=<start>,<end>  the seeded take was played on that
 //                              range, so it opens as a take from an earlier
 //                              section; its sound lasts as long as that range
@@ -74,8 +75,9 @@ const OUTCOMES: Readonly<Record<string, readonly ComparisonOutcome[]>> = {
   ],
 }
 
-// Saves that comparison-save=held keeps until releaseTakeSaves().
-const heldSaves: Array<() => void> = []
+// Saves that comparison-save=held keeps until releaseTakeSaves() or
+// failTakeSaves().
+const heldSaves: Array<(fail: boolean) => void> = []
 
 function savingAsAsked(
   repository: ComparisonRepository,
@@ -86,9 +88,11 @@ function savingAsAsked(
   return (input, signal) =>
     seeding
       ? repository.savePerformance(input, signal)
-      : new Promise((resolve) => {
-          heldSaves.push(() =>
-            resolve(repository.savePerformance(input, signal)),
+      : new Promise((resolve, reject) => {
+          heldSaves.push((fail) =>
+            fail
+              ? reject(new Error('The held save failed.'))
+              : resolve(repository.savePerformance(input, signal)),
           )
         })
 }
@@ -176,7 +180,10 @@ async function harnessRepository() {
 
 export const comparisonControls = {
   releaseTakeSaves() {
-    heldSaves.splice(0).forEach((release) => release())
+    heldSaves.splice(0).forEach((release) => release(false))
+  },
+  failTakeSaves() {
+    heldSaves.splice(0).forEach((release) => release(true))
   },
 } satisfies Partial<TestControls>
 
