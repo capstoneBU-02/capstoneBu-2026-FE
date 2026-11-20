@@ -176,6 +176,7 @@ function TaskWorkspace({
   const session = useComparisonSession({
     repository: comparable ? comparison : null,
     taskId: comparable ? task.id : null,
+    sectionName: task.sectionName,
     onExpired: source.onExpired,
   })
   const [chosenView, setChosenView] = useState<TaskView>('tab')

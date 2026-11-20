@@ -1,4 +1,5 @@
 import {
+  useContext,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -27,6 +28,7 @@ import {
 } from './RecordingViews.tsx'
 import { DiscardTakeDialog } from './DiscardTakeDialog.tsx'
 import { useRecorder, type TakeClock } from './useRecorder.ts'
+import { WorkspaceActivityContext } from '../workspace/useWorkspaceActivity.ts'
 
 export interface RecordingPanelProps {
   readonly sectionName: string
@@ -84,11 +86,16 @@ export function RecordingPanel({
   onCaptureChange,
   onUnsavedChange,
 }: RecordingPanelProps) {
+  const activity = useContext(WorkspaceActivityContext)
   const recorder = useRecorder({
     sectionSeconds,
     onSubmit,
     onSaved: onClose,
     onCaptureChange,
+    onInterrupted: () =>
+      activity?.notify(
+        `${sectionName} 녹음이 중단되어 저장되지 않았어요. 마이크 연결을 확인한 뒤 다시 녹음해 주세요.`,
+      ),
   })
   const { state, capture } = recorder
   const panelRef = useRef<HTMLElement>(null)
@@ -159,7 +166,11 @@ export function RecordingPanel({
     const wasAsked = asked.current
     asked.current = closing
     if (closing || !wasAsked || !panel) return
-    if (!panel.contains(document.activeElement)) focusCurrentStep(panel)
+    if (
+      document.activeElement === panel ||
+      !panel.contains(document.activeElement)
+    )
+      focusCurrentStep(panel)
   }, [closing])
 
   function leave() {
@@ -306,6 +317,7 @@ export function RecordingPanel({
         ref={panelRef}
         className={styles.panel}
         aria-label={sectionTitle}
+        tabIndex={-1}
       >
         <p className={styles.srOnly} role="status">
           {ANNOUNCEMENTS[state.phase]}

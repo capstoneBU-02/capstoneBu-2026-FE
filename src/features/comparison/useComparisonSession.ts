@@ -1,4 +1,12 @@
-import { useEffect, useEffectEvent, useReducer, useRef, useState } from 'react'
+import {
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useReducer,
+  useRef,
+  useState,
+} from 'react'
+import { WorkspaceActivityContext } from '../workspace/useWorkspaceActivity.ts'
 import {
   startRefreshLoop,
   type RefreshLoop,
@@ -65,14 +73,17 @@ function messageOf(error: unknown, fallback: string) {
 export function useComparisonSession({
   repository,
   taskId,
+  sectionName = '작업',
   onExpired,
   pollMs = POLL_MS,
 }: {
   repository: ComparisonRepository | null
   taskId: string | null
+  sectionName?: string
   onExpired: () => void
   pollMs?: number
 }): ComparisonSession {
+  const activity = useContext(WorkspaceActivityContext)
   const [state, dispatch] = useReducer(
     comparisonSessionReducer,
     initialComparisonSession,
@@ -146,7 +157,11 @@ export function useComparisonSession({
         // is gone, or a finished one whose result failed, waits for the user.
         if (running && !hasCode(error, 'comparison-unavailable'))
           return 'continue'
-        dispatch({ type: 'result-failed', comparisonId: id })
+        dispatch({
+          type: 'result-failed',
+          comparisonId: id,
+          missing: hasCode(error, 'comparison-unavailable'),
+        })
         return 'stop'
       }
     }
@@ -176,8 +191,9 @@ export function useComparisonSession({
     else dispatch({ type, performanceId, message: messageOf(error, fallback) })
   }
 
-  async function requestComparison(performanceId: string) {
-    const signal = lifetime.current?.signal
+  async function requestComparison(performanceId: string, saved = false) {
+    const screenSignal = lifetime.current?.signal
+    const signal = saved ? (activity?.signal() ?? screenSignal) : screenSignal
     if (!repository || !signal) return
     dispatch({ type: 'action-started', action: 'requesting', performanceId })
     try {
@@ -185,10 +201,21 @@ export function useComparisonSession({
         performanceId,
         signal,
       )
-      if (!signal.aborted)
+      if (!signal.aborted && !screenSignal?.aborted)
         dispatch({ type: 'comparison-started', performanceId, comparison })
     } catch (error) {
-      failAction('action-failed', error, REQUEST_FAILED, performanceId)
+      if (signal.aborted) return
+      if (hasCode(error, 'expired')) {
+        onExpired()
+        return
+      }
+      if (saved && activity) {
+        activity.notify(
+          `${sectionName} 연주는 저장됐지만 비교를 시작하지 못했어요. 해당 작업의 비교 화면에서 다시 시도해 주세요.`,
+        )
+        if (!screenSignal?.aborted)
+          dispatch({ type: 'action-finished', performanceId })
+      } else failAction('action-failed', error, REQUEST_FAILED, performanceId)
     }
   }
 
@@ -203,7 +230,9 @@ export function useComparisonSession({
       )
       if (signal.aborted) return { saved: true, message: null }
       dispatch({ type: 'saved', performance })
-      await requestComparison(performance.id)
+      // The take is durable now. Its comparison can finish in this workspace
+      // after the dialog closes or a pending navigation goes ahead.
+      void requestComparison(performance.id, true)
       return { saved: true, message: null }
     } catch (error) {
       if (hasCode(error, 'expired')) onExpired()

@@ -62,6 +62,62 @@ function run(events, from = initialComparisonSession) {
 
 const loaded = (performances) => run([{ type: 'list-loaded', performances }])
 
+test('a missing comparison differs from a temporary read failure and can be reloaded', () => {
+  const state = loaded([
+    performance('take-1', { id: 'compare-1', state: 'running' }),
+  ])
+  const missing = comparisonSessionReducer(state, {
+    type: 'result-failed',
+    comparisonId: 'compare-1',
+    missing: true,
+  })
+  assert.equal(sessionPanel(missing), 'result-missing')
+  assert.equal(
+    comparisonSessionReducer(missing, { type: 'reload-result' }).resultMissing,
+    false,
+  )
+  assert.equal(
+    sessionPanel(
+      comparisonSessionReducer(state, {
+        type: 'result-failed',
+        comparisonId: 'compare-1',
+      }),
+    ),
+    'result-failed',
+  )
+})
+
+test('an older saved take finishing does not clear the newer take request', () => {
+  const state = run([
+    {
+      type: 'list-loaded',
+      performances: [performance('take-2'), performance('take-1')],
+    },
+    { type: 'action-started', action: 'requesting', performanceId: 'take-1' },
+    { type: 'action-started', action: 'requesting', performanceId: 'take-2' },
+  ])
+  for (const event of [
+    { type: 'action-finished', performanceId: 'take-1' },
+    { type: 'action-failed', performanceId: 'take-1', message: 'failed' },
+    {
+      type: 'comparison-started',
+      performanceId: 'take-1',
+      comparison: { id: 'compare-1', state: 'queued' },
+    },
+  ]) {
+    const next = comparisonSessionReducer(state, event)
+    assert.equal(next.pending, 'requesting')
+    assert.equal(next.pendingPerformanceId, 'take-2')
+  }
+  assert.equal(
+    comparisonSessionReducer(state, {
+      type: 'action-finished',
+      performanceId: 'take-2',
+    }).pending,
+    null,
+  )
+})
+
 test('the list starts loading and shows the empty state when no take exists', () => {
   assert.equal(sessionPanel(initialComparisonSession), 'loading')
   assert.equal(sessionPanel(loaded([])), 'empty')

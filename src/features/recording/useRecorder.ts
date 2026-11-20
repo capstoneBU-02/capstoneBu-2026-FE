@@ -34,6 +34,7 @@ export interface RecorderOptions {
   readonly onSubmit: (take: NewTake) => Promise<SubmitTakeOutcome>
   readonly onSaved: () => void
   readonly onCaptureChange?: (take: TakeClock | null) => void
+  readonly onInterrupted?: () => void
 }
 
 export interface Recorder {
@@ -89,6 +90,7 @@ export function useRecorder(options: RecorderOptions): Recorder {
       if (captured.samples.length === 0) throw new RangeError('Empty take')
       dispatch({ type: 'finished', take: buildRecordedTake(captured, limit) })
     } catch {
+      latest.current.onInterrupted?.()
       dispatch({ type: 'interrupted' })
     }
   }
@@ -105,6 +107,7 @@ export function useRecorder(options: RecorderOptions): Recorder {
       onInterrupted() {
         if (request.current !== opened || !active.current) return
         releaseMicrophone()
+        latest.current.onInterrupted?.()
         dispatch({ type: 'interrupted' })
       },
     })

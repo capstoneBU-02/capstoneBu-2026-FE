@@ -49,6 +49,10 @@ import {
   type WorkspaceView,
 } from './navigation.ts'
 import { useWorkspaceNavigation } from './useWorkspaceNavigation.ts'
+import {
+  useWorkspaceActivity,
+  WorkspaceActivityContext,
+} from './useWorkspaceActivity.ts'
 import './consent-feedback.css'
 
 type Filter = 'all' | 'processing' | 'failed'
@@ -186,6 +190,7 @@ export function WorkspacePage({
   const workspaceId = workspace.workspace?.id ?? null
   const previousFocusViewKey = useRef(viewKey)
   const workspaceReady = loadState === 'empty' || loadState === 'success'
+  const activity = useWorkspaceActivity(workspaceReady ? workspaceId : null)
   const drafts = useSectionDrafts(
     workspaceId,
     view.name === 'new-section' ? view.songId : null,
@@ -414,7 +419,7 @@ export function WorkspacePage({
     },
   ] as const
 
-  return (
+  const content = (
     <div className={styles.appShell}>
       <a
         className={styles.skipLink}
@@ -498,6 +503,21 @@ export function WorkspacePage({
           </header>
         )}
         {!ownTopBar && consentFeedback}
+        {activity.notices.map((notice) => (
+          <div key={notice.id} className={styles.consentNotice} role="alert">
+            <span>{notice.message}</span>
+            <Button
+              compact
+              variant="ghost"
+              onClick={() => {
+                activity.dismiss(notice.id)
+                focusContent()
+              }}
+            >
+              알림 닫기
+            </Button>
+          </div>
+        ))}
         <StopNotice
           notice={
             stopNotice?.workspaceId === workspaceId &&
@@ -789,5 +809,10 @@ export function WorkspacePage({
         />
       )}
     </div>
+  )
+  return (
+    <WorkspaceActivityContext value={activity.context}>
+      {content}
+    </WorkspaceActivityContext>
   )
 }
