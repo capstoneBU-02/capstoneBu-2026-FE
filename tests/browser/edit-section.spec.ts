@@ -76,6 +76,11 @@ async function openEditFromHome(page: Page) {
   await expect(title(page)).toHaveText('최근 작업')
   await sidebarTask(page, VERSE_ROW).click()
   await expect(title(page)).toHaveText('벌스 1')
+  // Loading the tab adds a download action beside the edit button. Wait for
+  // that layout change before clicking in this history-navigation test.
+  await expect(
+    main(page).getByRole('button', { name: '내려받기', exact: true }),
+  ).toBeVisible()
   await editButton(page).click()
   await expect(form(page)).toBeVisible()
 }
