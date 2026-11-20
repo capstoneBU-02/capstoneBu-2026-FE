@@ -6,6 +6,15 @@ import type {} from './harness.tsx'
 const savedName = (download: Download) =>
   download.suggestedFilename().normalize('NFC')
 
+// The Linux WebKit port replaces spaces in suggested filenames with '_'.
+// Keep the exact name check on other platforms; fileName's unit tests also
+// check the application-provided name before the browser normalizes it.
+function expectedName(name: string, browserName: string) {
+  return browserName === 'webkit' && process.platform === 'linux'
+    ? name.replaceAll(' ', '_')
+    : name
+}
+
 const main = (page: Page) => page.locator('#workspace-content')
 const tracks = (page: Page) => main(page).getByRole('region', { name: '트랙' })
 const lane = (page: Page, label: string) =>
@@ -178,7 +187,10 @@ test('the download menu works from the keyboard', async ({ page }) => {
   await expect(menu(page)).toHaveCount(0)
 })
 
-test('PNG saves the tab on screen at twice its size', async ({ page }) => {
+test('PNG saves the tab on screen at twice its size', async ({
+  page,
+  browserName,
+}) => {
   test.slow()
   await openTask(page, 'task-verse')
   await expect(staff(page)).toBeVisible(STAFF_TIMEOUT)
@@ -186,7 +198,9 @@ test('PNG saves the tab on screen at twice its size', async ({ page }) => {
   const height = Number(await staff(page).getAttribute('height'))
 
   const download = await downloadAs(page, 'PNG 이미지')
-  expect(savedName(download)).toBe('neon_harbor_live_벌스 1.png')
+  expect(savedName(download)).toBe(
+    expectedName('neon_harbor_live_벌스 1.png', browserName),
+  )
   const bytes = await bytesOf(download)
   expect(bytes.subarray(0, 8)).toEqual(
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -200,7 +214,10 @@ test('PNG saves the tab on screen at twice its size', async ({ page }) => {
   await expect(progress(page)).toHaveText('타브를 내려받았어요.')
 })
 
-test('PDF saves the tab as vector pages with its font', async ({ page }) => {
+test('PDF saves the tab as vector pages with its font', async ({
+  page,
+  browserName,
+}) => {
   test.slow()
   // Three minutes from the start: about ninety bars, more than a page.
   await openTask(page, 'task-verse', '&refresh=150')
@@ -222,7 +239,9 @@ test('PDF saves the tab as vector pages with its font', async ({ page }) => {
   await expect(staff(page)).toHaveAccessibleName('타브 악보 90마디')
 
   const download = await downloadAs(page, 'PDF')
-  expect(savedName(download)).toBe('neon_harbor_live_벌스 1.pdf')
+  expect(savedName(download)).toBe(
+    expectedName('neon_harbor_live_벌스 1.pdf', browserName),
+  )
   const text = (await bytesOf(download)).toString('latin1')
   expect(text.startsWith('%PDF-')).toBe(true)
   const pages = text.match(/\/Type\s*\/Page(?!s)/g) ?? []
@@ -242,6 +261,7 @@ test('PDF saves the tab as vector pages with its font', async ({ page }) => {
 
 test('a failed download keeps the tab and can be tried again', async ({
   page,
+  browserName,
 }) => {
   test.slow()
   await openTask(page, 'task-verse')
@@ -276,7 +296,9 @@ test('a failed download keeps the tab and can be tried again', async ({
   const saved = page.waitForEvent('download', EXPORT_TIMEOUT)
   await retry.press('Enter')
   const download = await saved
-  expect(savedName(download)).toBe('neon_harbor_live_벌스 1.pdf')
+  expect(savedName(download)).toBe(
+    expectedName('neon_harbor_live_벌스 1.pdf', browserName),
+  )
   await expect(failure(page)).toHaveCount(0)
   // The notice goes with its button; focus returns to 내려받기.
   await expect(trigger(page)).toBeFocused()
@@ -334,6 +356,7 @@ test('the menu and its trigger fit a narrow screen', async ({ page }) => {
 
 test('a track that fails to play leaves the tab to read and download', async ({
   page,
+  browserName,
 }) => {
   // Waits on audio, drawing code and an export, one after another.
   test.slow()
@@ -353,7 +376,9 @@ test('a track that fails to play leaves the tab to read and download', async ({
   await expect(staff(page)).toBeVisible(STAFF_TIMEOUT)
 
   const download = await downloadAs(page, 'PNG 이미지')
-  expect(savedName(download)).toBe('neon_harbor_live_벌스 1.png')
+  expect(savedName(download)).toBe(
+    expectedName('neon_harbor_live_벌스 1.png', browserName),
+  )
 
   await page.evaluate(() => window.workspaceTest.healAudio())
   await banner(page)

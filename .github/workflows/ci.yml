@@ -2,6 +2,14 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      browser:
+        description: Browser for this manual regression run
+        type: choice
+        default: chromium
+        options:
+          - chromium
+          - webkit
   push:
   pull_request:
     branches:
@@ -13,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ inputs.browser == 'webkit' && 'webkit' || 'chromium' }}
   cancel-in-progress: true
 
 env:
@@ -60,8 +68,10 @@ jobs:
           retention-days: 7
 
   browser:
-    name: browser (${{ matrix.shard }}/${{ matrix.shardTotal }})
+    name: ${{ inputs.browser == 'webkit' && 'webkit' || 'browser' }} (${{ matrix.shard }}/${{ matrix.shardTotal }})
     runs-on: ubuntu-latest
+    env:
+      TEST_BROWSER: ${{ inputs.browser == 'webkit' && 'webkit' || 'chromium' }}
     # Longer than the browser suite's globalTimeout (playwright.config.ts) and
     # the steps around it, so a shard that runs out still uploads its report.
     timeout-minutes: 20
@@ -77,16 +87,21 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install browser
+        run: npx playwright install --with-deps "$TEST_BROWSER"
       - name: Browser regression tests
         id: browser-tests
-        run: npm run test:browser -- --shard=${{ matrix.shard }}/${{ matrix.shardTotal }}
-      - name: Upload browser failure report
-        if: ${{ failure() && steps.browser-tests.outcome == 'failure' }}
+        run: |
+          if [ "$TEST_BROWSER" = "webkit" ]; then
+            npm run test:browser:webkit -- --shard=${{ matrix.shard }}/${{ matrix.shardTotal }}
+          else
+            npm run test:browser -- --shard=${{ matrix.shard }}/${{ matrix.shardTotal }}
+          fi
+      - name: Upload browser report
+        if: ${{ !cancelled() && (steps.browser-tests.outcome == 'failure' || (inputs.browser == 'webkit' && steps.browser-tests.outcome == 'success')) }}
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: browser-failure-${{ github.sha }}-${{ matrix.shard }}
+          name: browser-report-${{ github.sha }}-${{ env.TEST_BROWSER }}-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/

@@ -73,8 +73,8 @@ fix(recording): 녹음 종료 후 마이크 해제
 
 ## CI와 빌드 결과
 
-GitHub Actions의 `CI`는 push, `main`·`develop`·`release/**` 대상 PR, 수동 실행을 지원한다. `check` 작업은 `.nvmrc`의 Node 버전으로 `npm ci`, `npm run check`, Conventional Commits 검사를 실행한다. 브라우저 회귀는 별도의 `browser (1/4)`부터 `browser (4/4)`까지 네 작업에서 동시에 실행한다. 병합 전에는 `check`와 모든 브라우저 작업의 통과를 확인한다.
+GitHub Actions의 `CI`는 push, `main`·`develop`·`release/**` 대상 PR, 수동 실행을 지원한다. `check` 작업은 `.nvmrc`의 Node 버전으로 `npm ci`, `npm run check`, Conventional Commits 검사를 실행한다. 브라우저 회귀는 별도의 `browser (1/4)`부터 `browser (4/4)`까지 네 작업에서 동시에 실행한다. 병합 전에는 `check`와 모든 Chromium 브라우저 작업의 통과를 확인한다. 수동 실행에서 `browser=webkit`을 선택하면 같은 분할 방식으로 WebKit을 시험한다. WebKit은 push·PR 필수 검사에 추가하지 않으며 실기기 검증과 구분한다.
 
-`check` 작업의 검사가 성공하면 `dist/`를 `frontend-dist-<commit SHA>` artifact로 7일 보관한다. 브라우저 작업의 결과와 별도로 업로드하므로 artifact 존재만으로 전체 CI 통과를 판단하지 않는다. `dist/`가 없으면 업로드 단계가 실패한다. 실패한 브라우저 조각은 조각 번호가 붙은 보고서를 7일 보관한다. Actions 실행의 artifact에서 결과를 내려받을 수 있으며, 사이트 배포는 별도 작업이다.
+`check` 작업의 검사가 성공하면 `dist/`를 `frontend-dist-<commit SHA>` artifact로 7일 보관한다. 브라우저 작업의 결과와 별도로 업로드하므로 artifact 존재만으로 전체 CI 통과를 판단하지 않는다. `dist/`가 없으면 업로드 단계가 실패한다. 실패한 브라우저 조각과 성공한 수동 WebKit 조각은 브라우저 이름·조각 번호가 붙은 보고서를 7일 보관한다. Actions 실행의 artifact에서 결과를 내려받을 수 있으며, 사이트 배포는 별도 작업이다.
 
 이번 범위는 CI까지다. CD는 배포 대상이 결정된 뒤 별도 이슈로 진행한다. Vercel은 검토 중인 후보이며 이번에는 CD 워크플로·배포 토큰·자동 배포를 추가하지 않는다.

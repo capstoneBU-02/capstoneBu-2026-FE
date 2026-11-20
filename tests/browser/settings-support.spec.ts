@@ -47,7 +47,11 @@ async function startHarness(page: Page, scenario = '') {
 test('settings shares consent and preserves list/filter/song state across history without reloading', async ({
   page,
 }) => {
+  await page.clock.install()
   await startHarness(page)
+  // Isolate navigation from the normal three-second background list refresh.
+  // Slow runners can otherwise finish this interaction after a legitimate poll.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 500))
   const loads = (await page.evaluate(() => window.accessTest.calls()))
     .workspaceLoads
   const processing = page.getByRole('button', {
@@ -76,6 +80,7 @@ test('settings shares consent and preserves list/filter/song state across histor
   await consentDialog(page)
     .getByRole('button', { name: '동의해요', exact: true })
     .click()
+  await page.clock.runFor(500)
   await expect(consentDialog(page)).toHaveCount(0)
   await expect(
     main(page).getByText('현재 선택: 동의', { exact: true }),

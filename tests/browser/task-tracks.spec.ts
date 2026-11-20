@@ -96,9 +96,12 @@ test('an original song shows the separated guitar above the original and plays t
   await expect(pauseButton(page)).toBeVisible()
   // The separated guitar covers the section alone, from 0 s.
   const [played] = await audioSources(page)
+  const [duration] = await sourceDurations(page)
   expect(played.loopStart).toBe(0)
-  expect(played.loopEnd).toBeCloseTo(21.4, 5)
-  expect((await sourceDurations(page))[0]).toBeCloseTo(21.4, 2)
+  // Linux WebKit's decoder can trim a few resampled frames. The loop must
+  // reach the available buffer's end, which still covers the 21.4 s section.
+  expect(duration).toBeCloseTo(21.4, 3)
+  expect(played.loopEnd).toBeCloseTo(Math.min(21.4, duration), 5)
   expect(await separatedCalls(page)).toContainEqual({
     taskId: 'task-solo',
     aborted: false,
@@ -177,8 +180,10 @@ test('separation finishing waits for playback to stop before the guitar plays', 
   await playButton(page).click()
   await expect(pauseButton(page)).toBeVisible()
   const played = (await audioSources(page)).at(-1)!
+  const duration = (await sourceDurations(page)).at(-1)!
   expect(played.loopStart).toBe(0)
-  expect(played.loopEnd).toBeCloseTo(21.4, 5)
+  expect(duration).toBeCloseTo(21.4, 3)
+  expect(played.loopEnd).toBeCloseTo(Math.min(21.4, duration), 5)
 })
 
 test('finding no guitar while the guitar plays waits for playback to stop', async ({
