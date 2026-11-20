@@ -108,9 +108,9 @@ export function TaskComparison({
           </div>
         </div>
       )}
-      {state.notice && (
+      {session.notice && (
         <p className={styles.notice} role="alert">
-          {state.notice}
+          {session.notice}
         </p>
       )}
       {panel === 'result' && state.result ? (
@@ -137,6 +137,7 @@ export function TaskComparison({
           probeDuration={probeDuration}
           onSubmit={session.submitTake}
           onClose={() => onEntryChange(null)}
+          onUnsavedChange={onUnsavedTakeChange}
         />
       )}
       {entry === 'record' && (
