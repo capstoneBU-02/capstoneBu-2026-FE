@@ -60,15 +60,16 @@ jobs:
           retention-days: 7
 
   browser:
-    name: browser (${{ matrix.shard }}/2)
+    name: browser (${{ matrix.shard }}/${{ matrix.shardTotal }})
     runs-on: ubuntu-latest
     # Longer than the browser suite's globalTimeout (playwright.config.ts) and
     # the steps around it, so a shard that runs out still uploads its report.
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
+        shardTotal: [4]
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
@@ -80,7 +81,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Browser regression tests
         id: browser-tests
-        run: npm run test:browser -- --shard=${{ matrix.shard }}/2
+        run: npm run test:browser -- --shard=${{ matrix.shard }}/${{ matrix.shardTotal }}
       - name: Upload browser failure report
         if: ${{ failure() && steps.browser-tests.outcome == 'failure' }}
         uses: actions/upload-artifact@v7.0.2

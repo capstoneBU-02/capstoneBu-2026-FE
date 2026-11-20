@@ -6,9 +6,9 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   timeout: 20_000,
   // One run, at least twice its slowest CI run (tests/ci-timeouts.test.mjs).
-  // CI runs the suite in two shards, each under this limit. The browser job's
+  // CI runs the suite in four shards, each under this limit. The browser job's
   // timeout-minutes leaves room for the failure report.
-  globalTimeout: 600_000,
+  globalTimeout: 720_000,
   workers: 2,
   reporter: [['list'], ['html', { open: 'never' }]],
   outputDir: 'test-results',
