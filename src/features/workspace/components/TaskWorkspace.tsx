@@ -107,6 +107,7 @@ function TaskBody({
   svgRef,
   player,
   playback,
+  takeFocus,
 }: {
   detail: TaskDetail
   refreshFailed: boolean
@@ -115,6 +116,7 @@ function TaskBody({
   svgRef: Ref<SVGSVGElement>
   player: SectionPlayback
   playback: TrackId
+  takeFocus: () => boolean
 }) {
   const { task } = detail
   if (isTaskInProgress(task))
@@ -132,6 +134,7 @@ function TaskBody({
       svgRef={svgRef}
       player={player}
       lead={trackLead(playback, task)}
+      takeFocus={takeFocus}
     />
   )
 }
@@ -334,6 +337,7 @@ function TaskWorkspace({
             svgRef={setSvg}
             player={player}
             playback={playback}
+            takeFocus={download.takeFocus}
           />
           {/* SEG-04: each kept result names the section it was made from. */}
           {previousResults.length > 0 && (
