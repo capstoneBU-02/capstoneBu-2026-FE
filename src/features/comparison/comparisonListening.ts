@@ -40,6 +40,10 @@ const WRAP_TOLERANCE_SECONDS = 0.05
 // A take hands over this long before it runs out, ahead of the player's wrap.
 const TAKE_END_MARGIN_SECONDS = 0.1
 
+// A place chosen on a turn's edge can come back from the player's clock a
+// rounding error short of it, which would hand it to the turn before.
+const TURN_EDGE_TOLERANCE_SECONDS = 1e-6
+
 // One sound of a range, on the player's clock: seconds into `range`.
 export interface ListenClock {
   // Tenths of the sound's file, widened to hold the whole range.
@@ -211,7 +215,10 @@ export function alternateTrack(input: AlternateTurn): ListenTrack {
     Math.ceil(positiveOrZero(input.rangeSeconds) / ALTERNATE_TURN_SECONDS),
   )
   const turnInPass = Math.min(
-    Math.floor(positiveOrZero(input.elapsedInRange) / ALTERNATE_TURN_SECONDS),
+    Math.floor(
+      (positiveOrZero(input.elapsedInRange) + TURN_EDGE_TOLERANCE_SECONDS) /
+        ALTERNATE_TURN_SECONDS,
+    ),
     turnsPerPass - 1,
   )
   // Turns keep counting across passes: with an odd number per pass, restarting

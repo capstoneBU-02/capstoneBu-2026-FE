@@ -53,6 +53,29 @@ const soundsSince = (page: Page, from: number) =>
     [from, SECTION_SECONDS] as const,
   )
 
+// Each source started since `from`, with how far into the section it began,
+// read at once. Only those begun before `until` count: a turn lasts four
+// seconds, and a slow machine may reach the next one before the test reads.
+const startsBefore = (page: Page, from: number, until: number) =>
+  page.evaluate(
+    ([from, until, section, songStart]) => {
+      const offsets = window.workspaceTest.sourceOffsets()
+      return window.workspaceTest
+        .sourceDurations()
+        .map((seconds, index) => {
+          const take = Math.abs(seconds - section) < 0.5
+          const offset = offsets[index] ?? 0
+          return {
+            sound: take ? 'take' : 'baseline',
+            at: take ? offset : offset - songStart,
+          }
+        })
+        .slice(from)
+        .filter(({ at }) => at < until)
+    },
+    [from, until, SECTION_SECONDS, SECTION_START] as const,
+  )
+
 // Tenths after the start of what plays, stepped with the slider's keys.
 async function seekWithKeys(page: Page, tenths: number) {
   await position(page).press('Home')
@@ -183,20 +206,24 @@ test('번갈아 changes the sound every four seconds of the section', async ({
     .toBe(true)
 })
 
-test('choosing 번갈아 plays the sound whose turn it is at the place', async ({
-  page,
-}) => {
-  await openListening(page)
-  // 6 seconds in is the take's turn.
-  await seekWithKeys(page, 60)
-  await sound(page, '번갈아').click()
-  const from = await sourceCount(page)
+for (const from of ['내 연주', '원곡']) {
+  test(`choosing 번갈아 from ${from} plays the sound whose turn it is at the place`, async ({
+    page,
+  }) => {
+    await openListening(page)
+    await sound(page, from).click()
+    // 6 seconds in is the take's turn.
+    await seekWithKeys(page, 60)
+    await sound(page, '번갈아').click()
+    const sources = await sourceCount(page)
 
-  await playButton(page).click()
-  await expect(pauseButton(page)).toBeVisible()
-  expect(await soundsSince(page, from)).toEqual(['take'])
-  expect(await lastOffset(page)).toBeCloseTo(6, 1)
-})
+    await playButton(page).click()
+    await expect(pauseButton(page)).toBeVisible()
+    const starts = await startsBefore(page, sources, 7.5)
+    expect(starts.map(({ sound }) => sound)).toEqual(['take'])
+    expect(starts[0]?.at).toBeCloseTo(6, 1)
+  })
+}
 
 test('a seek in 번갈아 while paused plays the sound whose turn it is there', async ({
   page,
@@ -208,8 +235,28 @@ test('a seek in 번갈아 while paused plays the sound whose turn it is there', 
 
   await playButton(page).click()
   await expect(pauseButton(page)).toBeVisible()
-  expect(await soundsSince(page, from)).toEqual(['take'])
-  expect(await lastOffset(page)).toBeCloseTo(6, 1)
+  const starts = await startsBefore(page, from, 7.5)
+  expect(starts.map(({ sound }) => sound)).toEqual(['take'])
+  expect(starts[0]?.at).toBeCloseTo(6, 1)
+})
+
+test('a seek onto the edge of a turn in 번갈아 plays that turn alone', async ({
+  page,
+}) => {
+  // With a take this long, 4 seconds read back from its clock comes out a
+  // rounding error short of the edge.
+  await openListening(page, '&comparison-take-seconds=24')
+  await sound(page, '번갈아').click()
+  await seekWithKeys(page, 40)
+  const from = await sourceCount(page)
+
+  await playButton(page).click()
+  await expect(pauseButton(page)).toBeVisible()
+  // Long enough for a wrong turn to have been taken and put back.
+  await expect.poll(() => elapsedTenths(page)).toBeGreaterThanOrEqual(45)
+  expect(
+    (await startsBefore(page, from, 7.5)).map(({ sound }) => sound),
+  ).toEqual(['take'])
 })
 
 test('going back to the start in 번갈아 plays the first turn', async ({
@@ -227,7 +274,9 @@ test('going back to the start in 번갈아 plays the first turn', async ({
 
   await playButton(page).click()
   await expect(pauseButton(page)).toBeVisible()
-  expect(await soundsSince(page, from)).toEqual(['baseline'])
+  expect(
+    (await startsBefore(page, from, 3.5)).map(({ sound }) => sound),
+  ).toEqual(['baseline'])
 })
 
 test('letting go of a place in 번갈아 plays the turn of the section there', async ({
@@ -246,7 +295,9 @@ test('letting go of a place in 번갈아 plays the turn of the section there', a
 
   await playButton(page).click()
   await expect(pauseButton(page)).toBeVisible()
-  expect(await soundsSince(page, from)).toEqual(['take'])
+  expect(
+    (await startsBefore(page, from, 7.5)).map(({ sound }) => sound),
+  ).toEqual(['take'])
 })
 
 test('번갈아 gives the next play of a place to the other sound', async ({
