@@ -53,15 +53,50 @@ function drawTab(
   }
 }
 
+// svg2pdf.js draws a page without handing the browser a turn, so a whole PDF
+// would run as one task and leaving the screen would go unseen until it
+// ended. A turn between pages lets it be seen, and the PDF stops there.
+// A message, unlike a timer, is not slowed in a background tab.
+async function nextPage(signal: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const { port1, port2 } = new MessageChannel()
+    port1.onmessage = () => {
+      port1.close()
+      resolve()
+    }
+    port2.postMessage(null)
+  })
+  signal.throwIfAborted()
+}
+
+// svg2pdf.js measures text in a hidden svg it adds to the body, and takes it
+// away only when the page draws without an error. Whatever is left goes.
+async function leavingNoSvg(draw: () => Promise<unknown>): Promise<void> {
+  const before = new Set(document.body.children)
+  try {
+    await draw()
+  } finally {
+    for (const child of [...document.body.children])
+      if (child instanceof SVGSVGElement && !before.has(child)) child.remove()
+  }
+}
+
 // The tab as vector A4 pages: paths and real text in JetBrains Mono, rows
 // whole on each page. jsPDF and svg2pdf.js load only when a PDF is made.
-export async function tabPdf(score: TabScore): Promise<Blob> {
+// Aborting `signal` stops it before the next page.
+export async function tabPdf(
+  score: TabScore,
+  signal: AbortSignal,
+): Promise<Blob> {
+  signal.throwIfAborted()
   const [{ jsPDF }, { svg2pdf }, regular, bold] = await Promise.all([
     import('jspdf'),
     import('svg2pdf.js'),
     base64Of(regularUrl),
     base64Of(boldUrl),
   ])
+  // The code and fonts take longest; the tab may be gone by now.
+  signal.throwIfAborted()
   const doc = new jsPDF({ unit: 'pt', format: 'a4', compress: true })
   doc.addFileToVFS('JetBrainsMono-Regular.ttf', regular)
   doc.addFont('JetBrainsMono-Regular.ttf', FAMILY, 'normal')
@@ -72,7 +107,10 @@ export async function tabPdf(score: TabScore): Promise<Blob> {
   const { frame, parts } = drawTab(score, layout)
   const { width, scale, spans } = pdfPlan(layout)
   for (const [index, span] of spans.entries()) {
-    if (index > 0) doc.addPage()
+    if (index > 0) {
+      await nextPage(signal)
+      doc.addPage()
+    }
     const height = span.bottom - span.top
     const page = frame.cloneNode(false) as SVGSVGElement
     for (const part of parts)
@@ -81,12 +119,17 @@ export async function tabPdf(score: TabScore): Promise<Blob> {
     page.setAttribute('viewBox', `0 ${span.top} ${width} ${height}`)
     page.setAttribute('width', String(width))
     page.setAttribute('height', String(height))
-    await svg2pdf(page, doc, {
-      x: PDF_PAGE.margin,
-      y: PDF_PAGE.margin,
-      width: width * scale,
-      height: height * scale,
-    })
+    await leavingNoSvg(() =>
+      svg2pdf(page, doc, {
+        x: PDF_PAGE.margin,
+        y: PDF_PAGE.margin,
+        width: width * scale,
+        height: height * scale,
+      }),
+    )
   }
+  // A tab of one page, or the last page, can still stop before the file is
+  // put together.
+  await nextPage(signal)
   return doc.output('blob')
 }

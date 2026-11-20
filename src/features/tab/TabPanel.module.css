@@ -22,7 +22,7 @@
   line-height: 20px;
 }
 
-/* Focus lands here only from code, after a retry. */
+/* Focus lands here only from code, after a retry or as the tab loads again. */
 .title:focus {
   outline: none;
 }

@@ -2,6 +2,7 @@ import {
   lazy,
   Suspense,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ComponentType,
@@ -25,6 +26,9 @@ export type TabSource =
 
 export interface TabPanelProps extends Omit<TabStaffProps, 'score'> {
   readonly tab: TabSource
+  // Asked once as the panel mounts; true puts focus on its heading, for
+  // controls that went away with the tab this panel replaces.
+  readonly takeFocus?: () => boolean
 }
 
 interface StaffModule {
@@ -59,11 +63,20 @@ function Loading() {
 
 // The tab area of a completed task. The heading shows at once; the tab and
 // the drawing code arrive on their own.
-export function TabPanel({ tab, ...staff }: TabPanelProps) {
+export function TabPanel({ tab, takeFocus, ...staff }: TabPanelProps) {
   const headingId = useId()
   const headingRef = useRef<HTMLHeadingElement>(null)
   // Remounting the boundary clears its failure and renders the fresh Staff.
   const [attempt, setAttempt] = useState(0)
+
+  // A layout effect asks in the commit that took the old controls away, and
+  // before paint, so focus never rests on the page in between. Only the
+  // function given at mount is asked.
+  const takeFocusRef = useRef(takeFocus)
+  useLayoutEffect(() => {
+    if (takeFocusRef.current?.() === true)
+      headingRef.current?.focus({ preventScroll: true })
+  }, [])
 
   // The button goes away with the failure, so focus stays in the tab area.
   const retryWith = (retry: () => void) => () => {

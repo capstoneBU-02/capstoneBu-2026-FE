@@ -26,7 +26,8 @@ export interface ComparisonSessionState {
   readonly playback: ComparisonPlayback | null
   readonly resultFailed: boolean
   readonly pending: ComparisonAction | null
-  readonly notice: string | null
+  // Why the last action on a take failed, kept with that take.
+  readonly notices: ReadonlyMap<string, string>
   // Changes whenever the open comparison has to be read from the start.
   readonly follow: number
 }
@@ -40,8 +41,22 @@ export type ComparisonSessionEvent =
   | { readonly type: 'list-failed' }
   | { readonly type: 'select'; readonly performanceId: string }
   | { readonly type: 'saved'; readonly performance: SavedPerformance }
-  | { readonly type: 'action-started'; readonly action: ComparisonAction }
-  | { readonly type: 'action-failed'; readonly message: string }
+  | {
+      readonly type: 'action-started'
+      readonly action: ComparisonAction
+      readonly performanceId: string
+    }
+  | {
+      readonly type: 'action-failed'
+      readonly performanceId: string
+      readonly message: string
+    }
+  // A mark runs beside a request or retry and leaves it pending.
+  | {
+      readonly type: 'mark-failed'
+      readonly performanceId: string
+      readonly message: string
+    }
   | {
       readonly type: 'comparison-started'
       readonly performanceId: string
@@ -72,7 +87,7 @@ export const initialComparisonSession: ComparisonSessionState = {
   playback: null,
   resultFailed: false,
   pending: null,
-  notice: null,
+  notices: new Map(),
   follow: 0,
 }
 
@@ -101,9 +116,30 @@ function openTake(
     result: null,
     playback: null,
     resultFailed: false,
-    notice: null,
     follow: state.follow + 1,
   }
+}
+
+function withNotice(
+  notices: ReadonlyMap<string, string>,
+  performanceId: string,
+  message: string,
+): ReadonlyMap<string, string> {
+  return new Map([...notices, [performanceId, message]])
+}
+
+function withoutNotice(
+  notices: ReadonlyMap<string, string>,
+  performanceId: string | null,
+): ReadonlyMap<string, string> {
+  if (performanceId === null || !notices.has(performanceId)) return notices
+  return new Map([...notices].filter(([id]) => id !== performanceId))
+}
+
+// The open take's notice has been seen once the user moves on from it; a
+// failure that arrives after that stays for their return.
+function leavingTake(state: ComparisonSessionState): ComparisonSessionState {
+  return { ...state, notices: withoutNotice(state.notices, state.selectedId) }
 }
 
 function withLatestComparison(
@@ -171,7 +207,6 @@ function afterComparisonStarted(
     result: null,
     playback: null,
     resultFailed: false,
-    notice: null,
     follow: state.follow + 1,
   }
 }
@@ -192,20 +227,33 @@ export function comparisonSessionReducer(
         ({ id }) => id === event.performanceId,
       )
       if (!performance || performance.id === state.selectedId) return state
-      return openTake(state, performance)
+      return openTake(leavingTake(state), performance)
     }
     case 'saved':
       return openTake(
         {
-          ...state,
+          ...leavingTake(state),
           performances: [event.performance, ...state.performances],
         },
         event.performance,
       )
     case 'action-started':
-      return { ...state, pending: event.action, notice: null }
+      return {
+        ...state,
+        pending: event.action,
+        notices: withoutNotice(state.notices, event.performanceId),
+      }
     case 'action-failed':
-      return { ...state, pending: null, notice: event.message }
+      return {
+        ...state,
+        pending: null,
+        notices: withNotice(state.notices, event.performanceId, event.message),
+      }
+    case 'mark-failed':
+      return {
+        ...state,
+        notices: withNotice(state.notices, event.performanceId, event.message),
+      }
     case 'comparison-started':
       return afterComparisonStarted(
         state,
@@ -229,9 +277,11 @@ export function comparisonSessionReducer(
       return { ...state, resultFailed: false, follow: state.follow + 1 }
     case 'region-marked':
       if (state.result?.comparisonId !== event.comparisonId) return state
+      // A new mark makes the failure of the last one old news.
       return {
         ...state,
         result: withRegionChecked(state.result, event.regionId, event.checked),
+        notices: withoutNotice(state.notices, state.selectedId),
       }
   }
 }
@@ -240,6 +290,12 @@ export function selectedPerformance(
   state: ComparisonSessionState,
 ): SavedPerformance | null {
   return state.performances.find(({ id }) => id === state.selectedId) ?? null
+}
+
+// Only the open take's notice is shown; another take keeps its own.
+export function sessionNotice(state: ComparisonSessionState): string | null {
+  if (state.selectedId === null) return null
+  return state.notices.get(state.selectedId) ?? null
 }
 
 export function comparedTakeCount(state: ComparisonSessionState): number {
@@ -262,12 +318,14 @@ export function sessionPanel(state: ComparisonSessionState): SessionPanel {
   }
   const { status, result } = state
   if (status === null) return 'not-requested'
+  // A comparison that could not be read, even one still running or not yet
+  // settled, waits for the user to ask again.
+  if (state.resultFailed && result === null) return 'result-failed'
   // The list cannot say whether a failure may be retried.
   if (status.state === 'failed' && !state.statusSettled) return 'loading-result'
   const panel = comparisonPanel(status, result)
   if (panel !== 'not-comparable' && panel !== 'loading-result') return panel
   // Even a take that could not be compared needs its result to name the
   // baseline it was held against.
-  if (result !== null) return panel
-  return state.resultFailed ? 'result-failed' : 'loading-result'
+  return result !== null ? panel : 'loading-result'
 }

@@ -21,6 +21,10 @@ const regionButton = (page: Page, number: number) =>
   page
     .getByRole('region', { name: '다시 들어볼 곳' })
     .getByRole('button', { name: new RegExp(`^${number}번 구간`) })
+const position = (page: Page) =>
+  page
+    .getByRole('region', { name: '구간 타임라인' })
+    .getByRole('slider', { name: '재생 위치' })
 
 // The file behind the sound that started last. A take lasts as long as asked;
 // the original is the whole song.
@@ -30,6 +34,56 @@ const lastOffset = (page: Page) =>
   page.evaluate(() => window.workspaceTest.sourceOffsets().at(-1) ?? 0)
 const lastSource = (page: Page) =>
   page.evaluate(() => window.workspaceTest.audioSources().at(-1))
+const sourceCount = (page: Page) =>
+  page.evaluate(() => window.workspaceTest.sourceDurations().length)
+
+// The take lasts as long as the section; the original is the whole song.
+const isTake = (seconds: number) => Math.abs(seconds - SECTION_SECONDS) < 0.5
+
+// Which sound each source started since `from` played.
+const soundsSince = (page: Page, from: number) =>
+  page.evaluate(
+    ([from, section]) =>
+      window.workspaceTest
+        .sourceDurations()
+        .slice(from)
+        .map((seconds) =>
+          Math.abs(seconds - section) < 0.5 ? 'take' : 'baseline',
+        ),
+    [from, SECTION_SECONDS] as const,
+  )
+
+// Each source started since `from`, with how far into the section it began,
+// read at once. Only those begun before `until` count: a turn lasts four
+// seconds, and a slow machine may reach the next one before the test reads.
+const startsBefore = (page: Page, from: number, until: number) =>
+  page.evaluate(
+    ([from, until, section, songStart]) => {
+      const offsets = window.workspaceTest.sourceOffsets()
+      return window.workspaceTest
+        .sourceDurations()
+        .map((seconds, index) => {
+          const take = Math.abs(seconds - section) < 0.5
+          const offset = offsets[index] ?? 0
+          return {
+            sound: take ? 'take' : 'baseline',
+            at: take ? offset : offset - songStart,
+          }
+        })
+        .slice(from)
+        .filter(({ at }) => at < until)
+    },
+    [from, until, SECTION_SECONDS, SECTION_START] as const,
+  )
+
+// Tenths after the start of what plays, stepped with the slider's keys.
+async function seekWithKeys(page: Page, tenths: number) {
+  await position(page).press('Home')
+  for (let step = 0; step < Math.floor(tenths / 10); step += 1)
+    await position(page).press('Shift+ArrowRight')
+  for (let step = 0; step < tenths % 10; step += 1)
+    await position(page).press('ArrowRight')
+}
 
 async function elapsedTenths(page: Page) {
   const text = (await bar(page).getByTestId('elapsed').textContent()) ?? ''
@@ -129,7 +183,6 @@ test('번갈아 changes the sound on every pass of a chosen place', async ({
   await playButton(page).click()
   await expect(pauseButton(page)).toBeVisible()
 
-  const isTake = (seconds: number) => Math.abs(seconds - SECTION_SECONDS) < 0.5
   expect(isTake(await lastSourceSeconds(page))).toBe(false)
   await expect
     .poll(async () => isTake(await lastSourceSeconds(page)), RESULT_TIMEOUT)
@@ -147,11 +200,160 @@ test('번갈아 changes the sound every four seconds of the section', async ({
   await playButton(page).click()
   await expect(pauseButton(page)).toBeVisible()
 
-  const isTake = (seconds: number) => Math.abs(seconds - SECTION_SECONDS) < 0.5
   expect(isTake(await lastSourceSeconds(page))).toBe(false)
   await expect
     .poll(async () => isTake(await lastSourceSeconds(page)), RESULT_TIMEOUT)
     .toBe(true)
+})
+
+for (const from of ['내 연주', '원곡']) {
+  test(`choosing 번갈아 from ${from} plays the sound whose turn it is at the place`, async ({
+    page,
+  }) => {
+    await openListening(page)
+    await sound(page, from).click()
+    // 6 seconds in is the take's turn.
+    await seekWithKeys(page, 60)
+    await sound(page, '번갈아').click()
+    const sources = await sourceCount(page)
+
+    await playButton(page).click()
+    await expect(pauseButton(page)).toBeVisible()
+    const starts = await startsBefore(page, sources, 7.5)
+    expect(starts.map(({ sound }) => sound)).toEqual(['take'])
+    expect(starts[0]?.at).toBeCloseTo(6, 1)
+  })
+}
+
+test('a seek in 번갈아 while paused plays the sound whose turn it is there', async ({
+  page,
+}) => {
+  await openListening(page)
+  await sound(page, '번갈아').click()
+  await seekWithKeys(page, 60)
+  const from = await sourceCount(page)
+
+  await playButton(page).click()
+  await expect(pauseButton(page)).toBeVisible()
+  const starts = await startsBefore(page, from, 7.5)
+  expect(starts.map(({ sound }) => sound)).toEqual(['take'])
+  expect(starts[0]?.at).toBeCloseTo(6, 1)
+})
+
+test('a seek onto the edge of a turn in 번갈아 plays that turn alone', async ({
+  page,
+}) => {
+  // With a take this long, 4 seconds read back from its clock comes out a
+  // rounding error short of the edge.
+  await openListening(page, '&comparison-take-seconds=24')
+  await sound(page, '번갈아').click()
+  await seekWithKeys(page, 40)
+  const from = await sourceCount(page)
+
+  await playButton(page).click()
+  await expect(pauseButton(page)).toBeVisible()
+  // Long enough for a wrong turn to have been taken and put back.
+  await expect.poll(() => elapsedTenths(page)).toBeGreaterThanOrEqual(45)
+  expect(
+    (await startsBefore(page, from, 7.5)).map(({ sound }) => sound),
+  ).toEqual(['take'])
+})
+
+test('going back to the start in 번갈아 plays the first turn', async ({
+  page,
+}) => {
+  await openListening(page)
+  await sound(page, '번갈아').click()
+  await playButton(page).click()
+  await expect
+    .poll(async () => isTake(await lastSourceSeconds(page)), RESULT_TIMEOUT)
+    .toBe(true)
+  await pauseButton(page).click()
+  await bar(page).getByRole('button', { name: '구간 처음으로' }).click()
+  const from = await sourceCount(page)
+
+  await playButton(page).click()
+  await expect(pauseButton(page)).toBeVisible()
+  expect(
+    (await startsBefore(page, from, 3.5)).map(({ sound }) => sound),
+  ).toEqual(['baseline'])
+})
+
+test('letting go of a place in 번갈아 plays the turn of the section there', async ({
+  page,
+}) => {
+  await openListening(page)
+  await sound(page, '번갈아').click()
+  await regionButton(page, 1).click()
+  // 1.4 seconds into the place, 3.1 s, is 4.5 s into the section: the take's.
+  await seekWithKeys(page, 14)
+  await regionButton(page, 1).click()
+  await expect(
+    bar(page).getByText(`/ 00:${SECTION_SECONDS.toFixed(1)}`),
+  ).toBeVisible()
+  const from = await sourceCount(page)
+
+  await playButton(page).click()
+  await expect(pauseButton(page)).toBeVisible()
+  expect(
+    (await startsBefore(page, from, 7.5)).map(({ sound }) => sound),
+  ).toEqual(['take'])
+})
+
+test('번갈아 gives the next play of a place to the other sound', async ({
+  page,
+}) => {
+  await openListening(page)
+  await sound(page, '번갈아').click()
+  await regionButton(page, 1).click()
+  await bar(page).getByRole('button', { name: '구간 반복' }).click()
+  await playButton(page).click()
+  await expect(pauseButton(page)).toBeVisible()
+  expect(isTake(await lastSourceSeconds(page))).toBe(false)
+  // The place plays once and stops.
+  await expect(playButton(page)).toBeVisible(RESULT_TIMEOUT)
+  const from = await sourceCount(page)
+
+  await playButton(page).click()
+  await expect(pauseButton(page)).toBeVisible()
+  expect(await soundsSince(page, from)).toEqual(['take'])
+})
+
+test('번갈아 keeps changing the sound while the page is hidden', async ({
+  page,
+}) => {
+  // A hidden page gets no animation frames, but its sound plays on.
+  await page.addInitScript(() => {
+    let hidden = false
+    const frame = window.requestAnimationFrame.bind(window)
+    Object.defineProperty(document, 'hidden', { get: () => hidden })
+    Object.defineProperty(document, 'visibilityState', {
+      get: () => (hidden ? 'hidden' : 'visible'),
+    })
+    window.requestAnimationFrame = (callback) => (hidden ? 0 : frame(callback))
+    Object.assign(window, {
+      hidePage() {
+        hidden = true
+        document.dispatchEvent(new Event('visibilitychange'))
+      },
+    })
+  })
+  await openListening(page)
+  await sound(page, '번갈아').click()
+  await regionButton(page, 1).click()
+  await playButton(page).click()
+  await expect(pauseButton(page)).toBeVisible()
+  expect(isTake(await lastSourceSeconds(page))).toBe(false)
+
+  await page.evaluate(() =>
+    (window as unknown as { hidePage(): void }).hidePage(),
+  )
+  await expect
+    .poll(async () => isTake(await lastSourceSeconds(page)), RESULT_TIMEOUT)
+    .toBe(true)
+  await expect
+    .poll(async () => isTake(await lastSourceSeconds(page)), RESULT_TIMEOUT)
+    .toBe(false)
 })
 
 test('a sound that cannot play leaves the others to choose', async ({

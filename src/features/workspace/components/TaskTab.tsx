@@ -9,6 +9,7 @@ export function TaskTab({
   svgRef,
   player,
   lead,
+  takeFocus,
 }: {
   tab: TabSource
   // The drawn tab, for the PNG download.
@@ -16,6 +17,8 @@ export function TaskTab({
   player: SectionPlayback
   // Seconds from the section start to where the player counts from.
   lead: number
+  // Whether to take focus the downloads dropped as this tab came in.
+  takeFocus: () => boolean
 }) {
   const { elapsed: playerElapsed, playing, subscribeSeek } = player
   const elapsed = useCallback(
@@ -29,6 +32,7 @@ export function TaskTab({
       playing={playing}
       elapsed={elapsed}
       subscribeSeek={subscribeSeek}
+      takeFocus={takeFocus}
     />
   )
 }

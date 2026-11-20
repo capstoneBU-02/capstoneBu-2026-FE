@@ -5,6 +5,7 @@ import {
   ALTERNATE_TURN_SECONDS,
   REGION_LOOP_PADDING_SECONDS,
   alternateTrack,
+  alternateTurnAt,
   baselineElapsed,
   baselineTrackKind,
   firstListenMode,
@@ -353,6 +354,31 @@ test('a time exactly on a boundary belongs to the next turn', () => {
   assert.equal(turn(0, 12, 16), 'performance')
 })
 
+test('a boundary read back a rounding error short is still on it', () => {
+  assert.equal(turn(0, 3.9999999999999996, 16), 'performance')
+  assert.equal(turn(0, 15.999999999999998, 16), 'performance')
+  assert.equal(turn(0, 3.99999, 16), 'baseline')
+})
+
+test('a boundary taken through the take clock and back keeps its turn', () => {
+  // The places of a 24-second take of a 23.7-second section, from the mock.
+  const map = createTimeMap(
+    [
+      region(3.65, 5.072, 3.696, 5.136),
+      region(9.243, 10.902, 9.36, 11.04),
+      region(17.301, 18.486, 17.52, 18.72),
+      region(19.908, 21.804, 20.16, 22.08),
+    ],
+    23.7,
+    24,
+  )
+  const clock = listenClock('performance', { start: 0, end: 23.7 }, map, 0)
+  for (const seconds of [4, 8, 12, 16, 20]) {
+    const back = clock.toBaseline(clock.toPlayer(seconds))
+    assert.equal(turn(0, back, 23.7), turn(0, seconds, 23.7), `${seconds}s`)
+  }
+})
+
 test('an even number of turns starts every pass on the baseline', () => {
   assert.equal(turn(0, 0, 8), 'baseline')
   assert.equal(turn(1, 0, 8), 'baseline')
@@ -463,4 +489,22 @@ test('a slower take with no place to go by still reaches the end', () => {
   const map = createTimeMap([], 30, 18)
 
   assert.equal(takeReaches(map, 29.99, 30), true)
+})
+
+test('the turn at a place gives the take only what it has sound for', () => {
+  const map = createTimeMap([region(10, 18, 10, 18)], 30, 18)
+  const at = (passIndex, elapsedInRange, regionSelected = false) =>
+    alternateTurnAt(map, {
+      passIndex,
+      elapsedInRange,
+      rangeSeconds: 30,
+      regionSelected,
+    })
+
+  assert.equal(at(0, 2), 'baseline')
+  assert.equal(at(0, 6), 'performance')
+  // 20 to 24 seconds is the take's turn, but the take stopped at 18.
+  assert.equal(at(0, 22), 'baseline')
+  // A chosen place counts passes alone.
+  assert.equal(at(1, 22, true), 'performance')
 })

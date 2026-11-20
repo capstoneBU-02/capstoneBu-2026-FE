@@ -45,10 +45,11 @@ export function useWorkspaceNavigation() {
   // Back or Forward asked to leave, so going ahead retraces that step.
   const leaveByHistory = useRef(false)
   const [pendingLeave, setPendingLeave] = useState<WorkspaceView | null>(null)
-
-  const blockLeaving = useCallback((blocked: boolean) => {
-    leaveBlocked.current = blocked
-    if (!blocked) setPendingLeave(null)
+  // The same request, for blockLeaving, which outlives the render showing it.
+  const pendingLeaveRef = useRef<WorkspaceView | null>(null)
+  const askToLeave = useCallback((next: WorkspaceView | null) => {
+    pendingLeaveRef.current = next
+    setPendingLeave(next)
   }, [])
 
   useEffect(() => {
@@ -82,7 +83,7 @@ export function useWorkspaceNavigation() {
         lastPush.current = null
         leaveOpenerRef.current = document.activeElement as HTMLElement | null
         leaveByHistory.current = true
-        setPendingLeave(next)
+        askToLeave(next)
         return
       }
       replace(next)
@@ -92,28 +93,49 @@ export function useWorkspaceNavigation() {
     }
     window.addEventListener('popstate', popstate)
     return () => window.removeEventListener('popstate', popstate)
-  }, [entry])
+  }, [entry, askToLeave])
 
-  function navigate(requested: WorkspaceView) {
-    const next = canonicalWorkspaceView(requested)
-    const from = workspaceViewKey(currentView.current)
-    const to = workspaceViewKey(next)
-    if (from === to) return
-    if (leaveBlocked.current) {
-      leaveOpenerRef.current = document.activeElement as HTMLElement | null
-      leaveByHistory.current = false
-      setPendingLeave(next)
-      return
-    }
-    window.history.pushState(
-      { [WORKSPACE_SCOPE_KEY]: entry.scope },
-      '',
-      workspaceUrl(entry.pathname, entry.selectorSearch, next),
-    )
-    lastPush.current = { from, to }
-    currentView.current = next
-    setView(next)
-  }
+  // Stable, so blockLeaving can be too.
+  const navigate = useCallback(
+    (requested: WorkspaceView) => {
+      const next = canonicalWorkspaceView(requested)
+      const from = workspaceViewKey(currentView.current)
+      const to = workspaceViewKey(next)
+      if (from === to) return
+      if (leaveBlocked.current) {
+        leaveOpenerRef.current = document.activeElement as HTMLElement | null
+        leaveByHistory.current = false
+        askToLeave(next)
+        return
+      }
+      window.history.pushState(
+        { [WORKSPACE_SCOPE_KEY]: entry.scope },
+        '',
+        workspaceUrl(entry.pathname, entry.selectorSearch, next),
+      )
+      lastPush.current = { from, to }
+      currentView.current = next
+      setView(next)
+    },
+    [entry, askToLeave],
+  )
+
+  // Once nothing would be lost, a leave still being asked about goes ahead:
+  // a take that finished saving or lost its microphone leaves the question
+  // with nothing to protect.
+  const blockLeaving = useCallback(
+    (blocked: boolean) => {
+      leaveBlocked.current = blocked
+      if (blocked) return
+      const next = pendingLeaveRef.current
+      askToLeave(null)
+      if (!next) return
+      // This screen's entry was pushed right after the one asked for.
+      if (leaveByHistory.current) window.history.back()
+      else navigate(next)
+    },
+    [askToLeave, navigate],
+  )
 
   // Closes a screen such as 구간 수정 without leaving it in history: Back
   // then skips it. Opened from the requested view, the screen's entry is
@@ -139,15 +161,6 @@ export function useWorkspaceNavigation() {
     )
   }
 
-  function confirmLeave() {
-    const next = pendingLeave
-    blockLeaving(false)
-    if (!next) return
-    // This screen's entry was pushed right after the one asked for.
-    if (leaveByHistory.current) window.history.back()
-    else navigate(next)
-  }
-
   return {
     view,
     navigate,
@@ -155,7 +168,7 @@ export function useWorkspaceNavigation() {
     blockLeaving,
     leaveAsked: pendingLeave !== null,
     leaveOpenerRef,
-    confirmLeave,
-    cancelLeave: () => setPendingLeave(null),
+    confirmLeave: () => blockLeaving(false),
+    cancelLeave: () => askToLeave(null),
   }
 }

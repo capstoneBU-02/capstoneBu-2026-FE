@@ -31,9 +31,9 @@ export interface SectionPlayback {
   toggle(): void
   // Stops the sound, wherever it came from, and keeps the time.
   pause(): void
-  // The section once from its start, whatever the repeat button says, until
-  // it ends or pause() is called.
-  playOnce(): void
+  // The section once from its start, or this many seconds after it,
+  // whatever the repeat button says, until it ends or pause() is called.
+  playOnce(from?: number): void
   restart(): void
   // To this many seconds after the section start.
   seek(elapsed: number): void
@@ -221,12 +221,12 @@ export function useSectionPlayer(
       player.setRepeat(repeat)
       syncPlayback()
     },
-    playOnce() {
+    playOnce(from = 0) {
       const player = playerRef.current
       if (!player || !available) return
       setFailedAudio(null)
       player.setRepeat(false)
-      player.seek(0)
+      player.seek(from)
       player.play()
       syncPlayback()
       notifySeek()

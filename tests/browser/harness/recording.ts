@@ -158,8 +158,8 @@ function mountPanel() {
         onSubmit: () => Promise.resolve({ saved: true, message: null }),
         onUploadInstead() {},
         onClose() {},
-        onCaptureChange(capturing) {
-          captureChanges = [...captureChanges, capturing]
+        onCaptureChange(take) {
+          captureChanges = [...captureChanges, take !== null]
         },
       }),
     ),
