@@ -1,5 +1,8 @@
 import type { ConsentChoice } from '../workspace/model.ts'
-import type { WorkspaceRepository } from '../workspace/repository.ts'
+import {
+  WorkspaceRepositoryError,
+  type WorkspaceRepository,
+} from '../workspace/repository.ts'
 import type { AccessFailure, AccessResult } from './model.ts'
 
 export interface AccessRepository {
@@ -22,4 +25,13 @@ export class AccessRepositoryError extends Error {
     this.name = 'AccessRepositoryError'
     this.code = code
   }
+}
+
+// Onboarding goes through both repositories, and each says so in its own way.
+export function isSessionExpired(error: unknown): boolean {
+  return (
+    (error instanceof AccessRepositoryError &&
+      error.code === 'session-expired') ||
+    (error instanceof WorkspaceRepositoryError && error.code === 'expired')
+  )
 }
