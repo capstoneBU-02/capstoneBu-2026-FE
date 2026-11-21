@@ -1,12 +1,19 @@
-import { isSessionRejected, type HttpClient } from '../../api/http.ts'
-import { readWorkspaceMe } from './adapter.ts'
+import {
+  apiErrorOf,
+  isSessionRejected,
+  type HttpClient,
+} from '../../api/http.ts'
+import { songUploadFile } from '../add-song/songFile.ts'
+import { readTrackUpload, readWorkspaceMe, toWorkspaceSong } from './adapter.ts'
 import type {
   ConsentChoice,
   SavedConsentChoice,
   WorkspaceInfo,
+  WorkspaceSong,
 } from './model.ts'
 import {
   WorkspaceRepositoryError,
+  type AddSongFailureCode,
   type WorkspaceRepository,
 } from './repository.ts'
 
@@ -19,19 +26,75 @@ export interface LocalConsent {
   save(choice: SavedConsentChoice): void
 }
 
+// Songs uploaded from this page. Without a list API they are the only songs
+// the page knows, and without an audio API the chosen file stands in for
+// the song's audio. The access repository keeps one per workspace, so
+// entering the same code again keeps them until the page reloads.
+export interface PageSongs {
+  list(): readonly WorkspaceSong[]
+  add(song: WorkspaceSong, file: File): void
+  fileOf(songId: string): File | undefined
+}
+
+export function createPageSongs(): PageSongs {
+  let songs: readonly WorkspaceSong[] = []
+  const files = new Map<string, File>()
+  return {
+    list: () => songs,
+    add(song, file) {
+      songs = [...songs.filter((item) => item.id !== song.id), song]
+      files.set(song.id, file)
+    },
+    fileOf: (songId) => files.get(songId),
+  }
+}
+
 const EXPIRED_MESSAGE = '작업 공간 이용 기간이 끝났어요.'
 const LOAD_FAILED_MESSAGE = '작업 목록을 불러오지 못했어요. 다시 시도해 주세요.'
 
-// The workspace API so far: the session check. Songs, tasks, audio and tabs
-// fail with each method's own code until their APIs are connected.
+// The server's reasons for refusing an upload. HTTP_413 is a proxy's own
+// body limit, which arrives without the backend envelope.
+const UPLOAD_REFUSALS: Readonly<Record<string, AddSongFailureCode>> = {
+  UNSUPPORTED_FORMAT: 'song-unsupported',
+  DURATION_EXCEEDED: 'song-too-long',
+  FILE_TOO_LARGE: 'song-too-large',
+  HTTP_413: 'song-too-large',
+  STORAGE_LIMIT_EXCEEDED: 'storage-full',
+}
+
+const ADD_SONG_MESSAGES: Readonly<Record<AddSongFailureCode, string>> = {
+  'song-unsupported': '서버가 처리할 수 없는 파일이에요.',
+  'song-too-long': '허용 길이를 넘는 파일이에요.',
+  'song-too-large': '허용 용량을 넘는 파일이에요.',
+  'storage-full': '작업 공간의 저장 한도를 모두 사용했어요.',
+  'add-song-failed': '곡을 추가하지 못했어요.',
+}
+
+function addSongError(error: unknown): WorkspaceRepositoryError {
+  if (isSessionRejected(error))
+    return new WorkspaceRepositoryError('expired', EXPIRED_MESSAGE, {
+      cause: error,
+    })
+  const code =
+    UPLOAD_REFUSALS[apiErrorOf(error)?.code ?? ''] ?? 'add-song-failed'
+  return new WorkspaceRepositoryError(code, ADD_SONG_MESSAGES[code], {
+    cause: error,
+  })
+}
+
+// The workspace API so far: the session check and song upload. Tasks, the
+// separated audio and tabs fail with each method's own code until their
+// APIs are connected.
 export function createHttpWorkspaceRepository({
   client,
   workspace,
   consent,
+  songs,
 }: {
   client: HttpClient
   workspace: WorkspaceInfo
   consent: LocalConsent
+  songs: PageSongs
 }): WorkspaceRepository {
   return {
     async loadWorkspace(signal) {
@@ -56,10 +119,9 @@ export function createHttpWorkspaceRepository({
       // this page would act on a different workspace.
       if (String(workspaceId) !== workspace.id)
         throw new WorkspaceRepositoryError('expired', EXPIRED_MESSAGE)
-      // Without a list API every load starts empty.
       return {
         workspace: { ...workspace },
-        songs: [],
+        songs: songs.list().map((song) => ({ ...song })),
         tasks: [],
         consentChoice: consent.read(),
       }
@@ -69,13 +131,44 @@ export function createHttpWorkspaceRepository({
       consent.save(choice)
       return choice
     },
+    async addSong(input, signal, onProgress) {
+      const form = new FormData()
+      form.append('file', songUploadFile(input.file))
+      form.append(
+        'is_separated_stem',
+        String(input.inputKind === 'separated-guitar'),
+      )
+      let song: WorkspaceSong
+      try {
+        const { data } = await client.request('POST', '/tracks/upload', {
+          signal,
+          form,
+          read: readTrackUpload,
+          onUploadProgress: onProgress,
+        })
+        song = toWorkspaceSong(data)
+      } catch (error) {
+        if (signal.aborted) throw error
+        throw addSongError(error)
+      }
+      songs.add(song, input.file)
+      return { ...song }
+    },
+    async loadSongAudio(songId, signal) {
+      signal.throwIfAborted()
+      const file = songs.fileOf(songId)
+      if (!file)
+        throw new WorkspaceRepositoryError(
+          'audio-unavailable',
+          '이 페이지에서 올린 곡만 들을 수 있어요.',
+        )
+      return file
+    },
     loadTask: () => notConnected('task-unavailable'),
-    addSong: () => notConnected('add-song-failed'),
     createTask: () => notConnected('create-task-failed'),
     reviseTask: () => notConnected('revise-task-failed'),
     cancelTask: () => notConnected('cancel-task-failed'),
     retryTask: () => notConnected('retry-task-failed'),
-    loadSongAudio: () => notConnected('audio-unavailable'),
     loadSeparatedAudio: () => notConnected('audio-unavailable'),
     loadTab: () => notConnected('tab-unavailable'),
     saveCopyStatus: () => notConnected('copy-status-failed'),
