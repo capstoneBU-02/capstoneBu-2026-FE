@@ -120,6 +120,17 @@ test('a caller mistake fails before anything is sent', async () => {
     }),
     TypeError,
   )
+  // fetch would refuse it too, but as a NETWORK failure on screen.
+  for (const body of [{ json: {} }, { form: new FormData() }]) {
+    await assert.rejects(
+      http.request('GET', '/health', {
+        signal: signal(),
+        ...body,
+        read: readStatus,
+      }),
+      TypeError,
+    )
+  }
   assert.equal(calls.length, 0)
 })
 

@@ -45,22 +45,29 @@ function readMode(value: unknown): ApiMode {
 function readBase(value: unknown): string {
   if (value === undefined || value === '') return DEFAULT_API_BASE
   const base = typeof value === 'string' ? value.replace(/\/+$/, '') : ''
-  if (/^\/[^/]/.test(base) || isPlainHttpUrl(base)) return base
+  if (isPlainBase(base)) return base
   throw new Error(
-    `VITE_API_BASE must be a path like ${DEFAULT_API_BASE} or an http(s) URL without a query, not ${JSON.stringify(value)}.`,
+    `VITE_API_BASE must be a path like ${DEFAULT_API_BASE} or a plain http(s) URL, without user, query, hash or spaces, not ${JSON.stringify(value)}.`,
   )
 }
 
-function isPlainHttpUrl(value: string) {
+const PROBE_ORIGIN = 'http://origin.invalid'
+
+// The base has to read the same after the browser parses it. That refuses
+// queries, hashes, user info, spaces and dot segments, and keeps a path such
+// as "/\host" from turning into another origin.
+function isPlainBase(base: string) {
   let url: URL
   try {
-    url = new URL(value)
+    url = new URL(base, PROBE_ORIGIN)
   } catch {
     return false
   }
+  if (base.startsWith('/')) {
+    return url.origin === PROBE_ORIGIN && url.pathname === base
+  }
   return (
     (url.protocol === 'https:' || url.protocol === 'http:') &&
-    !url.search &&
-    !url.hash
+    `${url.origin}${url.pathname}`.replace(/\/$/, '') === base
   )
 }

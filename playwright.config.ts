@@ -30,5 +30,7 @@ export default defineConfig({
     command: 'npm run dev -- --host 127.0.0.1 --port 4174 --strictPort',
     url: 'http://127.0.0.1:4174',
     reuseExistingServer: !process.env.CI,
+    // Beats VITE_API_MODE in .env.local, so the suite always runs on mocks.
+    env: { VITE_API_MODE: 'mock' },
   },
 })
