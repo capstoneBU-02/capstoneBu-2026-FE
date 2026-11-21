@@ -1,18 +1,26 @@
 export interface UploadFormat {
   readonly label: string
   readonly extensions: readonly string[]
+  // What browsers report for the format; the file input and the check take
+  // them all.
   readonly mimeTypes: readonly string[]
+  // The one type the upload declares. The server accepts only a short list
+  // and reads an empty type as application/octet-stream.
+  readonly uploadType: string
 }
 
 export interface UploadPolicy {
   readonly formats: readonly UploadFormat[]
   readonly maxDurationSeconds: number
+  // The server's own limit (50 MiB); a larger file is refused before upload.
+  readonly maxFileBytes: number
   readonly metadataTimeoutMs: number
 }
 
-// Provisional limits. D08 (3–5 minute cap) and IN-01~05 (bytes, codecs, MP4
-// audio) are still open; the Figma "최대 5분" is a placeholder. Change only
-// this object once the policy is confirmed: the hint, the file input filter
+// The backend's upload limits (POST /tracks/upload), checked here first so a
+// refused file is not sent. D08 (3–5 minute cap) and IN-01~05 (codecs, MP4
+// audio) are still open in planning. Change only this object when the
+// server's limits change: the hint, the file input filter, the upload type
 // and every error message derive from it.
 export const UPLOAD_POLICY: UploadPolicy = {
   formats: [
@@ -26,13 +34,16 @@ export const UPLOAD_POLICY: UploadPolicy = {
         'audio/mpeg3',
         'audio/x-mpeg-3',
       ],
+      uploadType: 'audio/mpeg',
     },
     {
       label: 'MP4',
       extensions: ['mp4'],
       mimeTypes: ['video/mp4', 'audio/mp4', 'application/mp4'],
+      uploadType: 'video/mp4',
     },
   ],
   maxDurationSeconds: 300,
+  maxFileBytes: 50 * 1024 * 1024,
   metadataTimeoutMs: 15_000,
 }
