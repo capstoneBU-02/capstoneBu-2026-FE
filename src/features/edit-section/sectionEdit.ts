@@ -13,7 +13,7 @@ import {
   formatSectionTime,
   secondsToTenths,
 } from '../new-section/sectionTime.ts'
-import { isTaskInProgress } from '../workspace/format.ts'
+import { failsAgainOnRetry, isTaskInProgress } from '../workspace/format.ts'
 import type {
   ReviseTaskInput,
   TaskDetail,
@@ -29,15 +29,16 @@ export function canReviseSection(
 }
 
 // The same editor changes a finished section (구간 수정) and moves one where
-// separation found no guitar (구간 다시 정하기). A tab failure is sent again
-// as it is, and a queued or running task has nothing to change yet.
+// separation found no guitar, or the server no sound it could read (구간 다시
+// 정하기). A tab failure is sent again as it is, and a queued or running task
+// has nothing to change yet.
 export type SectionEditKind = 'revise' | 'redefine'
 
 export function sectionEditKind(
   task: Pick<WorkspaceTask, 'processingStatus' | 'failureKind'>,
 ): SectionEditKind | null {
   if (canReviseSection(task)) return 'revise'
-  return task.processingStatus === 'failed' && task.failureKind === 'no-guitar'
+  return task.processingStatus === 'failed' && failsAgainOnRetry(task)
     ? 'redefine'
     : null
 }
@@ -72,8 +73,8 @@ export function changesSectionResult(
   )
 }
 
-// Separation listens to the range alone, so the same range would find no
-// guitar again whatever the part or tuning.
+// Separation and the sound check listen to the range alone, so the same
+// range would fail again whatever the part or tuning.
 export function canSendSectionEdit(
   task: SectionValues & Pick<WorkspaceTask, 'processingStatus' | 'failureKind'>,
   input: ReviseTaskInput,
@@ -95,7 +96,7 @@ export function sectionEditUnavailableText({
   previousResults,
 }: Pick<TaskDetail, 'task' | 'previousResults'>): string {
   if (!isTaskInProgress(task))
-    return '타브가 완성된 작업과 기타를 찾지 못한 작업만 구간을 바꿀 수 있어요.'
+    return '타브가 완성된 작업과 기타나 소리를 찾지 못한 작업만 구간을 바꿀 수 있어요.'
   const making = previousResults.length > 0 ? '다시 만드는' : '만드는'
   return `타브를 ${making} 중이에요. 타브가 완성되면 구간을 바꿀 수 있어요.`
 }

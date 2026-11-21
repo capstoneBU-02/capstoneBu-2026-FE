@@ -18,8 +18,9 @@ export interface TaskRecoveryActions {
     taskId: string,
   ) => Promise<'retried' | 'failed' | 'cancelled'>
   readonly contact: (returnFocus: HTMLElement | null) => void
-  // A song without guitar cannot be sent again (SEPARATION_NO_GUITAR); the
-  // section moves, or another file starts a new one.
+  // A section without guitar or readable sound cannot be sent again
+  // (SEPARATION_NO_GUITAR, PREPROCESS_INVALID_AUDIO); the section moves, or
+  // another file starts a new one.
   readonly redefine: (taskId: string) => void
   readonly uploadOther: (
     task: WorkspaceTask,
@@ -150,13 +151,18 @@ export function NoGuitarPanel({
   )
 }
 
-// The body of a task whose song the server could not read at all
-// (PREPROCESS_INVALID_AUDIO). Another section of the same file meets the same
-// failure, so only another file is offered.
+// The body of a task whose range the server could not read
+// (PREPROCESS_INVALID_AUDIO). The server gives one code for a silent range, a
+// range past the decoded end and a file that would not decode, so both a new
+// range and another file are offered, as for a song without guitar.
 export function InvalidAudioPanel({
   detail,
+  redefine,
   uploadOther,
-}: { detail: TaskDetail } & Pick<TaskRecoveryActions, 'uploadOther'>) {
+}: { detail: TaskDetail } & Pick<
+  TaskRecoveryActions,
+  'redefine' | 'uploadOther'
+>) {
   const headingId = useId()
   const { task } = detail
   return (
@@ -167,8 +173,10 @@ export function InvalidAudioPanel({
       </h2>
       <p className={styles.advice}>{invalidAudioAdvice()}</p>
       <div className={styles.actions}>
+        <Button variant="primary" compact onClick={() => redefine(task.id)}>
+          구간 다시 정하기
+        </Button>
         <Button
-          variant="primary"
           compact
           onClick={(event) => uploadOther(task, event.currentTarget)}
         >

@@ -37,22 +37,46 @@ function answer(route: Route, body: unknown, status = 200) {
   })
 }
 
+interface SegmentRange {
+  start_ms: number
+  end_ms: number
+}
+
 // The server side of one section: what processing-status reports now, the
 // failure GET /stems/54 explains, and the requests that changed something.
 async function serveSection(page: Page, failure: unknown) {
   let status = load('status-queued')
   const calls: string[] = []
   const created: unknown[] = []
+  const patched: unknown[] = []
   await page.route(`${API}/tracks/7/segments`, (route) => {
     calls.push('create segment')
     created.push(route.request().postDataJSON())
     return answer(route, load('segment-create'), 201)
+  })
+  // A moved range leaves the segment without a stem for it.
+  await page.route(`${API}/segments/31`, (route) => {
+    const range = route.request().postDataJSON() as SegmentRange
+    calls.push('patch segment')
+    patched.push(range)
+    status = load('status-nothing-requested')
+    const segment = load('segment-create') as { data: object }
+    return answer(route, {
+      ...segment,
+      data: {
+        ...segment.data,
+        ...range,
+        duration_ms: range.end_ms - range.start_ms,
+        version: 2,
+      },
+    })
   })
   await page.route(`${API}/segments/31/processing-status`, (route) =>
     answer(route, status),
   )
   await page.route(`${API}/segments/31/stems`, (route) => {
     calls.push('request stem')
+    status = load('status-queued')
     return answer(route, load('stem-created'), 201)
   })
   await page.route(`${API}/stems/54`, (route) => answer(route, failure))
@@ -64,6 +88,7 @@ async function serveSection(page: Page, failure: unknown) {
   return {
     calls,
     created,
+    patched,
     show(name: string | unknown) {
       status = typeof name === 'string' ? load(name) : name
     },
@@ -125,14 +150,9 @@ test('a new section asks the server for its guitar, fails and goes again on 다�
   expect(server.calls).toEqual(['create segment', 'request stem', 'retry stem'])
 })
 
-test('a song the server could not read offers another file without 다시 시도', async ({
-  page,
-}) => {
-  await openWorkspace(page)
-  await uploadSong(page)
-  const server = await serveSection(page, load('stem-invalid-audio'))
-  await createChorus(page)
-
+// PREPROCESS_INVALID_AUDIO as the server reports it: failed in preprocess,
+// with no retry left to offer.
+function showUnreadable(server: Awaited<ReturnType<typeof serveSection>>) {
   const failedStatus = load('status-stem-failed') as {
     data: { stem: Record<string, unknown> }
   }
@@ -147,12 +167,30 @@ test('a song the server could not read offers another file without 다시 시도
       },
     },
   })
+}
+
+const UNREADABLE_ADVICE =
+  '고른 구간에서 소리를 읽지 못했어요. 소리가 나는 구간을 다시 고르거나 다른 MP3, MP4 파일을 올려 보세요.'
+
+test('a range the server could not read offers a new range or another file without 다시 시도', async ({
+  page,
+}) => {
+  await openWorkspace(page)
+  await uploadSong(page)
+  const server = await serveSection(page, load('stem-invalid-audio'))
+  await createChorus(page)
+
+  showUnreadable(server)
   const failed = region(page, '음원을 읽지 못했어요')
   await refreshUntilVisible(page, failed)
-  await expect(failed).toContainText(
-    '올린 파일에서 소리를 읽지 못했어요. 다른 MP3, MP4 파일로 다시 올려 보세요.',
-  )
+  await expect(failed).toContainText(UNREADABLE_ADVICE)
   await expect(main(page).getByText('음원 읽기 실패')).toBeVisible()
+  // The server gives one code for a silent range, a range past the end and
+  // a file that would not decode, so both ways out stay open.
+  await expect(failed.getByRole('button')).toHaveText([
+    '구간 다시 정하기',
+    '다른 파일 올리기',
+  ])
   await expect(
     main(page).getByRole('button', { name: '다시 시도' }),
   ).toHaveCount(0)
@@ -162,4 +200,41 @@ test('a song the server could not read offers another file without 다시 시도
     page.getByRole('dialog', { name: '다른 파일 올리기' }),
   ).toBeVisible()
   expect(server.calls).toEqual(['create segment', 'request stem'])
+})
+
+test('구간 다시 정하기 moves an unreadable range and asks for its guitar again', async ({
+  page,
+}) => {
+  await openWorkspace(page)
+  await uploadSong(page)
+  const server = await serveSection(page, load('stem-invalid-audio'))
+  await createChorus(page)
+  showUnreadable(server)
+  const failed = region(page, '음원을 읽지 못했어요')
+  await refreshUntilVisible(page, failed)
+
+  await failed.getByRole('button', { name: '구간 다시 정하기' }).click()
+  await expect(page).toHaveURL(`${HARNESS}?view=edit-section&task=31`)
+  const editor = main(page).getByRole('form', { name: '구간 다시 정하기' })
+  await expect(editor).toHaveAccessibleDescription(
+    '소리가 나는 구간으로 바꾸면 기타 분리부터 다시 시작해요.',
+  )
+  const end = editor.getByLabel('끝', { exact: true })
+  await end.fill('00:25.0')
+  await end.press('Tab')
+  await main(page).getByRole('button', { name: '타브 만들기' }).click()
+
+  await expect(page).toHaveURL(`${HARNESS}?view=task&task=31`)
+  // The name stays, so only the range is sent.
+  expect(server.patched).toEqual([{ start_ms: 12300, end_ms: 25000 }])
+  expect(server.calls).toEqual([
+    'create segment',
+    'request stem',
+    'patch segment',
+    'request stem',
+  ])
+  await expect(region(page, '순서를 기다리고 있어요')).toBeVisible()
+  await expect(
+    main(page).getByText('00:12.3–00:25.0', { exact: true }),
+  ).toBeVisible()
 })

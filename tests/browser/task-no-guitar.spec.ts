@@ -211,7 +211,7 @@ test('a tab failure cannot be moved from its URL', async ({ page }) => {
   await expect(title(page)).toHaveText('구간을 바꿀 수 없어요')
   await expect(
     main(page).getByText(
-      '타브가 완성된 작업과 기타를 찾지 못한 작업만 구간을 바꿀 수 있어요.',
+      '타브가 완성된 작업과 기타나 소리를 찾지 못한 작업만 구간을 바꿀 수 있어요.',
     ),
   ).toBeVisible()
   await expect(form(page)).toHaveCount(0)

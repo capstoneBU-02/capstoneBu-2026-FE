@@ -49,7 +49,8 @@ export function taskHeadlineStatus(
 }
 
 // Failures the same file and section would meet again (SEPARATION_NO_GUITAR,
-// PREPROCESS_INVALID_AUDIO). Each has its own panel without 다시 시도.
+// PREPROCESS_INVALID_AUDIO). Each has its own panel without 다시 시도 that
+// offers a new range or another file.
 export function failsAgainOnRetry(
   task: Pick<WorkspaceTask, 'failureKind'>,
 ): boolean {

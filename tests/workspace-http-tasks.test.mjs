@@ -646,30 +646,35 @@ test('a new server name alone is patched before the tab', async () => {
   assert.deepEqual(sent(calls[0]), { name: 'BRIDGE' })
 })
 
-test('a section without guitar moves without keeping a result', async () => {
-  const { repository } = setup(
-    {
-      [PATCH]: fixture(200, 'segment-update'),
-      [STATUS]: fixture(200, 'status-nothing-requested'),
-      [STEMS]: fixture(202, 'stem-created'),
-    },
-    {
-      tasks: tasksWith({
-        task: { processingStatus: 'failed', failureKind: 'no-guitar' },
-        stemId: 54,
-      }),
-    },
-  )
-  const task = await repository.reviseTask(
-    '31',
-    { ...NEW_TASK, rangeStartSeconds: 15, rangeEndSeconds: 30 },
-    signal(),
-  )
-  assert.equal(task.processingStatus, 'queued')
-  assert.equal(task.failureKind, null)
-  const detail = await repository.loadTask('31', signal())
-  assert.deepEqual(detail.previousResults, [])
-})
+// A silent range or one past the decoded end fails the same way as a
+// broken file, so a section the server could not read moves as well.
+for (const failureKind of ['no-guitar', 'invalid-audio'])
+  test(`a ${failureKind} failure moves its section without keeping a result`, async () => {
+    const { repository, calls } = setup(
+      {
+        [PATCH]: fixture(200, 'segment-update'),
+        [STATUS]: fixture(200, 'status-nothing-requested'),
+        [STEMS]: fixture(202, 'stem-created'),
+      },
+      {
+        tasks: tasksWith({
+          task: { processingStatus: 'failed', failureKind },
+          stemId: 54,
+        }),
+      },
+    )
+    const task = await repository.reviseTask(
+      '31',
+      { ...NEW_TASK, rangeStartSeconds: 15, rangeEndSeconds: 30 },
+      signal(),
+    )
+    assert.deepEqual(keys(calls), [PATCH, STATUS, STEMS])
+    assert.deepEqual(sent(calls[0]), { start_ms: 15000, end_ms: 30000 })
+    assert.equal(task.processingStatus, 'queued')
+    assert.equal(task.failureKind, null)
+    const detail = await repository.loadTask('31', signal())
+    assert.deepEqual(detail.previousResults, [])
+  })
 
 for (const [name, record, input, code] of [
   ['an unknown task', null, PART_CHANGE, 'task-unavailable'],
