@@ -2,12 +2,10 @@ import { songNameFromFileName } from '../../../src/features/add-song/songFile.ts
 import { SECTION_POLICY } from '../../../src/features/new-section/sectionPolicy.ts'
 import { isTaskInProgress } from '../../../src/features/workspace/format.ts'
 import { mockRetriesUsed } from '../../../src/features/workspace/mockFixtures.ts'
-import {
-  keptResult,
-  mockRetryOf,
-} from '../../../src/features/workspace/mockServer.ts'
+import { mockRetryOf } from '../../../src/features/workspace/mockServer.ts'
 import { createMockWorkspaceRepository } from '../../../src/features/workspace/mockRepository.ts'
 import { taskStages } from '../../../src/features/workspace/processing.ts'
+import { keptResult } from '../../../src/features/workspace/taskLabels.ts'
 import type {
   NewSongInput,
   NewTaskInput,
