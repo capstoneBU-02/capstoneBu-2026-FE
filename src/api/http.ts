@@ -13,12 +13,14 @@ export type HttpMethod = 'GET' | 'POST' | 'PATCH'
 // NETWORK           no response at all (status 0)
 // HTTP_<status>     an error status without the backend envelope (proxy, 404)
 // INVALID_RESPONSE  a 2xx body that is not an envelope or fails `read`
+// The backend also sends HTTP_<status> inside its envelope for statuses it
+// has no code for (405), so the prefix does not tell whether one came back.
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
   readonly details: unknown
-  // The server's trace id, or the one this request sent; the backend uses
-  // the sent one, so both point at the same server log.
+  // The server's trace id, or the one this request sent. The backend takes
+  // the sent id as its own, so both name the same request.
   readonly traceId: string
 
   constructor({
@@ -88,6 +90,8 @@ export function createHttpClient({
         throw new TypeError(`API path must start with "/": ${path}`)
       if (json !== undefined && form !== undefined)
         throw new TypeError('Send either json or form, not both.')
+      if (method === 'GET' && (json !== undefined || form !== undefined))
+        throw new TypeError(`GET ${path} cannot carry a body.`)
 
       const traceId = nextTraceId()
       const headers: Record<string, string> = {

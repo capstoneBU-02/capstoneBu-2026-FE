@@ -48,6 +48,11 @@ test('an API on another origin must send the session cookie explicitly', () => {
       credentials: 'include',
     },
   )
+  assert.equal(
+    readApiConfig({ VITE_API_BASE: 'http://localhost:8000' }).baseUrl,
+    'http://localhost:8000',
+    'an origin alone is a base too',
+  )
 })
 
 test('a mistyped setting stops the app instead of silently picking a mode', () => {
@@ -65,6 +70,19 @@ test('a mistyped setting stops the app instead of silently picking a mode', () =
     'ftp://api.example.test',
     'https://api.example.test/api?x=1',
     'javascript:alert(1)',
+    'ws://api.example.test/api',
+    // Paths the browser would read differently from what was written.
+    '/api/v1?x=1',
+    '/api/v1#top',
+    '/api v1',
+    '/api/v1 ',
+    '/api/../v1',
+    '/\\evil.test',
+    // URLs whose extras break every request or hide in the address.
+    'http://user:pass@api.example.test/api',
+    'https://api.example.test/api?',
+    'https://api.example.test/api#',
+    ' https://api.example.test/api',
   ]) {
     assert.throws(
       () => readApiConfig({ VITE_API_BASE: base }),
