@@ -1,0 +1,14 @@
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_INPUT",
+    "message": "잘못된 입력입니다.",
+    "details": [
+      {
+        "field": "tester_code",
+        "message": "String should have at least 4 characters"
+      }
+    ]
+  },
+  "meta": { "trace_id": "6a2f9c04d1e8b375" }
+}

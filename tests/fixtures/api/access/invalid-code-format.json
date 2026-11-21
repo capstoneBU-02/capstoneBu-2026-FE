@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_CODE_FORMAT",
+    "message": "테스터 코드 형식이 올바르지 않습니다."
+  },
+  "meta": { "trace_id": "0d7e52b19a4fc386" }
+}

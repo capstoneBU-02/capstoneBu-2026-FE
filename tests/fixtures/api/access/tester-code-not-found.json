@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "TESTER_CODE_NOT_FOUND",
+    "message": "유효하지 않거나 폐기된 테스터 코드입니다."
+  },
+  "meta": { "trace_id": "c93b1e0a7f2d4685" }
+}
