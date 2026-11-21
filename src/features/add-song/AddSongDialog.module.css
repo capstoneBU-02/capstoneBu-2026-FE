@@ -216,6 +216,12 @@
   line-height: 20px;
 }
 
+/* The percent changes several times a second; fixed-width digits keep the
+   footer from shifting. */
+.footerNote[data-busy='true'] {
+  font-variant-numeric: tabular-nums;
+}
+
 .next[aria-disabled='true'] {
   opacity: 0.4;
 }

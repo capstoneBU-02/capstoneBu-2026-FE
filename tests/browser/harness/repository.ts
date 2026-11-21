@@ -79,6 +79,7 @@ const addCalls: Array<{
 }> = []
 const pendingAdds: Array<{
   input: NewSongInput
+  onProgress?: (percent: number) => void
   resolve: (song: WorkspaceSong) => void
   reject: (error: Error) => void
 }> = []
@@ -174,7 +175,7 @@ export const repository: WorkspaceRepository = {
           new WorkspaceRepositoryError('task-unavailable', 'Unavailable'),
         )
   },
-  addSong(input) {
+  addSong(input, _signal, onProgress) {
     addCalls.push({
       fileName: input.file.name,
       inputKind: input.inputKind,
@@ -182,7 +183,7 @@ export const repository: WorkspaceRepository = {
     })
     if (scenario === 'pending-add') {
       return new Promise((resolve, reject) =>
-        pendingAdds.push({ input, resolve, reject }),
+        pendingAdds.push({ input, onProgress, resolve, reject }),
       )
     }
     return Promise.resolve(addedSong(input))
@@ -325,6 +326,9 @@ export const requestControls = {
     pendingAdds
       .splice(0)
       .forEach(({ input, resolve }) => resolve(addedSong(input)))
+  },
+  reportAddProgress(percent) {
+    for (const { onProgress } of pendingAdds) onProgress?.(percent)
   },
   failAdd(code) {
     pendingAdds

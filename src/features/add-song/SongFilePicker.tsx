@@ -5,13 +5,13 @@ import {
   formatFileSize,
   songFileAccept,
   uploadHintLabel,
-  type SongFileCheck,
+  type AddSongFileCheck,
 } from './songFile.ts'
 import styles from './AddSongDialog.module.css'
 
 type Props = {
   file: File | null
-  check: SongFileCheck | null
+  check: AddSongFileCheck | null
   disabled: boolean
   describedBy?: string
   onChoose: (files: readonly File[]) => void
@@ -23,24 +23,27 @@ function hasFiles(event: DragEvent) {
   return event.dataTransfer.types.includes('Files')
 }
 
-function fileMeta(file: File, check: SongFileCheck): string {
+function fileMeta(file: File, check: AddSongFileCheck): string {
   const size = formatFileSize(file.size)
   switch (check.status) {
     case 'checking':
       return `길이 확인 중 · ${size}`
     case 'valid':
-    case 'too-long':
       return `${formatClockDuration(check.durationSeconds)} · ${size}`
+    case 'too-long':
+      // Rounded up, so a length just over the limit does not read 05:00.
+      return `${formatClockDuration(Math.ceil(check.durationSeconds))} · ${size}`
     case 'unreadable':
     case 'timed-out':
       return `길이 알 수 없음 · ${size}`
     case 'invalid-format':
-      // A disallowed format is never decoded, so only the size is known.
+    case 'too-large':
+      // A refused format or size is never decoded, so only the size is known.
       return size
   }
 }
 
-function StatusMark({ check }: { check: SongFileCheck }) {
+function StatusMark({ check }: { check: AddSongFileCheck }) {
   if (check.status === 'checking')
     return <span className={styles.spinner} aria-hidden="true" />
   return (
@@ -130,7 +133,9 @@ export function SongFilePicker({
             </span>
             <span
               className={styles.fileMeta}
-              data-alert={check.status === 'too-long'}
+              data-alert={
+                check.status === 'too-long' || check.status === 'too-large'
+              }
             >
               {fileMeta(file, check)}
             </span>
