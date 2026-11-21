@@ -8,6 +8,7 @@ import type {
   SongInputKind,
   WorkspaceSong,
 } from '../workspace/model.ts'
+import type { AddSongFailureCode } from '../workspace/repository.ts'
 import type { AddSongResult } from '../workspace/useWorkspace.ts'
 import pageStyles from '../workspace/WorkspacePage.module.css'
 import type { MediaDurationProbe } from './mediaDuration.ts'
@@ -83,7 +84,10 @@ export function AddSongDialog({
   // Upload progress in whole percents, null until the repository reports.
   const [progress, setProgress] = useState<number | null>(null)
   // The server refused this file for its content; only another file can go.
-  const [refusedFile, setRefusedFile] = useState<File | null>(null)
+  const [refusedFile, setRefusedFile] = useState<{
+    file: File
+    reason: AddSongFailureCode
+  } | null>(null)
   // Each pick gets a fresh alert so a repeated message is announced again.
   const [attempt, setAttempt] = useState(0)
   // A file over the size limit is refused without reading its length.
@@ -98,7 +102,9 @@ export function AddSongDialog({
   const errorId = useId()
   const fileError = check ? songFileMessage(check) : null
   const error = pickError ?? fileError ?? submitError
-  const refused = file !== null && file === refusedFile
+  const refusal =
+    file !== null && refusedFile?.file === file ? refusedFile.reason : null
+  const refused = refusal !== null
   const canSubmit = check?.status === 'valid' && !submitting && !refused
 
   useEffect(() => {
@@ -164,7 +170,8 @@ export function AddSongDialog({
     setProgress(null)
     if (result.status === 'added') onAdded(result.song)
     else if (result.status === 'failed') {
-      if (isFileRefusal(result.reason)) setRefusedFile(file)
+      if (isFileRefusal(result.reason))
+        setRefusedFile({ file, reason: result.reason })
       setSubmitError(addSongFailureMessage(result.reason))
     }
   }
@@ -262,6 +269,7 @@ export function AddSongDialog({
         <SongFilePicker
           file={file}
           check={check}
+          refusal={refusal}
           disabled={submitting}
           describedBy={error ? errorId : undefined}
           onChoose={choose}
@@ -282,7 +290,7 @@ export function AddSongDialog({
             ? '곡을 추가하고 있어요.'
             : check?.status === 'checking'
               ? '파일을 확인하고 있어요.'
-              : check?.status === 'valid'
+              : check?.status === 'valid' && !refused
                 ? '올릴 수 있는 파일이에요.'
                 : ''}
         </span>

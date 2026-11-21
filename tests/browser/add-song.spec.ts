@@ -24,6 +24,9 @@ const dropzone = (page: Page) =>
   dialog(page).getByRole('button', { name: '파일을 끌어다 놓거나 선택하세요' })
 const alertText = (page: Page) => dialog(page).getByRole('alert')
 const status = (page: Page) => dialog(page).getByRole('status')
+// The chosen file's card and its length and size line.
+const fileCard = (page: Page) => dialog(page).locator('[data-invalid]')
+const fileMeta = (page: Page) => fileCard(page).locator('[data-alert]')
 const original = (page: Page) =>
   dialog(page).getByRole('radio', { name: '원곡' })
 const separated = (page: Page) =>
@@ -451,6 +454,10 @@ test('a file the server refuses names the reason and waits for another file', as
   await page.evaluate(() => window.workspaceTest.failAdd('song-too-long'))
   await expect(alertText(page)).toHaveText(TOO_LONG_MESSAGE)
   await expect(next(page)).toHaveAttribute('aria-disabled', 'true')
+  // The card and the status no longer call the file ready to upload.
+  await expect(status(page)).toHaveText('')
+  await expect(fileCard(page)).toHaveAttribute('data-invalid', 'true')
+  await expect(fileMeta(page)).toHaveAttribute('data-alert', 'true')
   await pressNext(page)
   expect(
     await page.evaluate(() => window.workspaceTest.addCalls().length),
@@ -459,12 +466,18 @@ test('a file the server refuses names the reason and waits for another file', as
   await choose(page, audio('neon_harbor_live.mp3', 'audio/mpeg'))
   await expect(alertText(page)).toHaveCount(0)
   await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
+  await expect(status(page)).toHaveText('올릴 수 있는 파일이에요.')
+  await expect(fileCard(page)).toHaveAttribute('data-invalid', 'false')
   await next(page).click()
   await page.evaluate(() => window.workspaceTest.failAdd('song-unsupported'))
   await expect(alertText(page)).toHaveText(
     '이 파일은 처리할 수 없어요. 다른 MP3, MP4 파일로 다시 올려 주세요.',
   )
   await expect(next(page)).toHaveAttribute('aria-disabled', 'true')
+  await expect(status(page)).toHaveText('')
+  await expect(fileCard(page)).toHaveAttribute('data-invalid', 'true')
+  // The format is refused, not the length or size the card shows.
+  await expect(fileMeta(page)).toHaveAttribute('data-alert', 'false')
 
   // A full workspace is not about the file, so the same file can be retried.
   await choose(page, audio('late_train_cover.mp4', 'video/mp4'))
@@ -474,6 +487,7 @@ test('a file the server refuses names the reason and waits for another file', as
     '작업 공간에 더 올릴 수 없어요. 올릴 수 있는 곡 수나 저장 용량을 모두 사용했어요.',
   )
   await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
+  await expect(fileCard(page)).toHaveAttribute('data-invalid', 'false')
 })
 
 test('a file over 50MB is refused before its length is read', async ({

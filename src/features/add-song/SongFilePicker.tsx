@@ -1,5 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState, type DragEvent } from 'react'
 import { Icon } from '../../shared/ui/Icon.tsx'
+import type { AddSongFailureCode } from '../workspace/repository.ts'
 import {
   formatClockDuration,
   formatFileSize,
@@ -12,6 +13,9 @@ import styles from './AddSongDialog.module.css'
 type Props = {
   file: File | null
   check: AddSongFileCheck | null
+  // Why the server refused this file, if it did; the card then shows it
+  // as invalid even though the checks here passed.
+  refusal?: AddSongFailureCode | null
   disabled: boolean
   describedBy?: string
   onChoose: (files: readonly File[]) => void
@@ -43,17 +47,29 @@ function fileMeta(file: File, check: AddSongFileCheck): string {
   }
 }
 
-function StatusMark({ check }: { check: AddSongFileCheck }) {
-  if (check.status === 'checking')
-    return <span className={styles.spinner} aria-hidden="true" />
+// The length or the size on the card is what was refused.
+function metaRefused(
+  check: AddSongFileCheck,
+  refusal: AddSongFailureCode | null,
+): boolean {
   return (
-    <Icon name={check.status === 'valid' ? 'checkDone' : 'alertTriangle'} />
+    check.status === 'too-long' ||
+    check.status === 'too-large' ||
+    refusal === 'song-too-long' ||
+    refusal === 'song-too-large'
   )
+}
+
+function StatusMark({ ready }: { ready: boolean | null }) {
+  if (ready === null)
+    return <span className={styles.spinner} aria-hidden="true" />
+  return <Icon name={ready ? 'checkDone' : 'alertTriangle'} />
 }
 
 export function SongFilePicker({
   file,
   check,
+  refusal = null,
   disabled,
   describedBy,
   onChoose,
@@ -64,8 +80,12 @@ export function SongFilePicker({
   const [dragActive, setDragActive] = useState(false)
   const titleId = useId()
   const hintId = useId()
-  const invalid =
-    check !== null && check.status !== 'checking' && check.status !== 'valid'
+  // Null while the length is being read.
+  const ready =
+    check === null || check.status === 'checking'
+      ? null
+      : check.status === 'valid' && refusal === null
+  const invalid = ready === false
   const showingFile = file !== null && check !== null
 
   // The drop area that opened the chooser is replaced by the file card, so
@@ -133,9 +153,7 @@ export function SongFilePicker({
             </span>
             <span
               className={styles.fileMeta}
-              data-alert={
-                check.status === 'too-long' || check.status === 'too-large'
-              }
+              data-alert={metaRefused(check, refusal)}
             >
               {fileMeta(file, check)}
             </span>
@@ -165,7 +183,7 @@ export function SongFilePicker({
           >
             파일 바꾸기
           </button>
-          <StatusMark check={check} />
+          <StatusMark ready={ready} />
         </div>
       ) : (
         <button
