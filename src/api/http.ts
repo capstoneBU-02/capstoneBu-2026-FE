@@ -1,4 +1,5 @@
 import { isRecord } from './guards.ts'
+import { sendXhr, type CreateXhr } from './upload.ts'
 
 // The backend wraps every answer: { success: true, data, meta? } or
 // { success: false, error: { code, message, details? }, meta: { trace_id } }.
@@ -54,6 +55,10 @@ export interface RequestOptions<T> {
   // Checks `data` before any adapter sees it; throwing marks the response
   // invalid.
   readonly read: (data: unknown) => T
+  // Whole percents of the form body sent so far, rising to 100 once it has
+  // all gone; the server still has to check the file after that. Setting it
+  // sends the request over XMLHttpRequest (upload.ts).
+  readonly onUploadProgress?: (percent: number) => void
 }
 
 export interface ApiResponse<T> {
@@ -77,21 +82,31 @@ export function createHttpClient({
   credentials,
   // Looked up per call, so tests and the browser can swap it.
   fetch = (input, init) => globalThis.fetch(input, init),
+  createXhr = () => new XMLHttpRequest(),
   createTraceId: nextTraceId = createTraceId,
 }: {
   baseUrl: string
   credentials: RequestCredentials
   fetch?: Fetch
+  createXhr?: CreateXhr
   createTraceId?: () => string
 }): HttpClient {
   return {
-    async request(method, path, { signal, json, form, read }) {
+    async request(
+      method,
+      path,
+      { signal, json, form, read, onUploadProgress },
+    ) {
       if (!path.startsWith('/'))
         throw new TypeError(`API path must start with "/": ${path}`)
       if (json !== undefined && form !== undefined)
         throw new TypeError('Send either json or form, not both.')
       if (method === 'GET' && (json !== undefined || form !== undefined))
         throw new TypeError(`GET ${path} cannot carry a body.`)
+      if (onUploadProgress && form === undefined)
+        throw new TypeError(
+          `${method} ${path} reports upload progress only for a form body.`,
+        )
 
       const traceId = nextTraceId()
       const headers: Record<string, string> = {
@@ -104,18 +119,31 @@ export function createHttpClient({
         body = JSON.stringify(json)
       }
 
+      const url = `${baseUrl}${path}`
       let status: number
       let text: string
       try {
-        const response = await fetch(`${baseUrl}${path}`, {
-          method,
-          headers,
-          body,
-          credentials,
-          signal,
-        })
-        status = response.status
-        text = await response.text()
+        if (onUploadProgress && form) {
+          ;({ status, text } = await sendXhr(createXhr, {
+            method,
+            url,
+            headers,
+            body: form,
+            credentials,
+            signal,
+            onProgress: onUploadProgress,
+          }))
+        } else {
+          const response = await fetch(url, {
+            method,
+            headers,
+            body,
+            credentials,
+            signal,
+          })
+          status = response.status
+          text = await response.text()
+        }
       } catch (error) {
         // Whatever broke, a cancelled request ends as its abort reason.
         signal.throwIfAborted()
