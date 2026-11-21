@@ -18,15 +18,14 @@ export interface AppRepositories {
 }
 
 // Each mode lives in its own chunk, so an http build never downloads the mock
-// repositories and their fixtures.
+// repositories and their fixtures. Http mode ignores the address.
 export async function loadAppRepositories(
-  { mode }: Pick<ApiConfig, 'mode'>,
+  config: ApiConfig,
   search: string,
 ): Promise<AppRepositories> {
-  if (mode === 'http') {
-    throw new Error(
-      'VITE_API_MODE=http has no repositories yet. Run with VITE_API_MODE=mock.',
-    )
+  if (config.mode === 'http') {
+    const { createHttpRepositories } = await import('./httpRepositories.ts')
+    return createHttpRepositories(config)
   }
   const { createMockRepositories } = await import('./mockRepositories.ts')
   return createMockRepositories(search)
