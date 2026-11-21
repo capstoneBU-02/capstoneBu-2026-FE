@@ -206,6 +206,16 @@ export function createTraceId(): string {
   )
 }
 
+// The backend's answers for a missing, expired or unknown session cookie.
+const SESSION_REJECTIONS: ReadonlySet<string> = new Set([
+  'UNAUTHORIZED_SESSION',
+  'UNAUTHORIZED',
+])
+
+export function isSessionRejected(error: unknown): boolean {
+  return error instanceof ApiError && SESSION_REJECTIONS.has(error.code)
+}
+
 // The server failure behind a repository error, for logs and bug reports.
 export function apiErrorOf(error: unknown): ApiError | null {
   const seen = new Set<unknown>()
