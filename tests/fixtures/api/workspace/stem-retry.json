@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "data": {
+    "stem_id": 54,
+    "status": "queued",
+    "retry_from": "separation",
+    "retry_count": 2,
+    "max_retries": 3,
+    "retries_left": 1
+  }
+}

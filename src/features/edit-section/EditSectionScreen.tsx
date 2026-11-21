@@ -68,6 +68,20 @@ const TEXT: Record<SectionEditKind, Omit<EditText, 'current'>> = {
   },
 }
 
+// A range the server could not read (PREPROCESS_INVALID_AUDIO) needs sound in
+// it, where a range without guitar needs guitar.
+const REDEFINE_UNREADABLE: Pick<EditText, 'intro' | 'blocked'> = {
+  intro: '소리가 나는 구간으로 바꾸면 기타 분리부터 다시 시작해요.',
+  blocked:
+    '시작이나 끝을 바꿔야 타브를 만들 수 있어요. 같은 범위에서는 소리를 다시 읽지 못할 수 있어요.',
+}
+
+function editText(kind: SectionEditKind, task: WorkspaceTask) {
+  return kind === 'redefine' && task.failureKind === 'invalid-audio'
+    ? { ...TEXT.redefine, ...REDEFINE_UNREADABLE }
+    : TEXT[kind]
+}
+
 // The change is not kept as a draft: leaving the screen drops it, and the
 // next visit starts from the task again.
 export function EditSectionScreen({
@@ -88,7 +102,7 @@ export function EditSectionScreen({
     replaced: replacedSectionNotice(task),
   }))
   const [form, dispatch] = useReducer(reducer, task, sectionFormFromTask)
-  const { intro, blocked, ...text } = TEXT[kind]
+  const { intro, blocked, ...text } = editText(kind, task)
   return (
     <SectionEditor
       song={song}

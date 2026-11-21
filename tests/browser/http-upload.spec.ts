@@ -1,59 +1,19 @@
-import { readFileSync } from 'node:fs'
-import { expect, test, type Page, type Route } from '@playwright/test'
+import { expect, test, type Route } from '@playwright/test'
+import {
+  addSongDialog as dialog,
+  addSongNext as next,
+  API,
+  chooseTone,
+  fixture,
+  main,
+  openWorkspace,
+  sidebar,
+} from './http-workspace.ts'
 
 // Song upload through the http repositories against a faked API.
-const HARNESS = '/tests/browser/http-harness.html'
-const LOGIN = '**/api/v1/auth/tester-login'
-const ME = '**/api/v1/workspaces/me'
-const UPLOAD = '**/api/v1/tracks/upload'
-const fixture = (path: string) => `tests/fixtures/api/${path}`
-const TONE = {
-  name: 'tone-2s.mp3',
-  mimeType: 'audio/mpeg',
-  buffer: readFileSync(
-    new URL('../fixtures/media/tone-2s.mp3', import.meta.url),
-  ),
-}
-
-const main = (page: Page) => page.locator('#workspace-content')
-const sidebar = (page: Page) =>
-  page.getByRole('complementary', { name: '워크스페이스 탐색' })
-const dialog = (page: Page) => page.getByRole('dialog', { name: '곡 추가' })
-const next = (page: Page) =>
-  dialog(page).getByRole('button', { name: '다음', exact: true })
-const alertText = (page: Page) => dialog(page).getByRole('alert')
-
-async function openWorkspace(page: Page) {
-  await page.route(LOGIN, (route) =>
-    route.fulfill({ path: fixture('access/tester-login.json') }),
-  )
-  await page.route(ME, (route) =>
-    route.fulfill({ path: fixture('workspace/me.json') }),
-  )
-  await page.goto(HARNESS)
-  await page
-    .getByRole('textbox', { name: '테스터 코드', exact: true })
-    .fill('TESTER-2026-A1B2')
-  await page.getByRole('button', { name: '시작하기', exact: true }).click()
-  await page.getByRole('button', { name: '확인했어요', exact: true }).click()
-  await page
-    .getByRole('button', { name: '동의하지 않아요', exact: true })
-    .click()
-  await expect(
-    main(page).getByRole('heading', { name: '첫 곡을 올려 주세요' }),
-  ).toBeVisible()
-}
-
-async function chooseTone(page: Page) {
-  const chooser = page.waitForEvent('filechooser')
-  await dialog(page)
-    .getByRole('button', {
-      name: /^(파일을 끌어다 놓거나 선택하세요|파일 바꾸기)$/,
-    })
-    .click()
-  await (await chooser).setFiles(TONE)
-  await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
-}
+const UPLOAD = `${API}/tracks/upload`
+const alertText = (page: Parameters<typeof dialog>[0]) =>
+  dialog(page).getByRole('alert')
 
 test('an uploaded song is listed from the server answer and opens its new-section screen', async ({
   page,

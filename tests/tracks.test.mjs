@@ -47,7 +47,8 @@ test('no guitar leaves the guitar row flat whatever audio is kept', () => {
 })
 
 test('a failed task without the guitar says separation failed', () => {
-  for (const failureKind of [null, 'transcription'])
+  // A file the server could not read never reached separation either.
+  for (const failureKind of [null, 'transcription', 'invalid-audio'])
     assert.deepEqual(
       rows({
         processingStatus: 'failed',

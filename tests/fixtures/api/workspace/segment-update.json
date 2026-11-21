@@ -1,0 +1,14 @@
+{
+  "success": true,
+  "data": {
+    "segment_id": 31,
+    "track_id": 7,
+    "start_ms": 15000,
+    "end_ms": 30000,
+    "duration_ms": 15000,
+    "name": "BRIDGE",
+    "version": 2,
+    "created_at": "2026-11-21T06:10:02.114820Z",
+    "updated_at": "2026-11-21T06:31:47.902113Z"
+  }
+}

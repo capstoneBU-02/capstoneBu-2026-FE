@@ -34,14 +34,10 @@ import {
   type ProcessingRun,
   type ProcessingTiming,
 } from './mockProcessing.ts'
-import {
-  keptResult,
-  mockRetryOf,
-  newTaskLabels,
-  waitForMockRequest,
-} from './mockServer.ts'
+import { mockRetryOf, waitForMockRequest } from './mockServer.ts'
 import { mockTabInput } from './mockTab.ts'
 import { taskStages } from './processing.ts'
+import { keptResult, newTaskLabels } from './taskLabels.ts'
 import {
   WorkspaceRepositoryError,
   type AddSongFailureCode,

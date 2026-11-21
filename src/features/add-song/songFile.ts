@@ -151,6 +151,15 @@ export function songFileMessage(
   }
 }
 
+// A section whose sound the server could not read (PREPROCESS_INVALID_AUDIO):
+// a silent range, one past the decoded end, or a file that would not decode.
+// Its task cannot be sent again; another range or another file can.
+export function invalidAudioAdvice(
+  policy: UploadPolicy = UPLOAD_POLICY,
+): string {
+  return `고른 구간에서 소리를 읽지 못했어요. 소리가 나는 구간을 다시 고르거나 다른 ${formatLabels(policy)} 파일을 올려 보세요.`
+}
+
 // The server's reasons share the wording of the checks above; it may still
 // refuse a file that passed them, as it reads the length its own way.
 export function addSongFailureMessage(

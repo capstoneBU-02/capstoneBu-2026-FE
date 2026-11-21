@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "UNSUPPORTED_CONDITION",
+    "message": "지원하지 않는 연주 조건입니다."
+  },
+  "meta": { "trace_id": "b2d84f1e6a937c05" }
+}

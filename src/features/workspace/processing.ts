@@ -114,6 +114,7 @@ export function statusAnnouncement(
     case 'failed':
       if (task.failureKind === 'no-guitar')
         return '기타 소리를 거의 찾지 못했어요.'
+      if (task.failureKind === 'invalid-audio') return '음원을 읽지 못했어요.'
       return failedStage(stages) === 'separation'
         ? '기타를 분리하지 못했어요.'
         : '타브를 만들지 못했어요.'

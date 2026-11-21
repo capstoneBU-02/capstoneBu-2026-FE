@@ -1,16 +1,17 @@
-import {
-  apiErrorOf,
-  isSessionRejected,
-  type HttpClient,
-} from '../../api/http.ts'
+import { apiErrorOf, type HttpClient } from '../../api/http.ts'
+import { createRemoteFiles, type RemoteFiles } from '../../api/remoteFile.ts'
 import { songUploadFile } from '../add-song/songFile.ts'
 import { readTrackUpload, readWorkspaceMe, toWorkspaceSong } from './adapter.ts'
+import { expiredError, failureOf } from './httpErrors.ts'
+import { createHttpTasks } from './httpTasks.ts'
 import type {
   ConsentChoice,
   SavedConsentChoice,
   WorkspaceInfo,
   WorkspaceSong,
+  WorkspaceTask,
 } from './model.ts'
+import { createPageTasks, type PageTasks } from './pageTasks.ts'
 import {
   WorkspaceRepositoryError,
   type AddSongFailureCode,
@@ -49,7 +50,6 @@ export function createPageSongs(): PageSongs {
   }
 }
 
-const EXPIRED_MESSAGE = '작업 공간 이용 기간이 끝났어요.'
 const LOAD_FAILED_MESSAGE = '작업 목록을 불러오지 못했어요. 다시 시도해 주세요.'
 
 // The server's reasons for refusing an upload. HTTP_413 is a proxy's own
@@ -71,58 +71,54 @@ const ADD_SONG_MESSAGES: Readonly<Record<AddSongFailureCode, string>> = {
 }
 
 function addSongError(error: unknown): WorkspaceRepositoryError {
-  if (isSessionRejected(error))
-    return new WorkspaceRepositoryError('expired', EXPIRED_MESSAGE, {
-      cause: error,
-    })
   const code =
     UPLOAD_REFUSALS[apiErrorOf(error)?.code ?? ''] ?? 'add-song-failed'
-  return new WorkspaceRepositoryError(code, ADD_SONG_MESSAGES[code], {
-    cause: error,
-  })
+  return failureOf(code, ADD_SONG_MESSAGES[code], error)
 }
 
-// The workspace API so far: the session check and song upload. Tasks, the
-// separated audio and tabs fail with each method's own code until their
-// APIs are connected.
+// The workspace API so far: the session check, song upload, tasks and their
+// separated guitar. Tabs and the copy status fail with their own code until
+// their APIs are connected.
 export function createHttpWorkspaceRepository({
   client,
   workspace,
   consent,
   songs,
+  tasks = createPageTasks(),
+  files = createRemoteFiles(),
+  clock = () => new Date(),
 }: {
   client: HttpClient
   workspace: WorkspaceInfo
   consent: LocalConsent
   songs: PageSongs
+  tasks?: PageTasks
+  files?: RemoteFiles
+  clock?: () => Date
 }): WorkspaceRepository {
+  const work = createHttpTasks({ client, songs, tasks, files, clock })
   return {
     async loadWorkspace(signal) {
       let workspaceId: number
+      let listed: WorkspaceTask[]
       try {
         const { data } = await client.request('GET', '/workspaces/me', {
           signal,
           read: readWorkspaceMe,
         })
         workspaceId = data.workspace_id
+        // Entering another code in another tab replaces the session cookie,
+        // so this page would act on a different workspace.
+        if (String(workspaceId) !== workspace.id) throw expiredError()
+        listed = await work.list(signal)
       } catch (error) {
         if (signal.aborted) throw error
-        throw isSessionRejected(error)
-          ? new WorkspaceRepositoryError('expired', EXPIRED_MESSAGE, {
-              cause: error,
-            })
-          : new WorkspaceRepositoryError('load-failed', LOAD_FAILED_MESSAGE, {
-              cause: error,
-            })
+        throw failureOf('load-failed', LOAD_FAILED_MESSAGE, error)
       }
-      // Entering another code in another tab replaces the session cookie, so
-      // this page would act on a different workspace.
-      if (String(workspaceId) !== workspace.id)
-        throw new WorkspaceRepositoryError('expired', EXPIRED_MESSAGE)
       return {
         workspace: { ...workspace },
         songs: songs.list().map((song) => ({ ...song })),
-        tasks: [],
+        tasks: listed,
         consentChoice: consent.read(),
       }
     },
@@ -164,12 +160,12 @@ export function createHttpWorkspaceRepository({
         )
       return file
     },
-    loadTask: () => notConnected('task-unavailable'),
-    createTask: () => notConnected('create-task-failed'),
-    reviseTask: () => notConnected('revise-task-failed'),
-    cancelTask: () => notConnected('cancel-task-failed'),
-    retryTask: () => notConnected('retry-task-failed'),
-    loadSeparatedAudio: () => notConnected('audio-unavailable'),
+    loadTask: work.loadTask,
+    createTask: work.createTask,
+    reviseTask: work.reviseTask,
+    cancelTask: work.cancelTask,
+    retryTask: work.retryTask,
+    loadSeparatedAudio: work.loadSeparatedAudio,
     loadTab: () => notConnected('tab-unavailable'),
     saveCopyStatus: () => notConnected('copy-status-failed'),
   }

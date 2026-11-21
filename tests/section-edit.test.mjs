@@ -159,9 +159,14 @@ const noGuitar = {
   hasSeparatedAudio: false,
 }
 
-test('a section without guitar is moved, a finished one changed', () => {
+// PREPROCESS_INVALID_AUDIO: the server found no sound it could read in the
+// chosen range (silence, a range past the decoded end, or a broken file).
+const invalidAudio = { ...noGuitar, failureKind: 'invalid-audio' }
+
+test('a section without guitar or readable sound is moved, a finished one changed', () => {
   assert.equal(sectionEditKind(verse), 'revise')
   assert.equal(sectionEditKind(noGuitar), 'redefine')
+  assert.equal(sectionEditKind(invalidAudio), 'redefine')
   // A tab failure is sent again; a queued or running task has no result yet.
   for (const task of [
     { ...verse, processingStatus: 'failed', failureKind: 'transcription' },
@@ -181,23 +186,26 @@ test('a section without guitar has to move its range to be sent', () => {
     rangeStartSeconds: 190,
     rangeEndSeconds: 211,
   }
-  // The same range finds no guitar again, whatever the part or tuning.
-  for (const change of [{}, { part: 'lead' }, { tuningId: 'e-standard' }])
-    assert.equal(
-      canSendSectionEdit(noGuitar, { ...same, ...change }),
-      false,
-      JSON.stringify(change),
-    )
-  for (const change of [
-    { rangeStartSeconds: 185.5 },
-    { rangeEndSeconds: 205 },
-    { rangeEndSeconds: 205, part: 'lead' },
-  ])
-    assert.equal(
-      canSendSectionEdit(noGuitar, { ...same, ...change }),
-      true,
-      JSON.stringify(change),
-    )
+  // The same range finds no guitar, or no sound, again whatever the part or
+  // tuning.
+  for (const task of [noGuitar, invalidAudio]) {
+    for (const change of [{}, { part: 'lead' }, { tuningId: 'e-standard' }])
+      assert.equal(
+        canSendSectionEdit(task, { ...same, ...change }),
+        false,
+        `${task.failureKind} ${JSON.stringify(change)}`,
+      )
+    for (const change of [
+      { rangeStartSeconds: 185.5 },
+      { rangeEndSeconds: 205 },
+      { rangeEndSeconds: 205, part: 'lead' },
+    ])
+      assert.equal(
+        canSendSectionEdit(task, { ...same, ...change }),
+        true,
+        `${task.failureKind} ${JSON.stringify(change)}`,
+      )
+  }
   // A finished task keeps the rule of 구간 수정.
   const verseSame = { ...same, ...verseRange, tuningId: 'e-standard' }
   assert.equal(canSendSectionEdit(verse, verseSame), false)
@@ -354,6 +362,6 @@ test('an edit URL of a task being made says it is being made', () => {
       },
       previousResults: kept,
     }),
-    '타브가 완성된 작업과 기타를 찾지 못한 작업만 구간을 바꿀 수 있어요.',
+    '타브가 완성된 작업과 기타나 소리를 찾지 못한 작업만 구간을 바꿀 수 있어요.',
   )
 })

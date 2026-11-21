@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { invalidAudioAdvice } from '../../add-song/songFile.ts'
 import { Button } from '../../../shared/ui/Button.tsx'
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import type {
@@ -17,8 +18,9 @@ export interface TaskRecoveryActions {
     taskId: string,
   ) => Promise<'retried' | 'failed' | 'cancelled'>
   readonly contact: (returnFocus: HTMLElement | null) => void
-  // A song without guitar cannot be sent again (SEPARATION_NO_GUITAR); the
-  // section moves, or another file starts a new one.
+  // A section without guitar or readable sound cannot be sent again
+  // (SEPARATION_NO_GUITAR, PREPROCESS_INVALID_AUDIO); the section moves, or
+  // another file starts a new one.
   readonly redefine: (taskId: string) => void
   readonly uploadOther: (
     task: WorkspaceTask,
@@ -134,6 +136,42 @@ export function NoGuitarPanel({
         고른 구간에서 기타가 작게 들리거나 다른 악기와 겹쳐 있으면 그럴 수
         있어요. 기타가 잘 들리는 구간을 다시 골라 보세요.
       </p>
+      <div className={styles.actions}>
+        <Button variant="primary" compact onClick={() => redefine(task.id)}>
+          구간 다시 정하기
+        </Button>
+        <Button
+          compact
+          onClick={(event) => uploadOther(task, event.currentTarget)}
+        >
+          다른 파일 올리기
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+// The body of a task whose range the server could not read
+// (PREPROCESS_INVALID_AUDIO). The server gives one code for a silent range, a
+// range past the decoded end and a file that would not decode, so both a new
+// range and another file are offered, as for a song without guitar.
+export function InvalidAudioPanel({
+  detail,
+  redefine,
+  uploadOther,
+}: { detail: TaskDetail } & Pick<
+  TaskRecoveryActions,
+  'redefine' | 'uploadOther'
+>) {
+  const headingId = useId()
+  const { task } = detail
+  return (
+    <section className={styles.panel} aria-labelledby={headingId}>
+      <h2 id={headingId} className={styles.title}>
+        <Icon name="alertTriangle" />
+        음원을 읽지 못했어요
+      </h2>
+      <p className={styles.advice}>{invalidAudioAdvice()}</p>
       <div className={styles.actions}>
         <Button variant="primary" compact onClick={() => redefine(task.id)}>
           구간 다시 정하기
