@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ConsentChoice } from '../workspace/model.ts'
-import {
-  WorkspaceRepositoryError,
-  type WorkspaceRepository,
-} from '../workspace/repository.ts'
+import type { WorkspaceRepository } from '../workspace/repository.ts'
 import {
   ACCESS_ERROR_MESSAGES,
   type AccessResult,
   type AccessStatus,
 } from './model.ts'
-import { AccessRepositoryError, type AccessRepository } from './repository.ts'
+import {
+  AccessRepositoryError,
+  isSessionExpired,
+  type AccessRepository,
+} from './repository.ts'
 
 export interface AccessSession extends AccessResult {
   readonly repository: WorkspaceRepository
@@ -170,11 +171,7 @@ export function useAccess(
     } catch (error) {
       if (controller.signal.aborted || version !== generation.current)
         return false
-      if (
-        (error instanceof AccessRepositoryError &&
-          error.code === 'session-expired') ||
-        (error instanceof WorkspaceRepositoryError && error.code === 'expired')
-      ) {
+      if (isSessionExpired(error)) {
         returnToEntry('expired')
       } else {
         setState({

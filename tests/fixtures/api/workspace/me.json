@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "data": {
+    "workspace_id": 42,
+    "owner_type": "TESTER_CODE",
+    "session_active": true,
+    "created_at": "2026-11-19T09:30:00Z"
+  }
+}

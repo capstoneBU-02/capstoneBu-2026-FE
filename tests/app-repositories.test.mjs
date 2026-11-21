@@ -1,13 +1,17 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readApiConfig } from '../src/api/config.ts'
 import { DEMO_ACCESS_CODES, readAppMode } from '../src/app/demoConfig.ts'
 import { createMockRepositories } from '../src/app/mockRepositories.ts'
 import { loadAppRepositories } from '../src/app/repositories.ts'
+import { jsonResponse } from './fixtures/api/fetch.mjs'
 
 const signal = () => new AbortController().signal
+const MOCK = readApiConfig(undefined)
+const HTTP = { ...MOCK, mode: 'http' }
 
 test('mock mode starts at code entry with a working mock access repository', async () => {
-  const repositories = await loadAppRepositories({ mode: 'mock' }, '')
+  const repositories = await loadAppRepositories(MOCK, '')
   assert.equal(repositories.entryNotice, null)
   assert.equal(repositories.entrySearch, '')
   assert.equal(repositories.preview, null)
@@ -69,9 +73,29 @@ test('http mode ignores demo and access selectors', () => {
   })
 })
 
-test('http mode has no repositories until the access API is connected', async () => {
-  await assert.rejects(
-    loadAppRepositories({ mode: 'http' }, '?demo=workspace'),
-    /VITE_API_MODE=http/,
+test('http mode starts at code entry and logs in through the API base', async () => {
+  const repositories = await loadAppRepositories(
+    HTTP,
+    '?demo=workspace&access=session-expired',
   )
+  assert.equal(repositories.entryNotice, null)
+  assert.equal(repositories.entrySearch, '')
+  assert.equal(repositories.preview, null)
+
+  const urls = []
+  const original = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    urls.push(url)
+    return jsonResponse(200, { success: true, data: { workspace_id: 5 } })
+  }
+  try {
+    const entered = await repositories.access.enter(
+      'TESTER-2026-A1B2',
+      signal(),
+    )
+    assert.equal(entered.sessionId, '5')
+  } finally {
+    globalThis.fetch = original
+  }
+  assert.deepEqual(urls, ['/api/v1/auth/tester-login'])
 })

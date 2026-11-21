@@ -2,6 +2,11 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { DEMO_ACCESS_CODES, readAppMode } from '../src/app/demoConfig.ts'
 import { createMockAccessRepository } from '../src/features/access/mockRepository.ts'
+import {
+  AccessRepositoryError,
+  isSessionExpired,
+} from '../src/features/access/repository.ts'
+import { WorkspaceRepositoryError } from '../src/features/workspace/repository.ts'
 
 const signal = () => new AbortController().signal
 
@@ -194,4 +199,25 @@ test('unknown preview queries do not bypass code entry', () => {
       scenario,
     })
   }
+})
+
+test('either repository can report an expired session', () => {
+  assert.equal(
+    isSessionExpired(new AccessRepositoryError('session-expired', 'gone')),
+    true,
+  )
+  assert.equal(
+    isSessionExpired(new WorkspaceRepositoryError('expired', 'gone')),
+    true,
+  )
+  assert.equal(
+    isSessionExpired(new AccessRepositoryError('network', 'x')),
+    false,
+  )
+  assert.equal(
+    isSessionExpired(new WorkspaceRepositoryError('consent-failed', 'x')),
+    false,
+  )
+  assert.equal(isSessionExpired(new Error('expired')), false)
+  assert.equal(isSessionExpired(null), false)
 })
