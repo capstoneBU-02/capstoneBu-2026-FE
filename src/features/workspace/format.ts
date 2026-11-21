@@ -44,7 +44,18 @@ export function taskHeadlineStatus(
   if (task.processingStatus === 'processing') return '진행 중'
   if (task.processingStatus === 'queued') return '대기'
   if (task.failureKind === 'no-guitar') return '기타를 찾지 못함'
+  if (task.failureKind === 'invalid-audio') return '음원 읽기 실패'
   return stage === 'separation' ? '기타 분리 실패' : '타브 실패'
+}
+
+// Failures the same file and section would meet again (SEPARATION_NO_GUITAR,
+// PREPROCESS_INVALID_AUDIO). Each has its own panel without 다시 시도.
+export function failsAgainOnRetry(
+  task: Pick<WorkspaceTask, 'failureKind'>,
+): boolean {
+  return (
+    task.failureKind === 'no-guitar' || task.failureKind === 'invalid-audio'
+  )
 }
 
 // The 진행 중 filter covers tasks still waiting for their turn.
@@ -61,4 +72,29 @@ export function isTaskInProgress(
 export function playbackFailureText(trackLabel: string): string {
   const audio = trackLabel.endsWith('음원') ? trackLabel : `${trackLabel} 음원`
   return `${audio}을 재생하지 못했어요. 타브는 그대로 볼 수 있어요.`
+}
+
+// The list's change time, read on this device's clock: 방금 within a minute
+// (or slightly ahead, as a server clock may be), then 오늘 HH:MM, 어제 and
+// M월 D일.
+// The server writes microseconds (2026-11-21T06:10:02.114820Z). The date
+// format the language defines has milliseconds only, so the extra digits go
+// before parsing rather than trusting each browser to take them.
+export function serverTime(iso: string): number {
+  return Date.parse(iso.replace(/(\.\d{3})\d+/, '$1'))
+}
+
+export function updatedAtLabel(iso: string, now: Date = new Date()): string {
+  const time = new Date(serverTime(iso))
+  if (Number.isNaN(time.getTime())) return ''
+  if (now.getTime() - time.getTime() < 60_000) return '방금'
+  const day = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const days = Math.round((day(now) - day(time)) / 86_400_000)
+  if (days === 0) {
+    const pad = (value: number) => String(value).padStart(2, '0')
+    return `오늘 ${pad(time.getHours())}:${pad(time.getMinutes())}`
+  }
+  if (days === 1) return '어제'
+  return `${time.getMonth() + 1}월 ${time.getDate()}일`
 }

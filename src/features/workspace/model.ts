@@ -59,7 +59,9 @@ export interface WorkspaceTask {
   readonly rangeEndSeconds: number
   // queued: created and waiting for its turn before separation starts.
   readonly processingStatus: 'queued' | 'processing' | 'completed' | 'failed'
-  readonly failureKind: 'transcription' | 'no-guitar' | null
+  // no-guitar and invalid-audio cannot be retried: the same section of the
+  // same file fails the same way.
+  readonly failureKind: 'transcription' | 'no-guitar' | 'invalid-audio' | null
   readonly progressPercent: number | null
   readonly hasSeparatedAudio: boolean
   readonly comparisonCount: number

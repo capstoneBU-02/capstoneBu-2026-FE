@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "data": {
+    "tab_id": 88,
+    "segment_id": 31,
+    "version": 1,
+    "status": "failed",
+    "current_stage": "transcription",
+    "stages": [
+      { "stage": "transcription", "status": "failed" },
+      { "stage": "rhythm", "status": "queued" },
+      { "stage": "tab", "status": "queued" }
+    ],
+    "failure": {
+      "stage": "transcription",
+      "error_code": "TAB_NO_NOTES",
+      "message": "인식된 음이 없습니다.",
+      "retryable": true,
+      "retry_count": 0,
+      "max_retries": 3,
+      "retries_left": 3
+    },
+    "updated_at": "2026-11-21T06:13:02.497115Z"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "RETRY_LIMIT_EXCEEDED",
+    "message": "재시도 횟수를 모두 사용했습니다."
+  },
+  "meta": { "trace_id": "0c9f6b3e81d47a25" }
+}

@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "STEM_NOT_READY",
+    "message": "기타 음원이 아직 준비되지 않았습니다."
+  },
+  "meta": { "trace_id": "91f4c7a2e05d8b36" }
+}

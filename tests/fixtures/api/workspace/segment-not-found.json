@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "SEGMENT_NOT_FOUND",
+    "message": "구간을 찾을 수 없습니다."
+  },
+  "meta": { "trace_id": "8c21d0f4a9e3b675" }
+}

@@ -1,0 +1,30 @@
+{
+  "success": true,
+  "data": {
+    "stem_id": 54,
+    "segment_id": 31,
+    "version": 1,
+    "start_ms": 12300,
+    "end_ms": 27800,
+    "status": "failed",
+    "current_stage": "separation",
+    "bypass_separation": false,
+    "playable": false,
+    "backing_playable": false,
+    "review_reason": null,
+    "stages": [
+      { "stage": "preprocess", "status": "success" },
+      { "stage": "separation", "status": "failed" }
+    ],
+    "failure": {
+      "stage": "separation",
+      "error_code": "SEPARATION_NO_GUITAR",
+      "message": "음원에서 기타 소리를 찾지 못했습니다.",
+      "retryable": false,
+      "retry_count": 0,
+      "max_retries": 3,
+      "retries_left": 3
+    },
+    "updated_at": "2026-11-21T06:11:30.640298Z"
+  }
+}

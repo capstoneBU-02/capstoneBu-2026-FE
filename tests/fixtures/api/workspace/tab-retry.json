@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "data": {
+    "tab_id": 88,
+    "status": "queued",
+    "retry_from": "transcription",
+    "retry_count": 1,
+    "max_retries": 3,
+    "retries_left": 2
+  }
+}

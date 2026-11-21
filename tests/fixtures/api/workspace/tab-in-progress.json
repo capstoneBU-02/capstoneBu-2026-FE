@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "TAB_IN_PROGRESS",
+    "message": "같은 조건의 타브를 이미 만들고 있습니다."
+  },
+  "meta": { "trace_id": "7e15a9c2f08b4d63" }
+}

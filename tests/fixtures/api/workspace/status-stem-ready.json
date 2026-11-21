@@ -1,0 +1,15 @@
+{
+  "success": true,
+  "data": {
+    "segment_id": 31,
+    "stem": {
+      "stem_id": 54,
+      "status": "success",
+      "current_stage": "separation",
+      "playable": true,
+      "retryable": false
+    },
+    "tab": null,
+    "updated_at": "2026-11-21T06:12:38.019846Z"
+  }
+}

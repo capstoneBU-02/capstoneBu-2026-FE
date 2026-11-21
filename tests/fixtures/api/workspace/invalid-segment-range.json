@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_SEGMENT_RANGE",
+    "message": "구간 시작·종료 시간이 올바르지 않습니다."
+  },
+  "meta": { "trace_id": "2b7e91c04d5fa836" }
+}

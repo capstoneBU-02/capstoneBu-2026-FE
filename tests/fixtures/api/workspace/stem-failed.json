@@ -1,0 +1,30 @@
+{
+  "success": true,
+  "data": {
+    "stem_id": 54,
+    "segment_id": 31,
+    "version": 1,
+    "start_ms": 12300,
+    "end_ms": 27800,
+    "status": "failed",
+    "current_stage": "separation",
+    "bypass_separation": false,
+    "playable": false,
+    "backing_playable": false,
+    "review_reason": null,
+    "stages": [
+      { "stage": "preprocess", "status": "success" },
+      { "stage": "separation", "status": "failed" }
+    ],
+    "failure": {
+      "stage": "separation",
+      "error_code": "AI_WORKER_TIMEOUT",
+      "message": "처리 시간이 초과되었습니다.",
+      "retryable": true,
+      "retry_count": 1,
+      "max_retries": 3,
+      "retries_left": 2
+    },
+    "updated_at": "2026-11-21T06:11:30.640298Z"
+  }
+}

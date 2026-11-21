@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "STEM_NOT_CANCELABLE",
+    "message": "중단할 수 없는 상태입니다."
+  },
+  "meta": { "trace_id": "3a8d5e0f72c1b946" }
+}

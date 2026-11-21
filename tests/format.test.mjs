@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  failsAgainOnRetry,
   formatTaskRange,
   formatTime,
   isTaskInProgress,
@@ -59,6 +60,23 @@ test('input kinds and headline statuses have distinct labels', () => {
     ),
     '기타를 찾지 못함',
   )
+  // A file the server cannot read fails before any stage it would name.
+  for (const stage of ['separation', 'transcription'])
+    assert.equal(
+      taskHeadlineStatus(
+        { processingStatus: 'failed', failureKind: 'invalid-audio' },
+        stage,
+      ),
+      '음원 읽기 실패',
+    )
+})
+
+test('only failures the same file repeats have no retry of their own', () => {
+  const failed = (failureKind) => ({ processingStatus: 'failed', failureKind })
+  assert.equal(failsAgainOnRetry(failed('no-guitar')), true)
+  assert.equal(failsAgainOnRetry(failed('invalid-audio')), true)
+  assert.equal(failsAgainOnRetry(failed('transcription')), false)
+  assert.equal(failsAgainOnRetry(failed(null)), false)
 })
 
 test('queued and processing tasks both count as in progress', () => {

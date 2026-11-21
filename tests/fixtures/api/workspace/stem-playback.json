@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "data": {
+    "stem_id": 54,
+    "is_partial": false,
+    "tracks": [
+      {
+        "type": "guitar",
+        "label": "기타",
+        "available": true,
+        "url": "https://storage.example.com/stems/54/guitar.wav?X-Amz-Expires=600&X-Amz-Signature=a1b2"
+      },
+      {
+        "type": "backing",
+        "label": "반주",
+        "available": true,
+        "url": "https://storage.example.com/stems/54/backing.wav?X-Amz-Expires=600&X-Amz-Signature=c3d4"
+      }
+    ],
+    "expires_at": "2026-11-21T06:23:20.000000Z"
+  }
+}
