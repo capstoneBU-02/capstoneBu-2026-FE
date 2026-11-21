@@ -119,12 +119,12 @@ const repository: AccessRepository = {
               )
             : workspace.loadTask(taskId, signal)
         },
-        addSong(input, signal) {
+        addSong(input, signal, onProgress) {
           return expired
             ? Promise.reject(
                 new WorkspaceRepositoryError('expired', 'Expired test session'),
               )
-            : workspace.addSong(input, signal)
+            : workspace.addSong(input, signal, onProgress)
         },
         createTask(input, signal) {
           return expired

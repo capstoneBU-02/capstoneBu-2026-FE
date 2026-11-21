@@ -8,10 +8,18 @@ import type {
   SongInputKind,
   WorkspaceSong,
 } from '../workspace/model.ts'
+import type { AddSongFailureCode } from '../workspace/repository.ts'
 import type { AddSongResult } from '../workspace/useWorkspace.ts'
 import pageStyles from '../workspace/WorkspacePage.module.css'
 import type { MediaDurationProbe } from './mediaDuration.ts'
-import { songFileMessage } from './songFile.ts'
+import {
+  addSongFailureMessage,
+  isFileRefusal,
+  precheckSongFile,
+  songFileMessage,
+  uploadProgressLabel,
+  type AddSongFileCheck,
+} from './songFile.ts'
 import { SongFilePicker } from './SongFilePicker.tsx'
 import { useSongFileCheck } from './useSongFileCheck.ts'
 import styles from './AddSongDialog.module.css'
@@ -24,7 +32,11 @@ type Props = {
   initialFiles?: readonly File[]
   // 파일 바꾸기 starts from the replaced song's input kind.
   initialInputKind?: SongInputKind
-  onSubmit: (input: NewSongInput, signal: AbortSignal) => Promise<AddSongResult>
+  onSubmit: (
+    input: NewSongInput,
+    signal: AbortSignal,
+    onProgress: (percent: number) => void,
+  ) => Promise<AddSongResult>
   onAdded: (song: WorkspaceSong) => void
   onClose: () => void
   returnFocusRef: RefObject<HTMLElement | null>
@@ -43,7 +55,6 @@ const INPUT_KINDS: ReadonlyArray<{
 ]
 
 const MULTIPLE_FILES_MESSAGE = '파일은 한 번에 하나만 올릴 수 있어요.'
-const SUBMIT_FAILED_MESSAGE = '곡을 추가하지 못했어요. 다시 시도해 주세요.'
 
 export function AddSongDialog({
   title = '곡 추가',
@@ -70,15 +81,31 @@ export function AddSongDialog({
   const [submitting, setSubmitting] = useState(false)
   const submittingRef = useRef(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // Upload progress in whole percents, null until the repository reports.
+  const [progress, setProgress] = useState<number | null>(null)
+  // The server refused this file for its content; only another file can go.
+  const [refusedFile, setRefusedFile] = useState<{
+    file: File
+    reason: AddSongFailureCode
+  } | null>(null)
   // Each pick gets a fresh alert so a repeated message is announced again.
   const [attempt, setAttempt] = useState(0)
-  const { check, recheck } = useSongFileCheck(file, probeDuration)
+  // A file over the size limit is refused without reading its length.
+  const tooLarge =
+    file !== null && precheckSongFile(file)?.status === 'too-large'
+  const probed = useSongFileCheck(tooLarge ? null : file, probeDuration)
+  const check: AddSongFileCheck | null = tooLarge
+    ? { status: 'too-large' }
+    : probed.check
   const titleId = useId()
   const guideId = useId()
   const errorId = useId()
   const fileError = check ? songFileMessage(check) : null
   const error = pickError ?? fileError ?? submitError
-  const canSubmit = check?.status === 'valid' && !submitting
+  const refusal =
+    file !== null && refusedFile?.file === file ? refusedFile.reason : null
+  const refused = refusal !== null
+  const canSubmit = check?.status === 'valid' && !submitting && !refused
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -120,23 +147,33 @@ export function AddSongDialog({
     if (
       !file ||
       check?.status !== 'valid' ||
+      refused ||
       submittingRef.current ||
       !lifetime
     )
       return
     submittingRef.current = true
     setSubmitting(true)
+    setProgress(null)
     setPickError(null)
     setSubmitError(null)
     const result = await onSubmit(
       { file, inputKind, durationSeconds: check.durationSeconds },
       lifetime.signal,
+      (percent) => {
+        if (!lifetime.signal.aborted) setProgress(percent)
+      },
     )
     if (lifetime.signal.aborted) return
     submittingRef.current = false
     setSubmitting(false)
+    setProgress(null)
     if (result.status === 'added') onAdded(result.song)
-    else if (result.status === 'failed') setSubmitError(SUBMIT_FAILED_MESSAGE)
+    else if (result.status === 'failed') {
+      if (isFileRefusal(result.reason))
+        setRefusedFile({ file, reason: result.reason })
+      setSubmitError(addSongFailureMessage(result.reason))
+    }
   }
 
   const guide = INPUT_KINDS.find((kind) => kind.value === inputKind)?.guide
@@ -232,10 +269,11 @@ export function AddSongDialog({
         <SongFilePicker
           file={file}
           check={check}
+          refusal={refusal}
           disabled={submitting}
           describedBy={error ? errorId : undefined}
           onChoose={choose}
-          onRecheck={recheck}
+          onRecheck={probed.recheck}
         />
         {error && (
           <p
@@ -252,14 +290,16 @@ export function AddSongDialog({
             ? '곡을 추가하고 있어요.'
             : check?.status === 'checking'
               ? '파일을 확인하고 있어요.'
-              : check?.status === 'valid'
+              : check?.status === 'valid' && !refused
                 ? '올릴 수 있는 파일이에요.'
                 : ''}
         </span>
       </div>
       <div className={`${pageStyles.dialogFooter} ${styles.footer}`}>
-        <p className={styles.footerNote}>
-          올린 파일은 이 워크스페이스에서만 열려요.
+        <p className={styles.footerNote} data-busy={submitting}>
+          {submitting
+            ? uploadProgressLabel(progress)
+            : '올린 파일은 이 워크스페이스에서만 열려요.'}
         </p>
         <Button variant="ghost" compact onClick={dismiss} disabled={submitting}>
           취소

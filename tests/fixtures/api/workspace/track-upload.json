@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "data": {
+    "track_id": 7,
+    "filename": "봄날 커버 v2.mp3",
+    "duration_ms": 213480,
+    "media_type": "audio/mpeg",
+    "is_separated_stem": false,
+    "created_at": "2026-11-21T05:02:44.318201Z"
+  }
+}

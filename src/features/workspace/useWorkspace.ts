@@ -18,7 +18,9 @@ import {
   type ListChanges,
 } from './listMerge.ts'
 import {
+  addSongFailureOf,
   WorkspaceRepositoryError,
+  type AddSongFailureCode,
   type WorkspaceRepository,
 } from './repository.ts'
 
@@ -32,7 +34,8 @@ interface ConsentState {
 
 export type AddSongResult =
   | { readonly status: 'added'; readonly song: WorkspaceSong }
-  | { readonly status: 'failed' | 'expired' | 'cancelled' }
+  | { readonly status: 'failed'; readonly reason: AddSongFailureCode }
+  | { readonly status: 'expired' | 'cancelled' }
 
 export type CreateTaskResult =
   | { readonly status: 'created'; readonly task: WorkspaceTask }
@@ -54,7 +57,9 @@ export type ListRefreshResult = 'loaded' | 'failed' | 'expired' | 'cancelled'
 
 type RequestOutcome<T> =
   | { readonly status: 'done'; readonly value: T }
-  | { readonly status: 'failed' | 'expired' | 'cancelled' }
+  // `error` is for a caller that tells failures apart; most do not.
+  | { readonly status: 'failed'; readonly error: unknown }
+  | { readonly status: 'expired' | 'cancelled' }
 
 export interface UseWorkspaceResult {
   readonly loadState: WorkspaceLoadState
@@ -70,7 +75,12 @@ export interface UseWorkspaceResult {
   clearConsentError(): void
   saveConsent(choice: SavedConsentChoice): Promise<boolean>
   // The caller's signal cancels the request, e.g. when its dialog unmounts.
-  addSong(input: NewSongInput, signal: AbortSignal): Promise<AddSongResult>
+  // `onProgress` is passed on to the repository's upload progress.
+  addSong(
+    input: NewSongInput,
+    signal: AbortSignal,
+    onProgress?: (percent: number) => void,
+  ): Promise<AddSongResult>
   createTask(
     input: NewTaskInput,
     signal: AbortSignal,
@@ -386,7 +396,7 @@ export function useWorkspace(
         markExpired()
         return { status: 'expired' }
       }
-      return { status: 'failed' }
+      return { status: 'failed', error }
     } finally {
       signal.removeEventListener('abort', cancel)
       if (slot.current === controller) {
@@ -398,11 +408,12 @@ export function useWorkspace(
   async function addSong(
     input: NewSongInput,
     signal: AbortSignal,
+    onProgress?: (percent: number) => void,
   ): Promise<AddSongResult> {
     const result = await tracked(
       addSongController,
       signal,
-      (requestSignal) => repository.addSong(input, requestSignal),
+      (requestSignal) => repository.addSong(input, requestSignal, onProgress),
       (song) => {
         refreshChanges.current?.songs.add(song.id)
         setState((previous) =>
@@ -418,9 +429,14 @@ export function useWorkspace(
         )
       },
     )
-    return result.status === 'done'
-      ? { status: 'added', song: result.value }
-      : result
+    switch (result.status) {
+      case 'done':
+        return { status: 'added', song: result.value }
+      case 'failed':
+        return { status: 'failed', reason: addSongFailureOf(result.error) }
+      default:
+        return result
+    }
   }
 
   async function createTask(
@@ -450,7 +466,7 @@ export function useWorkspace(
     )
     return result.status === 'done'
       ? { status: 'created', task: result.value }
-      : result
+      : { status: result.status }
   }
 
   async function reviseTask(
@@ -472,7 +488,7 @@ export function useWorkspace(
     if (signal.aborted) return { status: 'cancelled' }
     return result.status === 'done'
       ? { status: 'revised', task: result.value }
-      : result
+      : { status: result.status }
   }
 
   async function cancelTask(
@@ -507,7 +523,7 @@ export function useWorkspace(
         })
       },
     )
-    return result.status === 'done' ? { status: 'canceled' } : result
+    return { status: result.status === 'done' ? 'canceled' : result.status }
   }
 
   async function retryTask(
@@ -526,7 +542,7 @@ export function useWorkspace(
     )
     return result.status === 'done'
       ? { status: 'retried', task: result.value }
-      : result
+      : { status: result.status }
   }
 
   function syncTask(loaded: WorkspaceTask) {

@@ -1,17 +1,21 @@
 import { useId, useLayoutEffect, useRef, useState, type DragEvent } from 'react'
 import { Icon } from '../../shared/ui/Icon.tsx'
+import type { AddSongFailureCode } from '../workspace/repository.ts'
 import {
   formatClockDuration,
   formatFileSize,
   songFileAccept,
   uploadHintLabel,
-  type SongFileCheck,
+  type AddSongFileCheck,
 } from './songFile.ts'
 import styles from './AddSongDialog.module.css'
 
 type Props = {
   file: File | null
-  check: SongFileCheck | null
+  check: AddSongFileCheck | null
+  // Why the server refused this file, if it did; the card then shows it
+  // as invalid even though the checks here passed.
+  refusal?: AddSongFailureCode | null
   disabled: boolean
   describedBy?: string
   onChoose: (files: readonly File[]) => void
@@ -23,34 +27,49 @@ function hasFiles(event: DragEvent) {
   return event.dataTransfer.types.includes('Files')
 }
 
-function fileMeta(file: File, check: SongFileCheck): string {
+function fileMeta(file: File, check: AddSongFileCheck): string {
   const size = formatFileSize(file.size)
   switch (check.status) {
     case 'checking':
       return `길이 확인 중 · ${size}`
     case 'valid':
-    case 'too-long':
       return `${formatClockDuration(check.durationSeconds)} · ${size}`
+    case 'too-long':
+      // Rounded up, so a length just over the limit does not read 05:00.
+      return `${formatClockDuration(Math.ceil(check.durationSeconds))} · ${size}`
     case 'unreadable':
     case 'timed-out':
       return `길이 알 수 없음 · ${size}`
     case 'invalid-format':
-      // A disallowed format is never decoded, so only the size is known.
+    case 'too-large':
+      // A refused format or size is never decoded, so only the size is known.
       return size
   }
 }
 
-function StatusMark({ check }: { check: SongFileCheck }) {
-  if (check.status === 'checking')
-    return <span className={styles.spinner} aria-hidden="true" />
+// The length or the size on the card is what was refused.
+function metaRefused(
+  check: AddSongFileCheck,
+  refusal: AddSongFailureCode | null,
+): boolean {
   return (
-    <Icon name={check.status === 'valid' ? 'checkDone' : 'alertTriangle'} />
+    check.status === 'too-long' ||
+    check.status === 'too-large' ||
+    refusal === 'song-too-long' ||
+    refusal === 'song-too-large'
   )
+}
+
+function StatusMark({ ready }: { ready: boolean | null }) {
+  if (ready === null)
+    return <span className={styles.spinner} aria-hidden="true" />
+  return <Icon name={ready ? 'checkDone' : 'alertTriangle'} />
 }
 
 export function SongFilePicker({
   file,
   check,
+  refusal = null,
   disabled,
   describedBy,
   onChoose,
@@ -61,8 +80,12 @@ export function SongFilePicker({
   const [dragActive, setDragActive] = useState(false)
   const titleId = useId()
   const hintId = useId()
-  const invalid =
-    check !== null && check.status !== 'checking' && check.status !== 'valid'
+  // Null while the length is being read.
+  const ready =
+    check === null || check.status === 'checking'
+      ? null
+      : check.status === 'valid' && refusal === null
+  const invalid = ready === false
   const showingFile = file !== null && check !== null
 
   // The drop area that opened the chooser is replaced by the file card, so
@@ -130,7 +153,7 @@ export function SongFilePicker({
             </span>
             <span
               className={styles.fileMeta}
-              data-alert={check.status === 'too-long'}
+              data-alert={metaRefused(check, refusal)}
             >
               {fileMeta(file, check)}
             </span>
@@ -160,7 +183,7 @@ export function SongFilePicker({
           >
             파일 바꾸기
           </button>
-          <StatusMark check={check} />
+          <StatusMark ready={ready} />
         </div>
       ) : (
         <button

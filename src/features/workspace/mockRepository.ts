@@ -1,7 +1,7 @@
 import { DEMO_DISPLAY_CONFIG } from '../../app/demoConfig.ts'
 import {
   checkSongDuration,
-  isAllowedSongFile,
+  precheckSongFile,
   songNameFromFileName,
 } from '../add-song/songFile.ts'
 import {
@@ -20,6 +20,7 @@ import {
 import type {
   ConsentChoice,
   DemoScenario,
+  NewSongInput,
   PreviousTaskResult,
   SavedConsentChoice,
   WorkspaceInfo,
@@ -43,6 +44,7 @@ import { mockTabInput } from './mockTab.ts'
 import { taskStages } from './processing.ts'
 import {
   WorkspaceRepositoryError,
+  type AddSongFailureCode,
   type WorkspaceRepository,
 } from './repository.ts'
 
@@ -69,6 +71,24 @@ function fixtureRetries(scenario: DemoScenario) {
   return scenario === 'task-states'
     ? mockTaskStatesRetriesUsed
     : mockRetriesUsed
+}
+
+// The server's reasons, in its order. A length it cannot read is a format
+// it cannot handle.
+function mockSongRefusal(input: NewSongInput): AddSongFailureCode | null {
+  const precheck = precheckSongFile(input.file)
+  if (precheck)
+    return precheck.status === 'too-large'
+      ? 'song-too-large'
+      : 'song-unsupported'
+  switch (checkSongDuration(input.durationSeconds).status) {
+    case 'valid':
+      return null
+    case 'too-long':
+      return 'song-too-long'
+    default:
+      return 'song-unsupported'
+  }
 }
 
 export function createMockWorkspaceRepository(
@@ -223,18 +243,17 @@ export function createMockWorkspaceRepository(
         retry: retryOf(task),
       }
     },
-    async addSong(input, signal) {
-      await waitForMockRequest(300, signal)
+    async addSong(input, signal, onProgress) {
+      // Nothing is sent, so the progress walks to 100 on its own.
+      await waitForMockRequest(150, signal)
+      onProgress?.(50)
+      await waitForMockRequest(150, signal)
+      onProgress?.(100)
       throwIfExpired()
       // A server checks the file again instead of trusting the client.
-      if (
-        !isAllowedSongFile(input.file) ||
-        checkSongDuration(input.durationSeconds).status !== 'valid'
-      ) {
-        throw new WorkspaceRepositoryError(
-          'add-song-failed',
-          '올릴 수 없는 파일이에요.',
-        )
+      const refusal = mockSongRefusal(input)
+      if (refusal) {
+        throw new WorkspaceRepositoryError(refusal, '올릴 수 없는 파일이에요.')
       }
 
       addedSongCount += 1

@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "DURATION_EXCEEDED",
+    "message": "음원 재생 길이는 최대 5분(300초)까지 지원합니다."
+  },
+  "meta": { "trace_id": "7b6a5f4e3d2c1b0a" }
+}

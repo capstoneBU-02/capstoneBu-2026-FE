@@ -1,5 +1,9 @@
 import { ApiError, isSessionRejected, type HttpClient } from '../../api/http.ts'
-import { createHttpWorkspaceRepository } from '../workspace/httpRepository.ts'
+import {
+  createHttpWorkspaceRepository,
+  createPageSongs,
+  type PageSongs,
+} from '../workspace/httpRepository.ts'
 import type { ConsentChoice, WorkspaceInfo } from '../workspace/model.ts'
 import type { WorkspaceRepository } from '../workspace/repository.ts'
 import {
@@ -65,6 +69,16 @@ export function createHttpAccessRepository({
   // The cookie is the real session; a session id here is the workspace id.
   const sessions = new Map<string, Session>()
   const onboardings = new Map<string, Onboarding>()
+  const pageSongs = new Map<string, PageSongs>()
+
+  function songsOf(workspaceId: string) {
+    let songs = pageSongs.get(workspaceId)
+    if (!songs) {
+      songs = createPageSongs()
+      pageSongs.set(workspaceId, songs)
+    }
+    return songs
+  }
 
   function sessionOf(sessionId: string) {
     const session = sessions.get(sessionId)
@@ -121,6 +135,7 @@ export function createHttpAccessRepository({
             save: (choice) =>
               updateOnboarding(workspaceId, { consentChoice: choice }),
           },
+          songs: songsOf(workspaceId),
         }),
       })
       return resultOf(workspaceId)

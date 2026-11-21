@@ -1,4 +1,9 @@
-import { UPLOAD_POLICY, type UploadPolicy } from './uploadPolicy.ts'
+import type { AddSongFailureCode } from '../workspace/repository.ts'
+import {
+  UPLOAD_POLICY,
+  type UploadFormat,
+  type UploadPolicy,
+} from './uploadPolicy.ts'
 
 export type SongFileCheck =
   | { readonly status: 'checking' }
@@ -9,6 +14,10 @@ export type SongFileCheck =
   // The length took too long to read; the same file can be checked again.
   | { readonly status: 'timed-out' }
 
+// A song also has to fit the upload size limit, which is checked before the
+// length is read. Performance takes are not uploaded this way.
+export type AddSongFileCheck = SongFileCheck | { readonly status: 'too-large' }
+
 // Browsers report no MIME, or a generic one, for some local files. Such files
 // pass on their extension and are judged by whether they play.
 const UNSPECIFIED_MIME_TYPES = new Set(['', 'application/octet-stream'])
@@ -18,20 +27,46 @@ function extensionOf(fileName: string): string {
   return dot > 0 ? fileName.slice(dot + 1).toLowerCase() : ''
 }
 
+function formatOf(
+  fileName: string,
+  policy: UploadPolicy,
+): UploadFormat | undefined {
+  const extension = extensionOf(fileName)
+  return policy.formats.find((candidate) =>
+    candidate.extensions.includes(extension),
+  )
+}
+
+function mimeOf(type: string): string {
+  return type.split(';')[0].trim().toLowerCase()
+}
+
 export function isAllowedSongFile(
   file: { readonly name: string; readonly type: string },
   policy: UploadPolicy = UPLOAD_POLICY,
 ): boolean {
-  const extension = extensionOf(file.name)
-  const format = policy.formats.find((candidate) =>
-    candidate.extensions.includes(extension),
-  )
+  const format = formatOf(file.name, policy)
   if (!format) return false
-  const mime = file.type.split(';')[0].trim().toLowerCase()
+  const mime = mimeOf(file.type)
   return UNSPECIFIED_MIME_TYPES.has(mime) || format.mimeTypes.includes(mime)
 }
 
-// Compare the whole seconds the card shows, so 05:00 is never "over 5 min".
+// What can be refused without decoding, in the order the server checks:
+// format, then size. Null leaves the length to the probe.
+export function precheckSongFile(
+  file: { readonly name: string; readonly type: string; readonly size: number },
+  policy: UploadPolicy = UPLOAD_POLICY,
+): Extract<
+  AddSongFileCheck,
+  { status: 'invalid-format' | 'too-large' }
+> | null {
+  if (!isAllowedSongFile(file, policy)) return { status: 'invalid-format' }
+  if (file.size > policy.maxFileBytes) return { status: 'too-large' }
+  return null
+}
+
+// The server rounds the length to milliseconds and refuses anything above
+// the limit, so 300.001 s is over five minutes here too.
 export function checkSongDuration(
   durationSeconds: number,
   policy: UploadPolicy = UPLOAD_POLICY,
@@ -39,13 +74,32 @@ export function checkSongDuration(
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     return { status: 'unreadable' }
   }
-  return Math.floor(durationSeconds) > policy.maxDurationSeconds
+  return Math.round(durationSeconds * 1000) > policy.maxDurationSeconds * 1000
     ? { status: 'too-long', durationSeconds }
     : { status: 'valid', durationSeconds }
 }
 
+// The same bytes and name, declaring the type the server accepts for the
+// extension. Browsers report several types for MP3 and none for some files.
+export function songUploadFile(
+  file: File,
+  policy: UploadPolicy = UPLOAD_POLICY,
+): File {
+  const format = formatOf(file.name, policy)
+  if (!format || file.type === format.uploadType) return file
+  return new File([file], file.name, {
+    type: format.uploadType,
+    lastModified: file.lastModified,
+  })
+}
+
 function formatLabels(policy: UploadPolicy): string {
   return policy.formats.map((format) => format.label).join(', ')
+}
+
+// 52428800 → 50MB, 1572864 → 1.5MB
+function sizeLimitLabel(bytes: number): string {
+  return formatFileSize(bytes).replace(/\.0(?=[KMG]B$)/, '')
 }
 
 // 300 → 5분, 210 → 3분 30초, 45 → 45초
@@ -69,15 +123,25 @@ export function songFileAccept(policy: UploadPolicy = UPLOAD_POLICY): string {
     .join(',')
 }
 
+function tooLongMessage(policy: UploadPolicy): string {
+  return `${durationLimitLabel(policy.maxDurationSeconds)} 이하 파일만 올릴 수 있어요. 필요한 부분만 잘라서 올려 주세요.`
+}
+
+function tooLargeMessage(policy: UploadPolicy): string {
+  return `${sizeLimitLabel(policy.maxFileBytes)} 이하 파일만 올릴 수 있어요. 용량을 줄여서 다시 올려 주세요.`
+}
+
 export function songFileMessage(
-  check: SongFileCheck,
+  check: AddSongFileCheck,
   policy: UploadPolicy = UPLOAD_POLICY,
 ): string | null {
   switch (check.status) {
     case 'invalid-format':
       return `${formatLabels(policy)} 파일만 올릴 수 있어요. 형식을 바꿔서 다시 올려 주세요.`
     case 'too-long':
-      return `${durationLimitLabel(policy.maxDurationSeconds)} 이하 파일만 올릴 수 있어요. 필요한 부분만 잘라서 올려 주세요.`
+      return tooLongMessage(policy)
+    case 'too-large':
+      return tooLargeMessage(policy)
     case 'unreadable':
       return '이 파일은 재생할 수 없어요. 손상되지 않은 파일인지 확인하고 다시 올려 주세요.'
     case 'timed-out':
@@ -85,6 +149,42 @@ export function songFileMessage(
     default:
       return null
   }
+}
+
+// The server's reasons share the wording of the checks above; it may still
+// refuse a file that passed them, as it reads the length its own way.
+export function addSongFailureMessage(
+  reason: AddSongFailureCode,
+  policy: UploadPolicy = UPLOAD_POLICY,
+): string {
+  switch (reason) {
+    case 'song-unsupported':
+      return `이 파일은 처리할 수 없어요. 다른 ${formatLabels(policy)} 파일로 다시 올려 주세요.`
+    case 'song-too-long':
+      return tooLongMessage(policy)
+    case 'song-too-large':
+      return tooLargeMessage(policy)
+    case 'storage-full':
+      return '작업 공간에 더 올릴 수 없어요. 올릴 수 있는 곡 수나 저장 용량을 모두 사용했어요.'
+    case 'add-song-failed':
+      return '곡을 추가하지 못했어요. 다시 시도해 주세요.'
+  }
+}
+
+// Null until the repository reports any progress (the mock may not). At 100
+// the file has gone and the server is reading it.
+export function uploadProgressLabel(percent: number | null): string {
+  if (percent === null) return '파일 올리는 중'
+  return percent >= 100 ? '파일 확인 중' : `파일 올리는 중 ${percent}%`
+}
+
+// Sending the same file again would be refused the same way.
+export function isFileRefusal(reason: AddSongFailureCode): boolean {
+  return (
+    reason === 'song-unsupported' ||
+    reason === 'song-too-long' ||
+    reason === 'song-too-large'
+  )
 }
 
 const SIZE_UNITS = ['KB', 'MB', 'GB'] as const

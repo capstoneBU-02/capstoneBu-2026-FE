@@ -2,14 +2,19 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { UPLOAD_POLICY } from '../src/features/add-song/uploadPolicy.ts'
 import {
+  addSongFailureMessage,
   checkSongDuration,
   formatClockDuration,
   formatFileSize,
   isAllowedSongFile,
+  isFileRefusal,
+  precheckSongFile,
   songFileAccept,
   songFileMessage,
   songNameFromFileName,
+  songUploadFile,
   uploadHintLabel,
+  uploadProgressLabel,
 } from '../src/features/add-song/songFile.ts'
 import {
   createMediaDurationProbe,
@@ -47,17 +52,21 @@ test('only MP3 and MP4 names with a matching or missing MIME pass the format che
   }
 })
 
-test('duration is checked in the whole seconds that the card displays', () => {
+test('duration is checked in rounded milliseconds, as the server checks it', () => {
   assert.deepEqual(checkSongDuration(252.4), {
     status: 'valid',
     durationSeconds: 252.4,
   })
-  // 300.9 s reads as 05:00, so it must not be rejected as over five minutes.
-  assert.equal(checkSongDuration(300.9).status, 'valid')
-  assert.deepEqual(checkSongDuration(301), {
+  assert.equal(checkSongDuration(299.999).status, 'valid')
+  assert.equal(checkSongDuration(300).status, 'valid')
+  // Rounds to 300000 ms.
+  assert.equal(checkSongDuration(300.0004).status, 'valid')
+  // The server refuses these, so they are not sent at all.
+  assert.deepEqual(checkSongDuration(300.001), {
     status: 'too-long',
-    durationSeconds: 301,
+    durationSeconds: 300.001,
   })
+  assert.equal(checkSongDuration(300.9).status, 'too-long')
   for (const unreadable of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
     assert.deepEqual(checkSongDuration(unreadable), { status: 'unreadable' })
   }
@@ -65,8 +74,67 @@ test('duration is checked in the whole seconds that the card displays', () => {
   assert.equal(checkSongDuration(181, shorter).status, 'too-long')
 })
 
+const MB = 1024 * 1024
+const sized = (name, type, size) => ({ name, type, size })
+
+test('format and size are checked before the length, in the server order', () => {
+  assert.equal(UPLOAD_POLICY.maxFileBytes, 50 * MB)
+  assert.equal(precheckSongFile(sized('a.mp3', 'audio/mpeg', 50 * MB)), null)
+  assert.deepEqual(
+    precheckSongFile(sized('a.mp3', 'audio/mpeg', 50 * MB + 1)),
+    { status: 'too-large' },
+  )
+  // A wrong format is named first, whatever its size.
+  assert.deepEqual(precheckSongFile(sized('a.wav', 'audio/wav', 80 * MB)), {
+    status: 'invalid-format',
+  })
+  const smaller = { ...UPLOAD_POLICY, maxFileBytes: 20 * MB }
+  assert.deepEqual(
+    precheckSongFile(sized('a.mp4', 'video/mp4', 21 * MB), smaller),
+    { status: 'too-large' },
+  )
+})
+
+test('the file sent carries the MIME type the server accepts for its extension', async () => {
+  const unnamed = new File(['abc'], 'No Mime.MP3', {
+    type: '',
+    lastModified: 1_700_000_000_000,
+  })
+  const sent = songUploadFile(unnamed)
+  assert.equal(sent.type, 'audio/mpeg')
+  assert.equal(sent.name, 'No Mime.MP3')
+  assert.equal(sent.lastModified, 1_700_000_000_000)
+  assert.equal(await sent.text(), 'abc')
+
+  for (const [name, type, expected] of [
+    ['generic.mp4', 'application/octet-stream', 'video/mp4'],
+    ['stem.mp4', 'audio/mp4', 'video/mp4'],
+    ['alias.mp3', 'audio/x-mp3', 'audio/mpeg'],
+    ['param.mp3', 'audio/mpeg; charset=binary', 'audio/mpeg'],
+  ]) {
+    assert.equal(songUploadFile(new File([], name, { type })).type, expected)
+  }
+
+  // A file that already has it is sent as it is.
+  const ready = new File([], 'ready.mp3', { type: 'audio/mpeg' })
+  assert.equal(songUploadFile(ready), ready)
+  const unknown = new File([], 'clip.wav', { type: 'audio/wav' })
+  assert.equal(songUploadFile(unknown), unknown)
+})
+
 test('hint and messages derive from the policy so a limit changes in one place', () => {
   assert.equal(uploadHintLabel(), 'MP3, MP4 · 최대 5분')
+  assert.equal(
+    songFileMessage({ status: 'too-large' }),
+    '50MB 이하 파일만 올릴 수 있어요. 용량을 줄여서 다시 올려 주세요.',
+  )
+  assert.match(
+    songFileMessage(
+      { status: 'too-large' },
+      { ...UPLOAD_POLICY, maxFileBytes: 1.5 * MB },
+    ),
+    /^1\.5MB 이하 파일만/,
+  )
   assert.equal(
     songFileMessage({ status: 'invalid-format' }),
     'MP3, MP4 파일만 올릴 수 있어요. 형식을 바꿔서 다시 올려 주세요.',
@@ -97,6 +165,41 @@ test('hint and messages derive from the policy so a limit changes in one place',
     uploadHintLabel({ ...UPLOAD_POLICY, maxDurationSeconds: 45 }),
     'MP3, MP4 · 최대 45초',
   )
+})
+
+test('a refused add names what the server found, with the same wording as the checks', () => {
+  assert.equal(
+    addSongFailureMessage('song-unsupported'),
+    '이 파일은 처리할 수 없어요. 다른 MP3, MP4 파일로 다시 올려 주세요.',
+  )
+  assert.equal(
+    addSongFailureMessage('song-too-long'),
+    songFileMessage({ status: 'too-long', durationSeconds: 301 }),
+  )
+  assert.equal(
+    addSongFailureMessage('song-too-large'),
+    songFileMessage({ status: 'too-large' }),
+  )
+  assert.equal(
+    addSongFailureMessage('storage-full'),
+    '작업 공간에 더 올릴 수 없어요. 올릴 수 있는 곡 수나 저장 용량을 모두 사용했어요.',
+  )
+  assert.equal(
+    addSongFailureMessage('add-song-failed'),
+    '곡을 추가하지 못했어요. 다시 시도해 주세요.',
+  )
+  for (const reason of ['song-unsupported', 'song-too-long', 'song-too-large'])
+    assert.equal(isFileRefusal(reason), true, reason)
+  for (const reason of ['storage-full', 'add-song-failed'])
+    assert.equal(isFileRefusal(reason), false, reason)
+})
+
+test('upload progress reads as sending, then as the server checking the file', () => {
+  assert.equal(uploadProgressLabel(null), '파일 올리는 중')
+  assert.equal(uploadProgressLabel(0), '파일 올리는 중 0%')
+  assert.equal(uploadProgressLabel(42), '파일 올리는 중 42%')
+  assert.equal(uploadProgressLabel(99), '파일 올리는 중 99%')
+  assert.equal(uploadProgressLabel(100), '파일 확인 중')
 })
 
 test('the file input accepts the allowed extensions and MIME types', () => {

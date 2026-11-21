@@ -239,18 +239,35 @@ test('adding a song honours cancellation and expiry without changing the list', 
   )
 })
 
-test('the mock refuses a song the upload policy rejects, like a server would', async () => {
+test('the mock refuses a song the upload policy rejects with the server reason', async () => {
   const repository = createMockWorkspaceRepository('empty')
-  for (const input of [
-    upload({ file: new File(['audio'], 'take.wav', { type: 'audio/wav' }) }),
-    upload({ durationSeconds: 301 }),
-    upload({ durationSeconds: Number.NaN }),
+  // Only the name, type and size are read before refusing.
+  const large = {
+    name: 'big.mp3',
+    type: 'audio/mpeg',
+    size: 50 * 1024 ** 2 + 1,
+  }
+  for (const [input, code] of [
+    [
+      upload({ file: new File(['audio'], 'take.wav', { type: 'audio/wav' }) }),
+      'song-unsupported',
+    ],
+    [upload({ file: large }), 'song-too-large'],
+    [upload({ durationSeconds: 300.001 }), 'song-too-long'],
+    [upload({ durationSeconds: Number.NaN }), 'song-unsupported'],
   ]) {
-    await assert.rejects(repository.addSong(input, signal()), {
-      code: 'add-song-failed',
-    })
+    await assert.rejects(repository.addSong(input, signal()), { code })
   }
   assert.equal((await repository.loadWorkspace(signal())).songs.length, 0)
+})
+
+test('the mock walks the upload progress to 100 before answering', async () => {
+  const repository = createMockWorkspaceRepository('empty')
+  const progress = []
+  await repository.addSong(upload(), signal(), (percent) =>
+    progress.push(percent),
+  )
+  assert.deepEqual(progress, [50, 100])
 })
 
 test('a created task waits in the queue and opens like any other task', async () => {

@@ -18,7 +18,13 @@ export interface WorkspaceRepository {
   // A missing task and another workspace's task fail identically so the
   // screen cannot reveal whether an id exists elsewhere.
   loadTask(taskId: string, signal: AbortSignal): Promise<TaskDetail>
-  addSong(input: NewSongInput, signal: AbortSignal): Promise<WorkspaceSong>
+  // `onProgress` gets whole percents of the file sent, where the repository
+  // can tell (upload.ts); the server still checks the file after 100.
+  addSong(
+    input: NewSongInput,
+    signal: AbortSignal,
+    onProgress?: (percent: number) => void,
+  ): Promise<WorkspaceSong>
   // A new task starts queued; separation and transcription come later.
   createTask(input: NewTaskInput, signal: AbortSignal): Promise<WorkspaceTask>
   // 구간 수정: the same task starts over in the queue with the new section,
@@ -54,12 +60,30 @@ export interface WorkspaceRepository {
   ): Promise<WorkspaceTask>
 }
 
+// Why a song was not added. The server checks the file again and may refuse
+// one that passed the dialog's checks; anything else is add-song-failed.
+export type AddSongFailureCode =
+  | 'add-song-failed'
+  | 'song-unsupported'
+  | 'song-too-long'
+  | 'song-too-large'
+  // The workspace holds as many songs or bytes as it may.
+  | 'storage-full'
+
+const ADD_SONG_FAILURES: ReadonlySet<string> = new Set<AddSongFailureCode>([
+  'add-song-failed',
+  'song-unsupported',
+  'song-too-long',
+  'song-too-large',
+  'storage-full',
+])
+
 type RepositoryErrorCode =
   | 'load-failed'
   | 'consent-failed'
   | 'expired'
   | 'task-unavailable'
-  | 'add-song-failed'
+  | AddSongFailureCode
   | 'create-task-failed'
   | 'revise-task-failed'
   | 'cancel-task-failed'
@@ -81,4 +105,11 @@ export class WorkspaceRepositoryError extends Error {
     this.name = 'WorkspaceRepositoryError'
     this.code = code
   }
+}
+
+export function addSongFailureOf(error: unknown): AddSongFailureCode {
+  return error instanceof WorkspaceRepositoryError &&
+    ADD_SONG_FAILURES.has(error.code)
+    ? (error.code as AddSongFailureCode)
+    : 'add-song-failed'
 }

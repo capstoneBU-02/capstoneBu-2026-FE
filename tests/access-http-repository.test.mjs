@@ -201,6 +201,29 @@ test('the workspace sees the consent chosen at onboarding and keeps changes', as
   assert.equal(again.consentChoice, 'accepted')
 })
 
+test('songs uploaded on this page stay with their workspace when the code is entered again', async () => {
+  const { repository } = setup((url) => {
+    if (url.endsWith('/workspaces/me')) return me(42)
+    if (url.endsWith('/tracks/upload'))
+      return fixtureResponse(201, 'workspace/track-upload.json')
+    return login(42)
+  })
+  const first = await repository.enter(CODE, signal())
+  const file = new File(['audio'], 'take.mp3', { type: 'audio/mpeg' })
+  await repository
+    .workspaceFor(first.sessionId)
+    .addSong({ file, inputKind: 'original', durationSeconds: 1 }, signal())
+
+  const again = await repository.enter(CODE, signal())
+  const workspace = repository.workspaceFor(again.sessionId)
+  const snapshot = await workspace.loadWorkspace(signal())
+  assert.deepEqual(
+    snapshot.songs.map((song) => song.id),
+    ['7'],
+  )
+  assert.equal(await workspace.loadSongAudio('7', signal()), file)
+})
+
 test('a cancelled onboarding is not completed', async () => {
   const { repository } = setup(() => login(42))
   const { sessionId } = await repository.enter(CODE, signal())

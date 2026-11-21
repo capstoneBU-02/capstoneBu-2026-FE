@@ -5,6 +5,7 @@ import type {
   TaskStage,
   WorkspaceTask,
 } from '../../../src/features/workspace/model.ts'
+import type { AddSongFailureCode } from '../../../src/features/workspace/repository.ts'
 
 // What browser tests call on window.workspaceTest. Each harness module
 // provides its part; harness.tsx puts them together.
@@ -39,7 +40,8 @@ export interface TestControls {
   failNextTaskLoad(code: 'load-failed' | 'task-unavailable' | 'expired'): void
   // pending-add keeps addSong requests open until settled here.
   resolveAdd(): void
-  failAdd(code: 'add-song-failed' | 'expired'): void
+  reportAddProgress(percent: number): void
+  failAdd(code: AddSongFailureCode | 'expired'): void
   addCalls(): Array<{
     fileName: string
     inputKind: SongInputKind

@@ -24,6 +24,9 @@ const dropzone = (page: Page) =>
   dialog(page).getByRole('button', { name: '파일을 끌어다 놓거나 선택하세요' })
 const alertText = (page: Page) => dialog(page).getByRole('alert')
 const status = (page: Page) => dialog(page).getByRole('status')
+// The chosen file's card and its length and size line.
+const fileCard = (page: Page) => dialog(page).locator('[data-invalid]')
+const fileMeta = (page: Page) => fileCard(page).locator('[data-alert]')
 const original = (page: Page) =>
   dialog(page).getByRole('radio', { name: '원곡' })
 const separated = (page: Page) =>
@@ -37,6 +40,10 @@ const UNREADABLE_MESSAGE =
   '이 파일은 재생할 수 없어요. 손상되지 않은 파일인지 확인하고 다시 올려 주세요.'
 const TIMEOUT_MESSAGE =
   '파일 길이를 확인하는 데 시간이 너무 오래 걸렸어요. 다시 확인하거나 다른 파일을 올려 주세요.'
+const TOO_LARGE_MESSAGE =
+  '50MB 이하 파일만 올릴 수 있어요. 용량을 줄여서 다시 올려 주세요.'
+const FOOTER_NOTE = '올린 파일은 이 워크스페이스에서만 열려요.'
+const MB = 1024 * 1024
 
 // 1.5KB of zeros; the harness probe decides each file's length by name.
 function audio(name: string, mimeType: string) {
@@ -70,15 +77,19 @@ async function pressNext(page: Page) {
   await page.keyboard.press('Enter')
 }
 
+// Files are made in the page, so one can be larger than Playwright lets
+// setFiles carry (50MB).
 async function dropFiles(
   target: Locator,
-  files: ReadonlyArray<{ name: string; type: string }>,
+  files: ReadonlyArray<{ name: string; type: string; size?: number }>,
 ) {
   const dataTransfer = await target.page().evaluateHandle((list) => {
     const transfer = new DataTransfer()
     for (const file of list)
       transfer.items.add(
-        new File([new Uint8Array(1536)], file.name, { type: file.type }),
+        new File([new Uint8Array(file.size ?? 1536)], file.name, {
+          type: file.type,
+        }),
       )
     return transfer
   }, files)
@@ -396,6 +407,13 @@ test('while adding the dialog stays open, and a failure keeps the file for a ret
   await next(page).click()
   await expect(status(page)).toHaveText('곡을 추가하고 있어요.')
   await expect(alertText(page)).toHaveCount(0)
+  // The footer note gives way to the upload progress.
+  const footer = dialog(page).getByText(/^(파일 (올리는|확인) 중|올린 파일은)/)
+  await expect(footer).toHaveText('파일 올리는 중')
+  await page.evaluate(() => window.workspaceTest.reportAddProgress(42))
+  await expect(footer).toHaveText('파일 올리는 중 42%')
+  await page.evaluate(() => window.workspaceTest.reportAddProgress(100))
+  await expect(footer).toHaveText('파일 확인 중')
   await expect(
     dialog(page).getByRole('button', { name: '취소' }),
   ).toBeDisabled()
@@ -417,12 +435,82 @@ test('while adding the dialog stays open, and a failure keeps the file for a ret
   )
   await expect(dialog(page).getByText('fresh_riff.mp3')).toBeVisible()
   await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
+  await expect(footer).toHaveText(FOOTER_NOTE)
 
   await next(page).click()
   await expect(alertText(page)).toHaveCount(0)
   await page.evaluate(() => window.workspaceTest.resolveAdd())
   await expect(dialog(page)).toHaveCount(0)
   await expect(main(page).getByText('fresh_riff.mp3')).toBeVisible()
+})
+
+test('a file the server refuses names the reason and waits for another file', async ({
+  page,
+}) => {
+  await openFromSidebar(page, 'pending-add')
+  await choose(page, audio('fresh_riff.mp3', 'audio/mpeg'))
+  await next(page).click()
+  // The server reads the length its own way and may refuse what passed here.
+  await page.evaluate(() => window.workspaceTest.failAdd('song-too-long'))
+  await expect(alertText(page)).toHaveText(TOO_LONG_MESSAGE)
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'true')
+  // The card and the status no longer call the file ready to upload.
+  await expect(status(page)).toHaveText('')
+  await expect(fileCard(page)).toHaveAttribute('data-invalid', 'true')
+  await expect(fileMeta(page)).toHaveAttribute('data-alert', 'true')
+  await pressNext(page)
+  expect(
+    await page.evaluate(() => window.workspaceTest.addCalls().length),
+  ).toBe(1)
+
+  await choose(page, audio('neon_harbor_live.mp3', 'audio/mpeg'))
+  await expect(alertText(page)).toHaveCount(0)
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
+  await expect(status(page)).toHaveText('올릴 수 있는 파일이에요.')
+  await expect(fileCard(page)).toHaveAttribute('data-invalid', 'false')
+  await next(page).click()
+  await page.evaluate(() => window.workspaceTest.failAdd('song-unsupported'))
+  await expect(alertText(page)).toHaveText(
+    '이 파일은 처리할 수 없어요. 다른 MP3, MP4 파일로 다시 올려 주세요.',
+  )
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'true')
+  await expect(status(page)).toHaveText('')
+  await expect(fileCard(page)).toHaveAttribute('data-invalid', 'true')
+  // The format is refused, not the length or size the card shows.
+  await expect(fileMeta(page)).toHaveAttribute('data-alert', 'false')
+
+  // A full workspace is not about the file, so the same file can be retried.
+  await choose(page, audio('late_train_cover.mp4', 'video/mp4'))
+  await next(page).click()
+  await page.evaluate(() => window.workspaceTest.failAdd('storage-full'))
+  await expect(alertText(page)).toHaveText(
+    '작업 공간에 더 올릴 수 없어요. 올릴 수 있는 곡 수나 저장 용량을 모두 사용했어요.',
+  )
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
+  await expect(fileCard(page)).toHaveAttribute('data-invalid', 'false')
+})
+
+test('a file over 50MB is refused before its length is read', async ({
+  page,
+}) => {
+  await openFromSidebar(page)
+  await dropFiles(dropzone(page), [
+    { name: 'huge_live.mp3', type: 'audio/mpeg', size: 50 * MB + 1 },
+  ])
+  await expect(alertText(page)).toHaveText(TOO_LARGE_MESSAGE)
+  await expect(dialog(page).getByText('50.0MB', { exact: true })).toBeVisible()
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'true')
+  expect(
+    await page.evaluate(() => window.workspaceTest.probeCalls()),
+  ).not.toContain('huge_live.mp3')
+
+  // The limit itself is allowed.
+  await dropFiles(dialog(page).getByText('huge_live.mp3'), [
+    { name: 'neon_harbor_live.mp3', type: 'audio/mpeg', size: 50 * MB },
+  ])
+  await expect(alertText(page)).toHaveCount(0)
+  await expect(dialog(page).getByText('04:12 · 50.0MB')).toBeVisible()
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
 })
 
 test('an expired session while adding closes the dialog and shows the expiry state', async ({
