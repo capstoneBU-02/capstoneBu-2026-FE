@@ -151,6 +151,15 @@ export function songFileMessage(
   }
 }
 
+// A song that passed every check but whose sound the server could not read
+// (PREPROCESS_INVALID_AUDIO). Its task cannot be sent again; only another
+// file helps.
+export function invalidAudioAdvice(
+  policy: UploadPolicy = UPLOAD_POLICY,
+): string {
+  return `올린 파일에서 소리를 읽지 못했어요. 다른 ${formatLabels(policy)} 파일로 다시 올려 보세요.`
+}
+
 // The server's reasons share the wording of the checks above; it may still
 // refuse a file that passed them, as it reads the length its own way.
 export function addSongFailureMessage(

@@ -57,6 +57,7 @@ import { ProcessingPanel } from './ProcessingPanel.tsx'
 import { LoadingState, ProblemState } from './StateMessage.tsx'
 import { TabDownloadFailure, TabDownloadMenu } from './TabDownload.tsx'
 import {
+  InvalidAudioPanel,
   NoGuitarPanel,
   TaskFailurePanel,
   type TaskRecoveryActions,
@@ -125,12 +126,13 @@ function TaskBody({
   const { task } = detail
   if (isTaskInProgress(task))
     return <ProcessingPanel detail={detail} refreshFailed={refreshFailed} />
-  if (task.processingStatus === 'failed')
-    return task.failureKind === 'no-guitar' ? (
-      <NoGuitarPanel detail={detail} {...recovery} />
-    ) : (
-      <TaskFailurePanel detail={detail} {...recovery} />
-    )
+  if (task.processingStatus === 'failed') {
+    if (task.failureKind === 'no-guitar')
+      return <NoGuitarPanel detail={detail} {...recovery} />
+    if (task.failureKind === 'invalid-audio')
+      return <InvalidAudioPanel detail={detail} {...recovery} />
+    return <TaskFailurePanel detail={detail} {...recovery} />
+  }
   return (
     <TaskTab
       key={tabMadeFrom(task)}

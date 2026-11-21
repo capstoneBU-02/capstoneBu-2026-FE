@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { invalidAudioAdvice } from '../../add-song/songFile.ts'
 import { Button } from '../../../shared/ui/Button.tsx'
 import { Icon } from '../../../shared/ui/Icon.tsx'
 import type {
@@ -139,6 +140,35 @@ export function NoGuitarPanel({
           구간 다시 정하기
         </Button>
         <Button
+          compact
+          onClick={(event) => uploadOther(task, event.currentTarget)}
+        >
+          다른 파일 올리기
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+// The body of a task whose song the server could not read at all
+// (PREPROCESS_INVALID_AUDIO). Another section of the same file meets the same
+// failure, so only another file is offered.
+export function InvalidAudioPanel({
+  detail,
+  uploadOther,
+}: { detail: TaskDetail } & Pick<TaskRecoveryActions, 'uploadOther'>) {
+  const headingId = useId()
+  const { task } = detail
+  return (
+    <section className={styles.panel} aria-labelledby={headingId}>
+      <h2 id={headingId} className={styles.title}>
+        <Icon name="alertTriangle" />
+        음원을 읽지 못했어요
+      </h2>
+      <p className={styles.advice}>{invalidAudioAdvice()}</p>
+      <div className={styles.actions}>
+        <Button
+          variant="primary"
           compact
           onClick={(event) => uploadOther(task, event.currentTarget)}
         >

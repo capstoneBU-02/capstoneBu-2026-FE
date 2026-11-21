@@ -168,4 +168,12 @@ test('status changes are announced with what happened', () => {
     }),
     '기타 소리를 거의 찾지 못했어요.',
   )
+  for (const inputKind of ['original', 'separated-guitar'])
+    assert.equal(
+      announce(
+        { ...base, processingStatus: 'failed', failureKind: 'invalid-audio' },
+        inputKind,
+      ),
+      '음원을 읽지 못했어요.',
+    )
 })

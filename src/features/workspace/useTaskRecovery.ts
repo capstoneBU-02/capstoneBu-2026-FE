@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { failsAgainOnRetry } from './format.ts'
 import type { WorkspaceTask } from './model.ts'
 import type { UseTaskDetailResult } from './useTaskDetail.ts'
 import type { UseWorkspaceResult } from './useWorkspace.ts'
@@ -82,10 +83,7 @@ export function useTaskRecovery({
     if (result.status === 'failed') {
       if (reloaded.status === 'loaded') {
         const task = reloaded.detail?.task
-        if (
-          task?.processingStatus !== 'failed' ||
-          task.failureKind === 'no-guitar'
-        )
+        if (task?.processingStatus !== 'failed' || failsAgainOnRetry(task))
           restoreFocus()
       }
       return 'failed'

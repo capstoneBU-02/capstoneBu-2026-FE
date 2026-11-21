@@ -6,6 +6,7 @@ import {
   checkSongDuration,
   formatClockDuration,
   formatFileSize,
+  invalidAudioAdvice,
   isAllowedSongFile,
   isFileRefusal,
   precheckSongFile,
@@ -165,6 +166,18 @@ test('hint and messages derive from the policy so a limit changes in one place',
     uploadHintLabel({ ...UPLOAD_POLICY, maxDurationSeconds: 45 }),
     'MP3, MP4 · 최대 45초',
   )
+})
+
+test('a song the server could not read asks for another file in the allowed formats', () => {
+  assert.equal(
+    invalidAudioAdvice(),
+    '올린 파일에서 소리를 읽지 못했어요. 다른 MP3, MP4 파일로 다시 올려 보세요.',
+  )
+  const mp3Only = {
+    ...UPLOAD_POLICY,
+    formats: UPLOAD_POLICY.formats.filter((format) => format.label === 'MP3'),
+  }
+  assert.match(invalidAudioAdvice(mp3Only), /다른 MP3 파일로/)
 })
 
 test('a refused add names what the server found, with the same wording as the checks', () => {
