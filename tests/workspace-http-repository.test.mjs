@@ -155,12 +155,6 @@ test('consent is kept on this device and sends nothing', async () => {
 test('features without an API yet fail with their own code and send nothing', async () => {
   const { repository, calls } = setup(() => assert.fail('no request'))
   for (const [call, code] of [
-    [() => repository.loadTask('1', signal()), 'task-unavailable'],
-    [() => repository.createTask({}, signal()), 'create-task-failed'],
-    [() => repository.reviseTask('1', {}, signal()), 'revise-task-failed'],
-    [() => repository.cancelTask('1', signal()), 'cancel-task-failed'],
-    [() => repository.retryTask('1', signal()), 'retry-task-failed'],
-    [() => repository.loadSeparatedAudio('1', signal()), 'audio-unavailable'],
     [() => repository.loadTab('1', signal()), 'tab-unavailable'],
     [
       () => repository.saveCopyStatus('1', true, signal()),

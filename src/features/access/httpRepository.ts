@@ -5,6 +5,7 @@ import {
   type PageSongs,
 } from '../workspace/httpRepository.ts'
 import type { ConsentChoice, WorkspaceInfo } from '../workspace/model.ts'
+import { createPageTasks, type PageTasks } from '../workspace/pageTasks.ts'
 import type { WorkspaceRepository } from '../workspace/repository.ts'
 import {
   normalizeTesterCode,
@@ -70,6 +71,7 @@ export function createHttpAccessRepository({
   const sessions = new Map<string, Session>()
   const onboardings = new Map<string, Onboarding>()
   const pageSongs = new Map<string, PageSongs>()
+  const pageTasks = new Map<string, PageTasks>()
 
   function songsOf(workspaceId: string) {
     let songs = pageSongs.get(workspaceId)
@@ -78,6 +80,15 @@ export function createHttpAccessRepository({
       pageSongs.set(workspaceId, songs)
     }
     return songs
+  }
+
+  function tasksOf(workspaceId: string) {
+    let tasks = pageTasks.get(workspaceId)
+    if (!tasks) {
+      tasks = createPageTasks()
+      pageTasks.set(workspaceId, tasks)
+    }
+    return tasks
   }
 
   function sessionOf(sessionId: string) {
@@ -136,6 +147,7 @@ export function createHttpAccessRepository({
               updateOnboarding(workspaceId, { consentChoice: choice }),
           },
           songs: songsOf(workspaceId),
+          tasks: tasksOf(workspaceId),
         }),
       })
       return resultOf(workspaceId)
