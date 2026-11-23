@@ -1,7 +1,7 @@
 // The task half of the workspace http repository. A task is a segment
 // (task id = segment_id); the server keeps its stem and tab apart, and this
-// file shows them as one task (taskState.ts). Without a list API (B1) the
-// page knows only the tasks it made (PageTasks).
+// file shows them as one task (taskState.ts). The server lists the segments;
+// the page keeps what the server does not, such as the part (PageTasks).
 
 import {
   apiErrorOf,
@@ -9,15 +9,18 @@ import {
   type HttpClient,
 } from '../../api/http.ts'
 import type { RemoteFiles } from '../../api/remoteFile.ts'
+import { mapConcurrently, REQUESTS_AT_ONCE } from '../../shared/concurrency.ts'
 import { scoreFromNotes } from '../tab/scoreFromNotes.ts'
 import {
   canSendSectionEdit,
   sectionEditKind,
 } from '../edit-section/sectionEdit.ts'
+import { parseSectionName } from '../new-section/sectionForm.ts'
 import type {
   FailureView,
   ProcessingStatusResponse,
   SegmentCreateRequest,
+  SegmentResponse,
   SegmentUpdateRequest,
 } from './apiTypes.ts'
 import { failureOf } from './httpErrors.ts'
@@ -44,12 +47,17 @@ import {
   readTabCreated,
   readTabResult,
   readWorkFailure,
+  sectionNameOf,
   segmentNameValue,
   tabRequestFor,
   tabTranscriptionOf,
   toMilliseconds,
 } from './taskAdapter.ts'
-import { keptResult, newTaskLabels } from './taskLabels.ts'
+import {
+  keptResult,
+  newTaskLabels,
+  RESTORED_TASK_LABELS,
+} from './taskLabels.ts'
 import { isWorkReady, taskStateOf } from './taskState.ts'
 
 const MESSAGES = {
@@ -84,6 +92,12 @@ const ALREADY_RUNNING: ReadonlySet<string> = new Set([
 
 const codeOf = (error: unknown) => apiErrorOf(error)?.code ?? ''
 
+// A segment from its track's list, with the song it belongs to.
+export interface ListedSegment {
+  readonly songId: string
+  readonly segment: SegmentResponse
+}
+
 export type HttpTasks = Pick<
   WorkspaceRepository,
   | 'loadTask'
@@ -94,16 +108,33 @@ export type HttpTasks = Pick<
   | 'loadSeparatedAudio'
   | 'loadTab'
 > & {
-  // The page's tasks for the list, reading those in progress again. Throws
-  // only for a rejected session or a cancelled signal; a task that fails
-  // to read keeps its last state.
-  list(signal: AbortSignal): Promise<WorkspaceTask[]>
+  // The listed segments and the page's tasks the list missed, in the order
+  // they were made. A known task is read again only while in progress or
+  // once its segment changed, and one that fails to read keeps its last
+  // state. A segment the page has no record of has none to keep, so its
+  // failed read fails the list, as do a rejected session and a cancelled
+  // signal.
+  list(
+    listed: readonly ListedSegment[],
+    signal: AbortSignal,
+  ): Promise<WorkspaceTask[]>
 }
 
 interface ReadResult {
   readonly record: PageTask
   readonly detail: TaskDetail
 }
+
+type SegmentTaskValues = Pick<
+  WorkspaceTask,
+  'songId' | 'sectionName' | 'part' | 'tuningId' | 'partLabel' | 'tuningLabel'
+>
+
+const keptResultId = (record: PageTask) =>
+  `kept-${record.task.id}-${record.previousResults.length + 1}`
+
+const byCreation = (a: WorkspaceTask, b: WorkspaceTask) =>
+  Number(a.id) - Number(b.id)
 
 export function createHttpTasks({
   client,
@@ -120,6 +151,87 @@ export function createHttpTasks({
 }): HttpTasks {
   const songOf = (songId: string) =>
     songs.list().find((song) => song.id === songId)
+
+  // A segment as a task waiting for its stem, before its status is read.
+  function queuedRecord(
+    segment: SegmentResponse,
+    values: SegmentTaskValues,
+  ): PageTask {
+    return {
+      task: {
+        id: String(segment.segment_id),
+        ...values,
+        rangeStartSeconds: segment.start_ms / 1000,
+        rangeEndSeconds: segment.end_ms / 1000,
+        processingStatus: 'queued',
+        failureKind: null,
+        progressPercent: null,
+        hasSeparatedAudio: false,
+        comparisonCount: 0,
+        copyStatus: 'unreviewed',
+        updatedAtLabel: updatedAtLabel(segment.updated_at, clock()),
+      },
+      previousResults: [],
+      stemId: null,
+      tabId: null,
+      updatedAt: segment.updated_at,
+      segmentVersion: segment.version,
+    }
+  }
+
+  // A segment this page has no record of, as after entering the code again.
+  // It shows the name without its number, and no part.
+  function restoredRecord({ songId, segment }: ListedSegment): PageTask {
+    return queuedRecord(segment, {
+      songId,
+      sectionName: sectionNameOf(segment.name),
+      ...RESTORED_TASK_LABELS,
+    })
+  }
+
+  // A segment changed since the page took it, as from another tab. The
+  // range and name come from the server; the name keeps its number while
+  // the server's name stands for the same section. A moved range starts
+  // over as a revise on this page does, keeping the finished result (D10).
+  function changedRecord(record: PageTask, segment: SegmentResponse): PageTask {
+    const { task } = record
+    const listedName = sectionNameOf(segment.name)
+    const sameSection =
+      parseSectionName(task.sectionName)?.baseName === listedName
+    const moved =
+      segment.start_ms !== toMilliseconds(task.rangeStartSeconds) ||
+      segment.end_ms !== toMilliseconds(task.rangeEndSeconds)
+    const renamed: PageTask = {
+      ...record,
+      task: {
+        ...task,
+        sectionName: sameSection ? task.sectionName : listedName,
+        rangeStartSeconds: segment.start_ms / 1000,
+        rangeEndSeconds: segment.end_ms / 1000,
+      },
+      updatedAt: segment.updated_at,
+      segmentVersion: segment.version,
+    }
+    if (!moved) return renamed
+    const keepsResult = sectionEditKind(task) === 'revise'
+    return {
+      ...renamed,
+      task: {
+        ...renamed.task,
+        processingStatus: 'queued',
+        failureKind: null,
+        progressPercent: null,
+        hasSeparatedAudio: false,
+        comparisonCount: keepsResult ? 0 : task.comparisonCount,
+        copyStatus: keepsResult ? 'unreviewed' : task.copyStatus,
+      },
+      previousResults: keepsResult
+        ? [keptResult(task, keptResultId(record)), ...record.previousResults]
+        : record.previousResults,
+      stemId: null,
+      tabId: null,
+    }
+  }
 
   async function getStatus(
     taskId: string,
@@ -326,32 +438,15 @@ export function createHttpTasks({
       if (signal.aborted) throw error
       throw failed('create-task-failed', error)
     }
-    const task: WorkspaceTask = {
-      id: String(segment.segment_id),
+    // Once the segment exists the task does. Failing the create after it
+    // would have the screen make a second segment for the same section.
+    const record = queuedRecord(segment, {
       songId: input.songId,
       sectionName: input.sectionName,
       part: input.part,
       tuningId: input.tuningId,
       ...labels,
-      rangeStartSeconds: segment.start_ms / 1000,
-      rangeEndSeconds: segment.end_ms / 1000,
-      processingStatus: 'queued',
-      failureKind: null,
-      progressPercent: null,
-      hasSeparatedAudio: false,
-      comparisonCount: 0,
-      copyStatus: 'unreviewed',
-      updatedAtLabel: updatedAtLabel(segment.updated_at, clock()),
-    }
-    // Once the segment exists the task does. Failing the create after it
-    // would have the screen make a second segment for the same section.
-    const record: PageTask = {
-      task,
-      previousResults: [],
-      stemId: null,
-      tabId: null,
-      updatedAt: segment.updated_at,
-    }
+    })
     return afterChange(record, signal, NOTHING_REQUESTED)
   }
 
@@ -389,6 +484,7 @@ export function createHttpTasks({
     }
 
     let range = { start: task.rangeStartSeconds, end: task.rangeEndSeconds }
+    let segmentVersion = record.segmentVersion
     let reusedTab = false
     try {
       if (moved || renamed) {
@@ -398,6 +494,7 @@ export function createHttpTasks({
           read: readSegment,
         })
         range = { start: data.start_ms / 1000, end: data.end_ms / 1000 }
+        segmentVersion = data.version
       }
       // A moved range gets a new stem on the next read; the same range
       // makes its tab again from the guitar it has.
@@ -436,16 +533,11 @@ export function createHttpTasks({
         copyStatus: keepsResult ? 'unreviewed' : task.copyStatus,
       },
       previousResults: keepsResult
-        ? [
-            keptResult(
-              task,
-              `kept-${taskId}-${record.previousResults.length + 1}`,
-            ),
-            ...record.previousResults,
-          ]
+        ? [keptResult(task, keptResultId(record)), ...record.previousResults]
         : record.previousResults,
       stemId: moved ? null : record.stemId,
       tabId: moved ? null : record.tabId,
+      segmentVersion,
     }
     return afterChange(revised, signal)
   }
@@ -570,6 +662,51 @@ export function createHttpTasks({
     }
   }
 
+  // Without a last state to show, a segment the page has no record of fails
+  // the list when it cannot be read. One stopped or deleted stays gone.
+  async function restore(
+    listed: ListedSegment,
+    signal: AbortSignal,
+  ): Promise<WorkspaceTask | null> {
+    const record = restoredRecord(listed)
+    const taskId = record.task.id
+    const result = await read(record, signal)
+    if (!result) {
+      tasks.remove(taskId)
+      return null
+    }
+    // Another list may have restored it meanwhile.
+    if (!tasks.get(taskId) && !tasks.isGone(taskId)) tasks.put(result.record)
+    return result.record.task
+  }
+
+  // A list sent before a change on this page holds an older version and
+  // leaves the task as the page has it.
+  async function sync(
+    listed: ListedSegment,
+    signal: AbortSignal,
+  ): Promise<WorkspaceTask | null> {
+    const record = tasks.get(String(listed.segment.segment_id))
+    if (!record) return restore(listed, signal)
+    if (listed.segment.version <= record.segmentVersion)
+      return refresh(record, signal)
+    const changed = changedRecord(record, listed.segment)
+    try {
+      const result = await read(changed, signal)
+      if (!result) {
+        drop(record)
+        return null
+      }
+      keep(record, result.record)
+      return result.record.task
+    } catch (error) {
+      if (signal.aborted || isSessionRejected(error)) throw error
+      // The server has the change, so it shows as sent.
+      keep(record, changed)
+      return changed.task
+    }
+  }
+
   return {
     loadTask,
     createTask,
@@ -578,12 +715,26 @@ export function createHttpTasks({
     cancelTask,
     loadSeparatedAudio,
     loadTab,
-    async list(signal) {
-      const listed = await Promise.all(
-        tasks.list().map((record) => refresh(record, signal)),
+    async list(listed, signal) {
+      const listedIds = new Set(
+        listed.map(({ segment }) => String(segment.segment_id)),
       )
-      return listed
+      const jobs = [
+        ...listed
+          .filter(({ segment }) => !tasks.isGone(String(segment.segment_id)))
+          .map((item) => () => sync(item, signal)),
+        // Made on this page after the list was sent.
+        ...tasks
+          .list()
+          .filter((record) => !listedIds.has(record.task.id))
+          .map((record) => () => refresh(record, signal)),
+      ]
+      const synced = await mapConcurrently(jobs, REQUESTS_AT_ONCE, (job) =>
+        job(),
+      )
+      return synced
         .filter((task): task is WorkspaceTask => task !== null)
+        .sort(byCreation)
         .map((task) => ({ ...task }))
     },
   }

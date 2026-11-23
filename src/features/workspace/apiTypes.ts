@@ -17,6 +17,17 @@ export interface TrackUploadResponse {
   readonly is_separated_stem: boolean
 }
 
+// GET /tracks: the workspace's tracks, newest first. media_type and
+// created_at also arrive.
+export interface TrackListResponse {
+  readonly items: readonly TrackResponse[]
+}
+
+export interface TrackResponse extends TrackUploadResponse {
+  // Only a track with sections is asked for them.
+  readonly segment_count: number
+}
+
 // Section names the server knows (SEG). It has no solo, and the number in a
 // name like "코러스 2" stays on the screen.
 export type SegmentNameValue =
@@ -38,13 +49,23 @@ export interface SegmentUpdateRequest {
   readonly name?: SegmentNameValue
 }
 
-// Both answers above. track_id, duration_ms, name, version and created_at
-// also arrive.
+// Both answers above, and each item of GET /tracks/{track_id}/segments.
+// track_id, duration_ms and created_at also arrive.
 export interface SegmentResponse {
   readonly segment_id: number
   readonly start_ms: number
   readonly end_ms: number
+  // One of SegmentNameValue, or null for a section sent without one.
+  readonly name: string | null
+  // Goes up only when the range or the name changes.
+  readonly version: number
   readonly updated_at: string
+}
+
+// GET /tracks/{track_id}/segments, by start time and then id. A track of
+// another workspace answers 404 TRACK_NOT_FOUND.
+export interface SegmentListResponse {
+  readonly items: readonly SegmentResponse[]
 }
 
 export const STEM_STATUSES = [

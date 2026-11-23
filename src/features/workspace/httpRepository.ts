@@ -1,9 +1,16 @@
 import { apiErrorOf, type HttpClient } from '../../api/http.ts'
 import { createRemoteFiles, type RemoteFiles } from '../../api/remoteFile.ts'
+import { mapConcurrently, REQUESTS_AT_ONCE } from '../../shared/concurrency.ts'
 import { songUploadFile } from '../add-song/songFile.ts'
-import { readTrackUpload, readWorkspaceMe, toWorkspaceSong } from './adapter.ts'
+import {
+  readTrackList,
+  readTrackUpload,
+  readWorkspaceMe,
+  toWorkspaceSong,
+} from './adapter.ts'
 import { expiredError, failureOf } from './httpErrors.ts'
-import { createHttpTasks } from './httpTasks.ts'
+import { createHttpTasks, type ListedSegment } from './httpTasks.ts'
+import { readSegmentList } from './taskAdapter.ts'
 import type {
   ConsentChoice,
   SavedConsentChoice,
@@ -27,15 +34,23 @@ export interface LocalConsent {
   save(choice: SavedConsentChoice): void
 }
 
-// Songs uploaded from this page. Without a list API they are the only songs
-// the page knows, and without an audio API the chosen file stands in for
-// the song's audio. The access repository keeps one per workspace, so
-// entering the same code again keeps them until the page reloads.
+// The workspace's songs as the server last listed them, with the files of
+// those uploaded from this page. Without an audio API the chosen file stands
+// in for the song's audio, so only those play. The access repository keeps
+// one per workspace, so entering the same code again keeps the files until
+// the page reloads.
 export interface PageSongs {
   list(): readonly WorkspaceSong[]
   add(song: WorkspaceSong, file: File): void
+  // Takes the server's songs. One uploaded while the list was on its way is
+  // not in it yet and stays; the page cannot delete a song.
+  sync(listed: readonly WorkspaceSong[]): void
   fileOf(songId: string): File | undefined
 }
+
+// Track ids grow, so this is the order the songs were added in.
+const byAdded = (a: WorkspaceSong, b: WorkspaceSong) =>
+  Number(a.id) - Number(b.id)
 
 export function createPageSongs(): PageSongs {
   let songs: readonly WorkspaceSong[] = []
@@ -45,6 +60,13 @@ export function createPageSongs(): PageSongs {
     add(song, file) {
       songs = [...songs.filter((item) => item.id !== song.id), song]
       files.set(song.id, file)
+    },
+    sync(listed) {
+      const listedIds = new Set(listed.map((song) => song.id))
+      songs = [
+        ...listed,
+        ...songs.filter((song) => !listedIds.has(song.id)),
+      ].sort(byAdded)
     },
     fileOf: (songId) => files.get(songId),
   }
@@ -76,9 +98,9 @@ function addSongError(error: unknown): WorkspaceRepositoryError {
   return failureOf(code, ADD_SONG_MESSAGES[code], error)
 }
 
-// The workspace API so far: the session check, song upload, tasks with their
-// separated guitar and tab. The copy status fails with its own code until
-// its API is connected.
+// The workspace API so far: the session check, the song and section lists,
+// song upload, tasks with their separated guitar and tab. The copy status
+// fails with its own code until its API is connected.
 export function createHttpWorkspaceRepository({
   client,
   workspace,
@@ -97,20 +119,44 @@ export function createHttpWorkspaceRepository({
   clock?: () => Date
 }): WorkspaceRepository {
   const work = createHttpTasks({ client, songs, tasks, files, clock })
+
+  // The sections of each song that has any.
+  async function listSegments(signal: AbortSignal): Promise<ListedSegment[]> {
+    const { data } = await client.request('GET', '/tracks', {
+      signal,
+      read: readTrackList,
+    })
+    songs.sync(data.items.map(toWorkspaceSong))
+    const lists = await mapConcurrently(
+      data.items.filter((track) => track.segment_count > 0),
+      REQUESTS_AT_ONCE,
+      async ({ track_id }) => {
+        const { data: segments } = await client.request(
+          'GET',
+          `/tracks/${track_id}/segments`,
+          { signal, read: readSegmentList },
+        )
+        return segments.items.map((segment) => ({
+          songId: String(track_id),
+          segment,
+        }))
+      },
+    )
+    return lists.flat()
+  }
+
   return {
     async loadWorkspace(signal) {
-      let workspaceId: number
       let listed: WorkspaceTask[]
       try {
         const { data } = await client.request('GET', '/workspaces/me', {
           signal,
           read: readWorkspaceMe,
         })
-        workspaceId = data.workspace_id
         // Entering another code in another tab replaces the session cookie,
         // so this page would act on a different workspace.
-        if (String(workspaceId) !== workspace.id) throw expiredError()
-        listed = await work.list(signal)
+        if (String(data.workspace_id) !== workspace.id) throw expiredError()
+        listed = await work.list(await listSegments(signal), signal)
       } catch (error) {
         if (signal.aborted) throw error
         throw failureOf('load-failed', LOAD_FAILED_MESSAGE, error)

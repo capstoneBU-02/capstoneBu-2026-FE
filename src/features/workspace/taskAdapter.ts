@@ -17,6 +17,7 @@ import {
   type FailureView,
   type ProcessingStatusResponse,
   type RetryResponse,
+  type SegmentListResponse,
   type SegmentNameValue,
   type SegmentResponse,
   type StemCreatedResponse,
@@ -31,14 +32,24 @@ import {
   type WorkFailureResponse,
 } from './apiTypes.ts'
 
-export function readSegment(data: unknown): SegmentResponse {
-  const segment = readObject(data)
+function readSegmentAt(value: unknown, path: string): SegmentResponse {
+  const segment = readObject(value, path)
   return {
     segment_id: segment.integer('segment_id'),
     start_ms: segment.integer('start_ms'),
     end_ms: segment.integer('end_ms'),
+    name: segment.nullable('name', readString),
+    version: segment.integer('version'),
     updated_at: segment.string('updated_at'),
   }
+}
+
+export function readSegment(data: unknown): SegmentResponse {
+  return readSegmentAt(data, 'data')
+}
+
+export function readSegmentList(data: unknown): SegmentListResponse {
+  return { items: readObject(data).array('items', readSegmentAt) }
 }
 
 export function readStemCreated(data: unknown): StemCreatedResponse {
@@ -207,6 +218,17 @@ export function segmentNameValue(
 ): SegmentNameValue | undefined {
   const parsed = parseSectionName(sectionName)
   return parsed ? SEGMENT_NAME_VALUES[parsed.baseName] : undefined
+}
+
+const SECTION_NAMES: ReadonlyMap<string, string> = new Map(
+  Object.entries(SEGMENT_NAME_VALUES).map(([name, value]) => [value, name]),
+)
+
+// The section name a server name stands for, without the number the server
+// does not keep. This page sends no name only for a solo, so a segment
+// without one, or with a name the page does not know, reads as one.
+export function sectionNameOf(name: string | null): string {
+  return (name !== null && SECTION_NAMES.get(name)) || '솔로'
 }
 
 // The section inputs are whole tenths, so rounding only removes float noise.
