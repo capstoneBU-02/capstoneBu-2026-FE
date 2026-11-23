@@ -20,9 +20,11 @@ const form = (page: Page) => main(page).getByRole('form', { name: '새 구간' }
 const region = (page: Page, name: string) =>
   main(page).getByRole('region', { name })
 
-interface SegmentRange {
-  start_ms: number
-  end_ms: number
+// The body of PATCH /segments/31: a range, a server name or both.
+interface SegmentChange {
+  start_ms?: number
+  end_ms?: number
+  name?: string
 }
 
 // The server side of one section: what processing-status reports now, the
@@ -34,24 +36,32 @@ async function serveSection(page: Page, failure: unknown) {
   const calls: string[] = []
   const created: unknown[] = []
   const patched: unknown[] = []
+  let segment = fixtureData('segment-create')
   await page.route(`${API}/tracks/7/segments`, (route) => {
     if (route.request().method() !== 'POST') return route.fallback()
     calls.push('create segment')
     created.push(route.request().postDataJSON())
-    listSegment(page, fixtureData('segment-create'))
+    listSegment(page, segment)
     return answer(route, load('segment-create'), 201)
   })
-  // A moved range leaves the segment without a stem for it.
+  // As on the server, a moved range raises the version and leaves the
+  // segment without a stem for it, and any change moves updated_at.
   await page.route(`${API}/segments/31`, (route) => {
-    const range = route.request().postDataJSON() as SegmentRange
+    const change = route.request().postDataJSON() as SegmentChange
     calls.push('patch segment')
-    patched.push(range)
-    status = load('status-nothing-requested')
-    const segment = {
-      ...fixtureData('segment-create'),
-      ...range,
-      duration_ms: range.end_ms - range.start_ms,
-      version: 2,
+    patched.push(change)
+    const start = change.start_ms ?? Number(segment.start_ms)
+    const end = change.end_ms ?? Number(segment.end_ms)
+    const moved = start !== segment.start_ms || end !== segment.end_ms
+    const renamed = change.name !== undefined && change.name !== segment.name
+    if (moved) status = load('status-nothing-requested')
+    segment = {
+      ...segment,
+      ...change,
+      duration_ms: end - start,
+      version: Number(segment.version) + (moved ? 1 : 0),
+      updated_at:
+        moved || renamed ? new Date().toISOString() : segment.updated_at,
     }
     listSegment(page, segment)
     return answer(route, { success: true, data: segment })
