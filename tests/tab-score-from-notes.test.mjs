@@ -129,7 +129,7 @@ test('lengths take dotted values and tie what no single value holds', () => {
   ])
 })
 
-test('triplet onsets snap to the nearest sixteenth', () => {
+test('triplets snap to the nearest sixteenth and leave no gap between them', () => {
   const third = 1 / 3
   const score = convert(
     transcription([
@@ -141,11 +141,28 @@ test('triplet onsets snap to the nearest sixteenth', () => {
   )
   assert.deepEqual(score.bars[0].beats, [
     beat(16, [[1, 0]]),
-    beat(16, [[1, 1]]),
-    beat(16),
+    beat(8, [[1, 1]]),
     beat(16, [[1, 2]]),
     beat(2, [[1, 3]], true),
   ])
+})
+
+test('a note ends where its own end snaps, not after its rounded length', () => {
+  // From the second triplet eighth to the second beat's last triplet eighth.
+  const score = convert(transcription([note(1 / 3, 4 / 3, 1, 0)]))
+  assert.deepEqual(score.bars[0].beats, [
+    beat(16),
+    beat(4, [[1, 0]], true),
+    beat(2),
+    beat(16),
+  ])
+})
+
+test('a chord lasts as long as the notes it keeps', () => {
+  const score = convert(
+    transcription([note(0, 4, 1, 0, { confidence: 0.5 }), note(0, 1, 1, 5)]),
+  )
+  assert.deepEqual(score.bars[0].beats, [beat(4, [[1, 5]]), beat(2, [], true)])
 })
 
 test('the score starts at the bar of the first note and numbers it 1', () => {

@@ -78,37 +78,40 @@ function groupBy<T>(
 }
 
 // One note per string, the surest, lowest string number first.
-function chordOf(notes: readonly PlacedNote[]): readonly TabNote[] {
-  const surest = [...groupBy(notes, (note) => note.string).values()].map(
-    (same) =>
+function surestPerString(notes: readonly PlacedNote[]): PlacedNote[] {
+  return [...groupBy(notes, (note) => note.string).values()]
+    .map((same) =>
       same.reduce((kept, note) =>
         note.confidence > kept.confidence ? note : kept,
       ),
-  )
-  return surest
+    )
     .sort((a, b) => a.string - b.string)
-    .map(({ string, fret }) => ({
-      string,
-      fret,
-      hammerOn: false,
-      tieFromPrevious: false,
-    }))
 }
 
-// Each onset sounds for its longest note, up to the next onset.
+const tabNoteOf = ({ string, fret }: PlacedNote): TabNote => ({
+  string,
+  fret,
+  hammerOn: false,
+  tieFromPrevious: false,
+})
+
+// Each onset sounds until the last of its kept notes ends, up to the next
+// onset. A note's end snaps on its own, so triplets that follow each other
+// leave no gap.
 function soundsOf(notes: readonly PlacedNote[]): readonly Span[] {
   const onsets = [...groupBy(notes, (note) => tickOf(note.beat))].sort(
     ([a], [b]) => a - b,
   )
   return onsets.map(([tick, group], index) => {
-    const length = Math.max(
-      ...group.map((note) => Math.max(1, tickOf(note.beats))),
+    const kept = surestPerString(group)
+    const end = Math.max(
+      ...kept.map((note) => Math.max(tick + 1, tickOf(note.beat + note.beats))),
     )
     const next = onsets[index + 1]?.[0] ?? Infinity
     return {
       start: tick,
-      end: Math.min(tick + length, next),
-      notes: chordOf(group),
+      end: Math.min(end, next),
+      notes: kept.map(tabNoteOf),
     }
   })
 }
