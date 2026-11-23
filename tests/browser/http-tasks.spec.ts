@@ -238,3 +238,66 @@ test('구간 다시 정하기 moves an unreadable range and asks for its guitar 
     main(page).getByText('00:12.3–00:25.0', { exact: true }),
   ).toBeVisible()
 })
+
+const tabPanel = (page: Page) =>
+  main(page).getByRole('region', { name: '타브', exact: true })
+
+// A finished section reads its tab result; the guitar is left unready so
+// the test stays on the tab.
+async function serveResult(page: Page, answers: (() => [unknown, number])[]) {
+  const asked: string[] = []
+  await page.route(`${API}/tabs/88/result`, (route) => {
+    const [body, status] = answers[Math.min(asked.length, answers.length - 1)]()
+    asked.push(route.request().method())
+    return answer(route, body, status)
+  })
+  await page.route(`${API}/stems/54/playback`, (route) =>
+    answer(route, load('stem-not-ready'), 409),
+  )
+  return asked
+}
+
+test('a finished section draws its tab from the result notes', async ({
+  page,
+}) => {
+  await openWorkspace(page)
+  await uploadSong(page)
+  const server = await serveSection(page, load('stem-failed'))
+  const asked = await serveResult(page, [() => [load('tab-result'), 200]])
+  await createChorus(page)
+
+  server.show('status-completed')
+  const staff = tabPanel(page).getByRole('img', { name: /^타브 악보/ })
+  await refreshUntilVisible(page, staff)
+  // Eight notes on two bars of 4/4.
+  await expect(staff).toHaveAccessibleName('타브 악보 2마디')
+  await expect(tabPanel(page)).toContainText('초안 · 자동 생성')
+  expect(asked).toEqual(['GET'])
+  expect(server.calls).toEqual(['create segment', 'request stem'])
+})
+
+test('a tab result that fails offers 다시 시도 and draws on the next answer', async ({
+  page,
+}) => {
+  await openWorkspace(page)
+  await uploadSong(page)
+  const server = await serveSection(page, load('stem-failed'))
+  const asked = await serveResult(page, [
+    () => [load('tab-not-ready'), 409],
+    () => [load('tab-result'), 200],
+  ])
+  await createChorus(page)
+
+  server.show('status-completed')
+  const failure = tabPanel(page).getByRole('alert')
+  await refreshUntilVisible(page, failure)
+  await expect(failure).toContainText(
+    '타브를 불러오지 못했어요. 다시 시도해 주세요.',
+  )
+
+  await tabPanel(page).getByRole('button', { name: '다시 시도' }).click()
+  await expect(
+    tabPanel(page).getByRole('img', { name: '타브 악보 2마디' }),
+  ).toBeVisible()
+  expect(asked).toEqual(['GET', 'GET'])
+})
