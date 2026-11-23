@@ -76,9 +76,9 @@ function addSongError(error: unknown): WorkspaceRepositoryError {
   return failureOf(code, ADD_SONG_MESSAGES[code], error)
 }
 
-// The workspace API so far: the session check, song upload, tasks and their
-// separated guitar. Tabs and the copy status fail with their own code until
-// their APIs are connected.
+// The workspace API so far: the session check, song upload, tasks with their
+// separated guitar and tab. The copy status fails with its own code until
+// its API is connected.
 export function createHttpWorkspaceRepository({
   client,
   workspace,
@@ -166,7 +166,7 @@ export function createHttpWorkspaceRepository({
     cancelTask: work.cancelTask,
     retryTask: work.retryTask,
     loadSeparatedAudio: work.loadSeparatedAudio,
-    loadTab: () => notConnected('tab-unavailable'),
+    loadTab: work.loadTab,
     saveCopyStatus: () => notConnected('copy-status-failed'),
   }
 }

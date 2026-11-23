@@ -152,17 +152,12 @@ test('consent is kept on this device and sends nothing', async () => {
   assert.equal(calls.length, 0)
 })
 
-test('features without an API yet fail with their own code and send nothing', async () => {
+test('the copy status without an API yet fails with its own code and sends nothing', async () => {
   const { repository, calls } = setup(() => assert.fail('no request'))
-  for (const [call, code] of [
-    [() => repository.loadTab('1', signal()), 'tab-unavailable'],
-    [
-      () => repository.saveCopyStatus('1', true, signal()),
-      'copy-status-failed',
-    ],
-  ]) {
-    await assert.rejects(call(), { name: 'WorkspaceRepositoryError', code })
-  }
+  await assert.rejects(repository.saveCopyStatus('1', true, signal()), {
+    name: 'WorkspaceRepositoryError',
+    code: 'copy-status-failed',
+  })
   assert.equal(calls.length, 0)
 })
 

@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ApiError, apiErrorOf, createHttpClient } from '../src/api/http.ts'
 import { createRemoteFiles } from '../src/api/remoteFile.ts'
+import { parseTabScore } from '../src/features/tab/parseTabScore.ts'
 import { updatedAtLabel } from '../src/features/workspace/format.ts'
 import {
   createHttpWorkspaceRepository,
@@ -1022,6 +1023,104 @@ test('a cancelled download stays an AbortError', async () => {
   })
   const controller = new AbortController()
   const pending = repository.loadSeparatedAudio('31', controller.signal)
+  controller.abort()
+  await assert.rejects(pending, { name: 'AbortError' })
+})
+
+// --- loadTab ---------------------------------------------------------------
+
+const RESULT = `GET ${API}/tabs/88/result`
+
+test('a finished tab is read from its result and drawn as bars', async () => {
+  const { repository, calls } = setup(
+    { [RESULT]: fixture(200, 'tab-result') },
+    { tasks: tasksWith(COMPLETED) },
+  )
+  const score = await repository.loadTab('31', signal())
+  assert.deepEqual(keys(calls), [RESULT])
+  const parsed = parseTabScore(score)
+  assert.equal(parsed.ok, true, parsed.error)
+  assert.deepEqual(score.tuning, ['E4', 'B3', 'G3', 'D3', 'A2', 'E2'])
+  assert.deepEqual(
+    score.bars.map((bar) => bar.startSeconds),
+    [0.5, 2.5],
+  )
+  assert.equal(score.endSeconds, 4.5)
+  assert.deepEqual(
+    score.bars[0].beats[0].notes.map(({ string, fret }) => [string, fret]),
+    [
+      [2, 1],
+      [5, 3],
+    ],
+  )
+  // The last note of the first bar holds on into the second.
+  assert.deepEqual(score.bars[1].beats[0].notes, [
+    { string: 3, fret: 2, hammerOn: false, tieFromPrevious: true },
+  ])
+})
+
+test('a result with nothing to draw reaches the screen as a format failure', async () => {
+  const result = readFixture('workspace/tab-result.json')
+  result.data.time_signature = '6/8'
+  const { repository } = setup(
+    { [RESULT]: () => jsonResponse(200, result) },
+    { tasks: tasksWith(COMPLETED) },
+  )
+  const answer = await repository.loadTab('31', signal())
+  assert.equal(parseTabScore(answer).ok, false)
+})
+
+for (const [name, route, code] of [
+  [
+    'a tab the server says is not ready',
+    fixture(409, 'tab-not-ready'),
+    'tab-unavailable',
+  ],
+  ['a server that cannot be reached', noResponse, 'tab-unavailable'],
+  ['a server error', serverError, 'tab-unavailable'],
+  [
+    'a result that cannot be read',
+    () => jsonResponse(200, { success: true, data: { notes: [] } }),
+    'tab-unavailable',
+  ],
+  ['a rejected session', common(401, 'unauthorized-session'), 'expired'],
+]) {
+  test(`${name} fails the tab as ${code}`, async () => {
+    const { repository } = setup(
+      { [RESULT]: route },
+      { tasks: tasksWith(COMPLETED) },
+    )
+    await assert.rejects(repository.loadTab('31', signal()), {
+      name: 'WorkspaceRepositoryError',
+      code,
+    })
+  })
+}
+
+test('a task without a finished tab has none to load', async () => {
+  const { repository, calls } = setup(
+    {},
+    {
+      tasks: tasksWith(
+        { task: { processingStatus: 'processing' }, stemId: 54, tabId: 88 },
+        { task: { id: '32', processingStatus: 'completed' }, stemId: 54 },
+      ),
+    },
+  )
+  for (const taskId of ['31', '32', '99']) {
+    await assert.rejects(repository.loadTab(taskId, signal()), {
+      code: 'tab-unavailable',
+    })
+  }
+  assert.equal(calls.length, 0)
+})
+
+test('a cancelled tab request stays an AbortError', async () => {
+  const { repository } = setup(pendingFetch(), {
+    tasks: tasksWith(COMPLETED),
+  })
+  const controller = new AbortController()
+  const pending = repository.loadTab('31', controller.signal)
   controller.abort()
   await assert.rejects(pending, { name: 'AbortError' })
 })

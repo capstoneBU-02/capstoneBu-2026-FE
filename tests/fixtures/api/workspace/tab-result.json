@@ -1,0 +1,145 @@
+{
+  "success": true,
+  "data": {
+    "tab_id": 88,
+    "stem_id": 54,
+    "version": 1,
+    "result_type": "original",
+    "status": "needs_review",
+    "is_draft": true,
+    "segment": {
+      "segment_id": 31,
+      "name": "CHORUS",
+      "start_ms": 12300,
+      "end_ms": 27800
+    },
+    "condition": {
+      "tuning_id": "e_standard",
+      "tuning_notes": ["E2", "A2", "D3", "G3", "B3", "E4"],
+      "strings": 6,
+      "capo": 0
+    },
+    "tempo_bpm": 120.0,
+    "time_signature": "4/4",
+    "tempo_uncertain": false,
+    "review_reasons": ["LOW_CONFIDENCE_NOTES"],
+    "summary": {
+      "note_count": 8,
+      "low_confidence_count": 1,
+      "unplayable_count": 0
+    },
+    "notes": [
+      {
+        "start": 0.5,
+        "end": 1.0,
+        "pitch": 48,
+        "string": 5,
+        "fret": 3,
+        "beat": 0.0,
+        "duration": 1.0,
+        "confidence": 0.91,
+        "low_confidence": false,
+        "bend": [],
+        "playable": true
+      },
+      {
+        "start": 0.5,
+        "end": 1.0,
+        "pitch": 60,
+        "string": 2,
+        "fret": 1,
+        "beat": 0.0,
+        "duration": 1.0,
+        "confidence": 0.88,
+        "low_confidence": false,
+        "bend": [],
+        "playable": true
+      },
+      {
+        "start": 1.0,
+        "end": 1.25,
+        "pitch": 55,
+        "string": 3,
+        "fret": 0,
+        "beat": 1.0,
+        "duration": 0.5,
+        "confidence": 0.84,
+        "low_confidence": false,
+        "bend": [],
+        "playable": true
+      },
+      {
+        "start": 1.25,
+        "end": 1.5,
+        "pitch": 60,
+        "string": 2,
+        "fret": 1,
+        "beat": 1.5,
+        "duration": 0.5,
+        "confidence": 0.86,
+        "low_confidence": false,
+        "bend": [],
+        "playable": true
+      },
+      {
+        "start": 1.5,
+        "end": 2.0,
+        "pitch": 52,
+        "string": 4,
+        "fret": 2,
+        "beat": 2.0,
+        "duration": 1.0,
+        "confidence": 0.9,
+        "low_confidence": false,
+        "bend": [],
+        "playable": true
+      },
+      {
+        "start": 2.0,
+        "end": 2.75,
+        "pitch": 57,
+        "string": 3,
+        "fret": 2,
+        "beat": 3.0,
+        "duration": 1.5,
+        "confidence": 0.79,
+        "low_confidence": false,
+        "bend": [],
+        "playable": true
+      },
+      {
+        "start": 2.75,
+        "end": 3.0,
+        "pitch": 62,
+        "string": 2,
+        "fret": 3,
+        "beat": 4.5,
+        "duration": 0.5,
+        "confidence": 0.83,
+        "low_confidence": false,
+        "bend": [],
+        "playable": true
+      },
+      {
+        "start": 3.0,
+        "end": 4.5,
+        "pitch": 64,
+        "string": 1,
+        "fret": 0,
+        "beat": 5.0,
+        "duration": 3.0,
+        "confidence": 0.42,
+        "low_confidence": true,
+        "bend": [],
+        "playable": true
+      }
+    ],
+    "musicxml_url": "https://storage.example.test/tabs/88/v1/tab.musicxml?X-Amz-Expires=3600",
+    "musicxml_url_expires_at": "2026-11-21T07:13:21.004512Z",
+    "model": {
+      "config_version": "2026-11-19",
+      "transcription": "basic-pitch icassp2022-onnx",
+      "beat": "beat-this final0"
+    }
+  }
+}
