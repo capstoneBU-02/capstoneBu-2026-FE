@@ -102,6 +102,7 @@ function tasksWith(...records) {
       tabId: null,
       updatedAt: '2026-11-21T06:10:02.114820Z',
       segmentVersion: 1,
+      segmentUpdatedAt: '2026-11-21T06:10:02.114820Z',
       ...record,
       task: { ...TASK, ...record.task },
     })
@@ -661,10 +662,33 @@ test('a section changed in another tab brings its range and name, and is read ag
   )
 })
 
-test('a newer section with the same name keeps the number on the screen', async () => {
+// The server keeps the version for a new name alone and moves only the time.
+const RENAMED_ELSEWHERE = {
+  ...SEGMENT_31,
+  name: 'BRIDGE',
+  updated_at: '2026-11-21T06:31:47.902113Z',
+}
+
+test('a section renamed in another tab brings its name at the same version', async () => {
+  const { repository, calls } = setup(
+    {
+      ...listing(RENAMED_ELSEWHERE),
+      [STATUS]: fixture(200, 'status-completed'),
+    },
+    { tasks: tasksWith(COMPLETED) },
+  )
+  const [task] = (await repository.loadWorkspace(signal())).tasks
+  assert.deepEqual(keys(calls), [...LISTED, STATUS])
+  assert.equal(task.sectionName, '브리지')
+  // The same range keeps its result.
+  assert.equal(task.processingStatus, 'completed')
+  assert.equal(task.comparisonCount, 2)
+})
+
+test('a section renamed away and back elsewhere keeps the number on the screen', async () => {
   const { repository } = setup(
     {
-      ...listing({ ...SEGMENT_31, version: 2 }),
+      ...listing({ ...RENAMED_ELSEWHERE, name: 'CHORUS' }),
       [STATUS]: fixture(200, 'status-completed'),
     },
     { tasks: tasksWith(COMPLETED) },
@@ -673,6 +697,33 @@ test('a newer section with the same name keeps the number on the screen', async 
   assert.equal(task.sectionName, '코러스 2')
   assert.equal(task.processingStatus, 'completed')
   assert.equal(task.comparisonCount, 2)
+})
+
+test('a list sent before a rename does not bring back the old name', async () => {
+  const { repository } = setup(
+    {
+      // The list still has the section as it was before the change.
+      ...listing(SEGMENT_31),
+      [`PATCH ${API}/segments/31`]: () =>
+        jsonResponse(200, { success: true, data: RENAMED_ELSEWHERE }),
+      [TABS]: fixture(202, 'tab-created'),
+      [STATUS]: fixture(200, 'status-tab-running'),
+    },
+    { tasks: tasksWith(COMPLETED) },
+  )
+  await repository.reviseTask(
+    '31',
+    {
+      sectionName: '브리지',
+      part: 'lead',
+      tuningId: 'e-standard',
+      rangeStartSeconds: 12.3,
+      rangeEndSeconds: 27.8,
+    },
+    signal(),
+  )
+  const [task] = (await repository.loadWorkspace(signal())).tasks
+  assert.equal(task.sectionName, '브리지')
 })
 
 test('a changed section that fails to read comes back queued at its new range', async () => {
@@ -733,6 +784,57 @@ test('a listed section deleted before its read is left out', async () => {
     [STATUS]: fixture(404, 'segment-not-found'),
   })
   assert.deepEqual((await repository.loadWorkspace(signal())).tasks, [])
+})
+
+// As when another code's session took the cookie and this code was entered
+// again: the page keeps the same tasks, and the server finds the section.
+test('a section the server could not find comes back in a later list', async () => {
+  const { repository } = setup(
+    {
+      ...listing(SEGMENT_31),
+      [STATUS]: [
+        fixture(404, 'segment-not-found'),
+        fixture(200, 'status-completed'),
+      ],
+    },
+    { tasks: tasksWith({}) },
+  )
+  assert.deepEqual((await repository.loadWorkspace(signal())).tasks, [])
+  const { tasks } = await repository.loadWorkspace(signal())
+  assert.deepEqual(
+    tasks.map(({ id, processingStatus }) => [id, processingStatus]),
+    [['31', 'completed']],
+  )
+})
+
+async function until(condition) {
+  for (let turn = 0; turn < 100 && !condition(); turn += 1)
+    await new Promise((resolve) => setImmediate(resolve))
+  assert.ok(condition(), 'the awaited request was not sent')
+}
+
+test('a task stopped while the list reads it is left out and asked for nothing', async () => {
+  let answerListRead
+  const listRead = new Promise((resolve) => {
+    answerListRead = resolve
+  })
+  const { repository, calls } = setup(
+    {
+      ...listing(SEGMENT_31),
+      [STATUS]: [() => listRead, fixture(200, 'status-nothing-requested')],
+    },
+    { tasks: tasksWith({}) },
+  )
+  const listed = repository.loadWorkspace(signal())
+  await until(() => calls.length === LISTED.length + 1)
+  await repository.cancelTask('31', signal())
+  answerListRead(
+    fixtureResponse(200, 'workspace/status-nothing-requested.json'),
+  )
+
+  assert.deepEqual((await listed).tasks, [])
+  // No stem for the stopped section.
+  assert.deepEqual(keys(calls), [...LISTED, STATUS, STATUS])
 })
 
 for (const [name, routes] of [

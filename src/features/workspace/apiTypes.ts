@@ -57,7 +57,8 @@ export interface SegmentResponse {
   readonly end_ms: number
   // One of SegmentNameValue, or null for a section sent without one.
   readonly name: string | null
-  // Goes up only when the range or the name changes.
+  // Goes up only when the range changes. A new name alone keeps it and
+  // moves updated_at.
   readonly version: number
   readonly updated_at: string
 }
