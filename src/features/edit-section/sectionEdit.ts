@@ -120,7 +120,8 @@ export function sectionFormFromTask(
     number: name?.number ?? null,
     start: formatSectionTime(secondsToTenths(task.rangeStartSeconds)),
     end: formatSectionTime(secondsToTenths(task.rangeEndSeconds)),
-    part: inPolicy(policy.parts, task.part) ? task.part : fresh.part,
+    part:
+      policy.parts.find((option) => option.id === task.part)?.id ?? fresh.part,
     tuningId: inPolicy(policy.tunings, task.tuningId)
       ? task.tuningId
       : fresh.tuningId,

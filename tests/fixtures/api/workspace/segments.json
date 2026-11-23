@@ -1,0 +1,29 @@
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "segment_id": 31,
+        "track_id": 7,
+        "start_ms": 12300,
+        "end_ms": 27800,
+        "duration_ms": 15500,
+        "name": "CHORUS",
+        "version": 1,
+        "created_at": "2026-11-21T06:10:02.114820Z",
+        "updated_at": "2026-11-21T06:10:02.114820Z"
+      },
+      {
+        "segment_id": 33,
+        "track_id": 7,
+        "start_ms": 60000,
+        "end_ms": 84500,
+        "duration_ms": 24500,
+        "name": null,
+        "version": 1,
+        "created_at": "2026-11-21T06:25:40.770126Z",
+        "updated_at": "2026-11-21T06:25:40.770126Z"
+      }
+    ]
+  }
+}

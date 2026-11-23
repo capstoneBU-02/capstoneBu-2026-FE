@@ -32,6 +32,10 @@ export interface NewSongInput {
 
 export type SectionPart = 'rhythm' | 'lead'
 
+// A task the server lists without this page's record has no part, as the
+// server keeps none (B5). 구간 수정 asks for one.
+export type TaskPart = SectionPart | 'unset'
+
 // What the new-section screen hands to the repository. Labels for the part
 // and tuning come from the repository, not from the screen.
 export interface NewTaskInput {
@@ -51,7 +55,7 @@ export interface WorkspaceTask {
   readonly songId: string
   readonly sectionName: string
   // The ids prefill 구간 수정; the labels are what the screens show.
-  readonly part: SectionPart
+  readonly part: TaskPart
   readonly tuningId: string
   readonly partLabel: string
   readonly tuningLabel: string

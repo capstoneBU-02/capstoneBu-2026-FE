@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ApiError, apiErrorOf, createHttpClient } from '../src/api/http.ts'
 import {
+  readTrackList,
   readTrackUpload,
   readWorkspaceMe,
   toWorkspaceSong,
@@ -69,22 +70,126 @@ test('the session check reads only the workspace id', () => {
   })
 })
 
-test('opening the workspace checks the session and starts empty', async () => {
-  const { repository, calls } = setup(
-    () => fixtureResponse(200, 'workspace/me.json'),
-    'declined',
-  )
+const ME_URL = '/api/v1/workspaces/me'
+const TRACKS_URL = '/api/v1/tracks'
+const NO_ITEMS = () => jsonResponse(200, { success: true, data: { items: [] } })
+
+// The session check and the track list answered; anything else by `other`.
+function workspaceAnswer(other = () => assert.fail('no other request')) {
+  return (url, init) => {
+    if (url === ME_URL) return fixtureResponse(200, 'workspace/me.json')
+    if (url === TRACKS_URL && (init.method ?? 'GET') === 'GET')
+      return NO_ITEMS()
+    return other(url, init)
+  }
+}
+
+test('opening an empty workspace checks the session, then lists its tracks', async () => {
+  const { repository, calls } = setup(workspaceAnswer(), 'declined')
   const snapshot = await repository.loadWorkspace(signal())
 
-  assert.equal(calls.length, 1)
-  assert.equal(calls[0].url, '/api/v1/workspaces/me')
-  assert.equal(calls[0].init.method, 'GET')
-  assert.equal(calls[0].init.body, undefined)
+  assert.deepEqual(
+    calls.map(({ url, init }) => [init.method, url, init.body]),
+    [
+      ['GET', ME_URL, undefined],
+      ['GET', TRACKS_URL, undefined],
+    ],
+  )
   assert.deepEqual(snapshot, {
     workspace: WORKSPACE,
     songs: [],
     tasks: [],
     consentChoice: 'declined',
+  })
+})
+
+test('a track list reads each track with how many sections it has', () => {
+  const { items } = readTrackList(fixtureData('workspace/tracks.json'))
+  assert.deepEqual(items[1], {
+    track_id: 7,
+    filename: '봄날 커버 v2.mp3',
+    duration_ms: 213480,
+    is_separated_stem: false,
+    segment_count: 2,
+  })
+  assert.deepEqual(
+    items.map(({ track_id, segment_count }) => [track_id, segment_count]),
+    [
+      [9, 0],
+      [7, 2],
+    ],
+  )
+  assert.throws(
+    () => readTrackList({ items: [{ ...items[0], segment_count: -1 }] }),
+    {
+      name: 'ResponseShapeError',
+      path: 'data.items[0].segment_count',
+    },
+  )
+  assert.throws(() => readTrackList({}), { path: 'data.items' })
+})
+
+test('listed tracks become songs in the order they were added, and only tracks with sections are asked for them', async () => {
+  const { repository, calls } = setup((url) => {
+    if (url === ME_URL) return fixtureResponse(200, 'workspace/me.json')
+    if (url === TRACKS_URL) return fixtureResponse(200, 'workspace/tracks.json')
+    return NO_ITEMS()
+  })
+  const { songs } = await repository.loadWorkspace(signal())
+
+  assert.deepEqual(songs, [
+    {
+      id: '7',
+      name: '봄날 커버 v2',
+      fileName: '봄날 커버 v2.mp3',
+      inputKind: 'original',
+      durationSeconds: 213.48,
+    },
+    {
+      id: '9',
+      name: '기타 연습',
+      fileName: '기타 연습.mp4',
+      inputKind: 'separated-guitar',
+      durationSeconds: 95.04,
+    },
+  ])
+  assert.deepEqual(
+    calls.map(({ url }) => url),
+    [ME_URL, TRACKS_URL, '/api/v1/tracks/7/segments'],
+  )
+})
+
+test('a listed song plays only when it was uploaded from this page', async () => {
+  const songs = createPageSongs()
+  const file = new File(['audio'], '봄날 커버 v2.mp3')
+  songs.add(
+    toWorkspaceSong(
+      readTrackUpload(fixtureData('workspace/track-upload.json')),
+    ),
+    file,
+  )
+  const { repository } = setup(
+    (url) => {
+      if (url === ME_URL) return fixtureResponse(200, 'workspace/me.json')
+      if (url === TRACKS_URL)
+        return fixtureResponse(200, 'workspace/tracks.json')
+      return NO_ITEMS()
+    },
+    'undecided',
+    { songs },
+  )
+  const snapshot = await repository.loadWorkspace(signal())
+
+  // The uploaded song is listed once, as the server has it.
+  assert.deepEqual(
+    snapshot.songs.map((song) => song.id),
+    ['7', '9'],
+  )
+  assert.equal(await repository.loadSongAudio('7', signal()), file)
+  // The server has no audio to hand back yet.
+  await assert.rejects(repository.loadSongAudio('9', signal()), {
+    name: 'WorkspaceRepositoryError',
+    code: 'audio-unavailable',
   })
 })
 
@@ -128,7 +233,26 @@ for (const [name, answer] of [
     assert.equal(error.code, 'load-failed')
     assert.ok(apiErrorOf(error) instanceof ApiError)
   })
+
+  test(`${name} on the track list leaves the workspace retryable`, async () => {
+    const { repository } = setup((url) =>
+      url === ME_URL ? fixtureResponse(200, 'workspace/me.json') : answer(),
+    )
+    const error = await failureOf(repository.loadWorkspace(signal()))
+    assert.equal(error.code, 'load-failed')
+    assert.ok(apiErrorOf(error) instanceof ApiError)
+  })
 }
+
+test('a rejected session on the track list ends the workspace as expired', async () => {
+  const { repository } = setup((url) =>
+    url === ME_URL
+      ? fixtureResponse(200, 'workspace/me.json')
+      : fixtureResponse(401, 'common/unauthorized-session.json'),
+  )
+  const error = await failureOf(repository.loadWorkspace(signal()))
+  assert.equal(error.code, 'expired')
+})
 
 test('a cancelled load stays an AbortError', async () => {
   const { repository } = setup(pendingFetch())
@@ -197,12 +321,10 @@ const songInput = (overrides = {}) => ({
 })
 
 function uploadAnswer(onUpload = () => {}) {
-  return (url, init) => {
-    if (url === '/api/v1/workspaces/me')
-      return fixtureResponse(200, 'workspace/me.json')
+  return workspaceAnswer((_url, init) => {
     onUpload(init)
     return fixtureResponse(201, 'workspace/track-upload.json')
-  }
+  })
 }
 
 test('adding a song uploads the file and its kind as a form', async () => {
@@ -232,6 +354,7 @@ test('adding a song uploads the file and its kind as a form', async () => {
   assert.equal(original.id, '7')
 })
 
+// The track list answers empty: the song came after it was sent.
 test('songs added on this page are listed and play from the chosen file', async () => {
   const songs = createPageSongs()
   const { repository } = setup(uploadAnswer(), 'undecided', { songs })
@@ -352,11 +475,7 @@ for (const [name, answer, code] of [
   ],
 ]) {
   test(`${name} refuses the song as ${code} and lists nothing`, async () => {
-    const { repository } = setup((url) =>
-      url === '/api/v1/workspaces/me'
-        ? fixtureResponse(200, 'workspace/me.json')
-        : answer(),
-    )
+    const { repository } = setup(workspaceAnswer(() => answer()))
     const error = await failureOf(repository.addSong(songInput(), signal()))
     assert.equal(error.name, 'WorkspaceRepositoryError')
     assert.equal(error.code, code)

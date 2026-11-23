@@ -5,11 +5,13 @@ import {
   readProcessingStatus,
   readRetry,
   readSegment,
+  readSegmentList,
   readStemCreated,
   readStemPlayback,
   readTabCreated,
   readTabResult,
   readWorkFailure,
+  sectionNameOf,
   segmentNameValue,
   tabRequestFor,
   tabTranscriptionOf,
@@ -21,17 +23,58 @@ import { fixtureData } from './fixtures/api/fetch.mjs'
 
 const data = (name) => fixtureData(`workspace/${name}.json`)
 
-test('a segment answer keeps its id, range and change time', () => {
+test('a segment answer keeps its id, range, name, version and change time', () => {
   assert.deepEqual(readSegment(data('segment-create')), {
     segment_id: 31,
     start_ms: 12300,
     end_ms: 27800,
+    name: 'CHORUS',
+    version: 1,
     updated_at: '2026-11-21T06:10:02.114820Z',
   })
   assert.throws(
     () => readSegment({ ...data('segment-create'), start_ms: 12.3 }),
     { name: 'ResponseShapeError', path: 'data.start_ms' },
   )
+  assert.throws(
+    () => readSegment({ ...data('segment-create'), version: '1' }),
+    { path: 'data.version' },
+  )
+})
+
+test('a segment list reads each segment as a segment answer', () => {
+  const { items } = readSegmentList(data('segments'))
+  assert.deepEqual(
+    items.map(({ segment_id, name, version }) => [segment_id, name, version]),
+    [
+      [31, 'CHORUS', 1],
+      [33, null, 1],
+    ],
+  )
+  assert.deepEqual(items[0], readSegment(data('segment-create')))
+  assert.throws(
+    () =>
+      readSegmentList({
+        items: [{ ...data('segment-create'), name: 7 }],
+      }),
+    { path: 'data.items[0].name' },
+  )
+})
+
+test('server names come back as the section names they stand for', () => {
+  for (const [value, name] of [
+    ['INTRO', '인트로'],
+    ['VERSE', '벌스'],
+    ['PRE_CHORUS', '프리코러스'],
+    ['CHORUS', '코러스'],
+    ['BRIDGE', '브리지'],
+    ['INTERLUDE', '인터루드'],
+    ['OUTRO', '아웃트로'],
+  ])
+    assert.equal(sectionNameOf(value), name, value)
+  // This page sends no name only for a solo.
+  assert.equal(sectionNameOf(null), '솔로')
+  assert.equal(sectionNameOf('SOLO'), '솔로')
 })
 
 test('stem and tab requests keep the id, status and whether it was reused', () => {

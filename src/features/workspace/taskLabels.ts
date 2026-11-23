@@ -35,6 +35,23 @@ export function newTaskLabels(
   return valid ? { partLabel: part.label, tuningLabel: tuning.label } : null
 }
 
+const RESTORED_TUNING_ID = 'e-standard'
+
+// What a task the server lists without this page's record shows for what
+// the server does not keep: no part, and E standard, the only tuning the
+// server makes tabs in.
+export const RESTORED_TASK_LABELS: Pick<
+  WorkspaceTask,
+  'part' | 'partLabel' | 'tuningId' | 'tuningLabel'
+> = {
+  part: 'unset',
+  partLabel: '파트 미정',
+  tuningId: RESTORED_TUNING_ID,
+  tuningLabel:
+    SECTION_POLICY.tunings.find((option) => option.id === RESTORED_TUNING_ID)
+      ?.label ?? RESTORED_TUNING_ID,
+}
+
 export function keptResult(
   task: WorkspaceTask,
   id: string,

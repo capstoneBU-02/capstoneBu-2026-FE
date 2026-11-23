@@ -5,6 +5,7 @@ import { createHttpAccessRepository } from '../src/features/access/httpRepositor
 import { ACCESS_ERROR_MESSAGES } from '../src/features/access/model.ts'
 import {
   fakeFetch,
+  fixtureData,
   fixtureResponse,
   jsonResponse,
   pendingFetch,
@@ -17,6 +18,8 @@ const login = (workspaceId) =>
   jsonResponse(200, { success: true, data: { workspace_id: workspaceId } })
 const me = (workspaceId) =>
   jsonResponse(200, { success: true, data: { workspace_id: workspaceId } })
+const tracks = (items = []) =>
+  jsonResponse(200, { success: true, data: { items } })
 
 function repositoryWith(fetch) {
   const client = createHttpClient({
@@ -181,9 +184,11 @@ test('putting off the choice completes onboarding without a consent', async () =
 })
 
 test('the workspace sees the consent chosen at onboarding and keeps changes', async () => {
-  const { repository } = setup((url) =>
-    url.endsWith('/workspaces/me') ? me(42) : login(42),
-  )
+  const { repository } = setup((url) => {
+    if (url.endsWith('/workspaces/me')) return me(42)
+    if (url.endsWith('/tracks')) return tracks()
+    return login(42)
+  })
   const { sessionId } = await repository.enter(CODE, signal())
   await repository.completeOnboarding(sessionId, 'declined', signal())
 
@@ -206,6 +211,11 @@ test('songs uploaded on this page stay with their workspace when the code is ent
     if (url.endsWith('/workspaces/me')) return me(42)
     if (url.endsWith('/tracks/upload'))
       return fixtureResponse(201, 'workspace/track-upload.json')
+    // The server lists the uploaded song, which has no sections yet.
+    if (url.endsWith('/tracks'))
+      return tracks([
+        { ...fixtureData('workspace/track-upload.json'), segment_count: 0 },
+      ])
     return login(42)
   })
   const first = await repository.enter(CODE, signal())
