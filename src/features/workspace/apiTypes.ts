@@ -92,6 +92,37 @@ export interface TabCreatedResponse {
   readonly is_reused: boolean
 }
 
+// GET /tabs/{tab_id}/result, only while the tab is success or needs_review
+// (409 TAB_NOT_READY otherwise). The ids, version, result_type, status,
+// is_draft, segment, tempo_uncertain, review_reasons, summary, musicxml_url
+// with its expiry and model also arrive; the tab is drawn from the notes.
+export interface TabResultResponse {
+  // tuning_id, strings and capo also arrive.
+  readonly condition: {
+    // Lowest string first: E2 A2 D3 G3 B3 E4.
+    readonly tuning_notes: readonly string[]
+  }
+  readonly tempo_bpm: number
+  // Beats over the beat unit, "4/4" for now.
+  readonly time_signature: string
+  readonly notes: readonly TabResultNote[]
+}
+
+// end, pitch, low_confidence, bend and playable also arrive.
+export interface TabResultNote {
+  // Seconds from the start of the section.
+  readonly start: number
+  // 1 is the high E string.
+  readonly string: number
+  readonly fret: number
+  // Quarter-note beats from the first bar's first downbeat, on a sixteenth
+  // or triplet grid.
+  readonly beat: number
+  // In beats, already cut at the next onset.
+  readonly duration: number
+  readonly confidence: number
+}
+
 // GET /segments/{segment_id}/processing-status. stem is the newest stem for
 // the segment's current range, tab the newest tab made from it; either is
 // null until requested. Between two stages the status returns to queued

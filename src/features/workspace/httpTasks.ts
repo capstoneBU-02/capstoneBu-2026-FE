@@ -9,6 +9,7 @@ import {
   type HttpClient,
 } from '../../api/http.ts'
 import type { RemoteFiles } from '../../api/remoteFile.ts'
+import { scoreFromNotes } from '../tab/scoreFromNotes.ts'
 import {
   canSendSectionEdit,
   sectionEditKind,
@@ -41,9 +42,11 @@ import {
   readStemCreated,
   readStemPlayback,
   readTabCreated,
+  readTabResult,
   readWorkFailure,
   segmentNameValue,
   tabRequestFor,
+  tabTranscriptionOf,
   toMilliseconds,
 } from './taskAdapter.ts'
 import { keptResult, newTaskLabels } from './taskLabels.ts'
@@ -57,6 +60,7 @@ const MESSAGES = {
   'retry-task-failed': '다시 시도하지 못했어요.',
   'cancel-task-failed': '작업을 멈추지 못했어요.',
   'audio-unavailable': '분리한 기타 음원을 불러오지 못했어요.',
+  'tab-unavailable': '타브를 불러오지 못했어요.',
 } as const
 
 type TaskFailureCode = keyof typeof MESSAGES
@@ -88,6 +92,7 @@ export type HttpTasks = Pick<
   | 'cancelTask'
   | 'retryTask'
   | 'loadSeparatedAudio'
+  | 'loadTab'
 > & {
   // The page's tasks for the list, reading those in progress again. Throws
   // only for a rejected session or a cancelled signal; a task that fails
@@ -526,6 +531,26 @@ export function createHttpTasks({
     }
   }
 
+  // The result's notes turned into bars. A result with nothing to draw
+  // resolves null, which the screen's check reports as a tab it cannot show.
+  async function loadTab(taskId: string, signal: AbortSignal) {
+    signal.throwIfAborted()
+    const record = tasks.get(taskId)
+    const tabId = record?.tabId
+    if (record?.task.processingStatus !== 'completed' || tabId == null)
+      throw refused('tab-unavailable')
+    try {
+      const { data } = await client.request('GET', `/tabs/${tabId}/result`, {
+        signal,
+        read: readTabResult,
+      })
+      return scoreFromNotes(tabTranscriptionOf(data))
+    } catch (error) {
+      if (signal.aborted) throw error
+      throw failed('tab-unavailable', error)
+    }
+  }
+
   async function refresh(
     record: PageTask,
     signal: AbortSignal,
@@ -552,6 +577,7 @@ export function createHttpTasks({
     retryTask,
     cancelTask,
     loadSeparatedAudio,
+    loadTab,
     async list(signal) {
       const listed = await Promise.all(
         tasks.list().map((record) => refresh(record, signal)),

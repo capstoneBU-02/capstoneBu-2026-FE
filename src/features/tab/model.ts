@@ -1,6 +1,5 @@
-// Display model for the tab renderer. It does not prescribe the server's
-// transcription format, which is still open with the TAB owner; an adapter
-// will map the confirmed format into this shape.
+// Display model for the tab renderer. The server sends notes on a beat grid;
+// scoreFromNotes turns them into this shape.
 
 // 1 whole, 2 half, 4 quarter, 8 eighth, 16 sixteenth.
 export type TabDuration = 1 | 2 | 4 | 8 | 16
@@ -27,8 +26,7 @@ export interface TabBeat {
 
 export interface TabBar {
   readonly number: number
-  // Seconds from the start of the section (0 s). Whether the server sends
-  // bar times or a tempo map is still open.
+  // Seconds from the start of the section (0 s) where the bar begins.
   readonly startSeconds: number
   readonly beats: readonly TabBeat[]
 }

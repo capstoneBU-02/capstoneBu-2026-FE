@@ -8,9 +8,11 @@ import {
   readStemCreated,
   readStemPlayback,
   readTabCreated,
+  readTabResult,
   readWorkFailure,
   segmentNameValue,
   tabRequestFor,
+  tabTranscriptionOf,
   toMilliseconds,
 } from '../src/features/workspace/taskAdapter.ts'
 import { taskStateOf } from '../src/features/workspace/taskState.ts'
@@ -410,4 +412,54 @@ test('server times keep milliseconds from their microseconds', () => {
     ),
     '방금',
   )
+})
+
+test('a tab result keeps the tuning, tempo, meter and where each note sits', () => {
+  const result = readTabResult(data('tab-result'))
+  assert.deepEqual(result.condition, {
+    tuning_notes: ['E2', 'A2', 'D3', 'G3', 'B3', 'E4'],
+  })
+  assert.equal(result.tempo_bpm, 120)
+  assert.equal(result.time_signature, '4/4')
+  assert.equal(result.notes.length, 8)
+  assert.deepEqual(result.notes[0], {
+    start: 0.5,
+    string: 5,
+    fret: 3,
+    beat: 0,
+    duration: 1,
+    confidence: 0.91,
+  })
+})
+
+test('a tab result with a broken meter or note fails at its field', () => {
+  const result = data('tab-result')
+  assert.throws(() => readTabResult({ ...result, time_signature: '4' }), {
+    name: 'ResponseShapeError',
+    path: 'data.time_signature',
+  })
+  assert.throws(() => readTabResult({ ...result, time_signature: '0/4' }), {
+    path: 'data.time_signature',
+  })
+  const notes = result.notes.map((note, index) =>
+    index === 1 ? { ...note, fret: '1' } : note,
+  )
+  assert.throws(() => readTabResult({ ...result, notes }), {
+    path: 'data.notes[1].fret',
+  })
+})
+
+test('a tab result becomes notes on a beat grid, highest string first', () => {
+  const transcription = tabTranscriptionOf(readTabResult(data('tab-result')))
+  assert.deepEqual(transcription.tuning, ['E4', 'B3', 'G3', 'D3', 'A2', 'E2'])
+  assert.deepEqual(transcription.timeSignature, [4, 4])
+  assert.equal(transcription.tempoBpm, 120)
+  assert.deepEqual(transcription.notes.at(-1), {
+    startSeconds: 3,
+    beat: 5,
+    beats: 3,
+    string: 1,
+    fret: 0,
+    confidence: 0.38,
+  })
 })

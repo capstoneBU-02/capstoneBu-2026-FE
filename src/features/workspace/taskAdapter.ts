@@ -1,8 +1,15 @@
-// Readers for the task APIs (segments, stems, tabs) and the values the
-// screen's section turns into before it is sent.
+// Readers for the task APIs (segments, stems, tabs), the values the screen's
+// section turns into before it is sent, and a tab result as the renderer's
+// converter takes it.
 
-import { readObject, readString, type ObjectReader } from '../../api/guards.ts'
+import {
+  readObject,
+  readString,
+  ResponseShapeError,
+  type ObjectReader,
+} from '../../api/guards.ts'
 import { parseSectionName } from '../new-section/sectionForm.ts'
+import type { NoteTranscription } from '../tab/scoreFromNotes.ts'
 import {
   STEM_STATUSES,
   TAB_STATUSES,
@@ -18,6 +25,8 @@ import {
   type StemStatusView,
   type TabCreatedResponse,
   type TabCreateRequest,
+  type TabResultNote,
+  type TabResultResponse,
   type TabStatusView,
   type WorkFailureResponse,
 } from './apiTypes.ts'
@@ -47,6 +56,62 @@ export function readTabCreated(data: unknown): TabCreatedResponse {
     tab_id: tab.integer('tab_id'),
     status: tab.oneOf('status', TAB_STATUSES),
     is_reused: tab.boolean('is_reused'),
+  }
+}
+
+const TIME_SIGNATURE = /^([1-9]\d*)\/([1-9]\d*)$/
+
+function readTimeSignature(value: unknown, path: string): string {
+  const text = readString(value, path)
+  if (!TIME_SIGNATURE.test(text))
+    throw new ResponseShapeError(path, 'a time signature such as 4/4')
+  return text
+}
+
+function readTabNote(value: unknown, path: string): TabResultNote {
+  const note = readObject(value, path)
+  return {
+    start: note.number('start'),
+    string: note.integer('string'),
+    fret: note.integer('fret'),
+    beat: note.number('beat'),
+    duration: note.number('duration'),
+    confidence: note.number('confidence'),
+  }
+}
+
+export function readTabResult(data: unknown): TabResultResponse {
+  const tab = readObject(data)
+  const condition = tab.object('condition')
+  return {
+    condition: { tuning_notes: condition.array('tuning_notes', readString) },
+    tempo_bpm: tab.number('tempo_bpm'),
+    time_signature: readTimeSignature(
+      tab.raw('time_signature'),
+      `${tab.path}.time_signature`,
+    ),
+    notes: tab.array('notes', readTabNote),
+  }
+}
+
+// What the tab renderer's converter takes: the tuning turned highest string
+// first and the meter as numbers.
+export function tabTranscriptionOf(
+  result: TabResultResponse,
+): NoteTranscription {
+  const [, beats, unit] = TIME_SIGNATURE.exec(result.time_signature) ?? []
+  return {
+    tuning: [...result.condition.tuning_notes].reverse(),
+    timeSignature: [Number(beats), Number(unit)],
+    tempoBpm: result.tempo_bpm,
+    notes: result.notes.map((note) => ({
+      startSeconds: note.start,
+      beat: note.beat,
+      beats: note.duration,
+      string: note.string,
+      fret: note.fret,
+      confidence: note.confidence,
+    })),
   }
 }
 

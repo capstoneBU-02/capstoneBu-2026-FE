@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "TAB_NOT_READY",
+    "message": "타브가 아직 준비되지 않았습니다."
+  },
+  "meta": { "trace_id": "5c2e8d1a07f94b63" }
+}
