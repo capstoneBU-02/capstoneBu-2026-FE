@@ -460,6 +460,6 @@ test('a tab result becomes notes on a beat grid, highest string first', () => {
     beats: 3,
     string: 1,
     fret: 0,
-    confidence: 0.42,
+    confidence: 0.38,
   })
 })

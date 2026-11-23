@@ -22,7 +22,7 @@
     "tempo_bpm": 120.0,
     "time_signature": "4/4",
     "tempo_uncertain": false,
-    "review_reasons": ["LOW_CONFIDENCE_NOTES"],
+    "review_reasons": ["STEM_NEEDS_REVIEW"],
     "summary": {
       "note_count": 8,
       "low_confidence_count": 1,
@@ -128,7 +128,7 @@
         "fret": 0,
         "beat": 5.0,
         "duration": 3.0,
-        "confidence": 0.42,
+        "confidence": 0.38,
         "low_confidence": true,
         "bend": [],
         "playable": true
