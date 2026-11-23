@@ -6,6 +6,7 @@ import { maskTesterCode } from '../../src/features/workspace/navigation.ts'
 const HARNESS = '/tests/browser/http-harness.html'
 const LOGIN = '**/api/v1/auth/tester-login'
 const ME = '**/api/v1/workspaces/me'
+const TRACKS = '**/api/v1/tracks'
 const CODE = 'TESTER-2026-A1B2'
 const fixture = (path: string) => `tests/fixtures/api/${path}`
 
@@ -39,6 +40,9 @@ test('a tester code opens an empty workspace through the API', async ({
   })
   await page.route(ME, (route) =>
     route.fulfill({ path: fixture('workspace/me.json') }),
+  )
+  await page.route(TRACKS, (route) =>
+    route.fulfill({ json: { success: true, data: { items: [] } } }),
   )
 
   // Demo selectors do nothing in http mode.

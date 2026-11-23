@@ -1,41 +1,24 @@
-import { readFileSync } from 'node:fs'
-import {
-  expect,
-  test,
-  type Locator,
-  type Page,
-  type Route,
-} from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import {
   API,
+  answer,
+  fixtureData,
   HARNESS,
+  listSegment,
+  listTrack,
+  load,
   main,
   openWorkspace,
   sidebar,
+  signIn,
   uploadSong,
 } from './http-workspace.ts'
 
 // A section made, followed and sent again through the http repositories
 // against a faked API. Track 7, segment 31 and stem 54 match the fixtures.
-const load = (name: string): unknown =>
-  JSON.parse(
-    readFileSync(
-      new URL(`../fixtures/api/workspace/${name}.json`, import.meta.url),
-      'utf8',
-    ),
-  )
-
 const form = (page: Page) => main(page).getByRole('form', { name: '새 구간' })
 const region = (page: Page, name: string) =>
   main(page).getByRole('region', { name })
-
-function answer(route: Route, body: unknown, status = 200) {
-  return route.fulfill({
-    status,
-    contentType: 'application/json',
-    body: JSON.stringify(body),
-  })
-}
 
 interface SegmentRange {
   start_ms: number
@@ -44,14 +27,18 @@ interface SegmentRange {
 
 // The server side of one section: what processing-status reports now, the
 // failure GET /stems/54 explains, and the requests that changed something.
+// The section joins the server's list once made, and its list entry follows
+// each change.
 async function serveSection(page: Page, failure: unknown) {
   let status = load('status-queued')
   const calls: string[] = []
   const created: unknown[] = []
   const patched: unknown[] = []
   await page.route(`${API}/tracks/7/segments`, (route) => {
+    if (route.request().method() !== 'POST') return route.fallback()
     calls.push('create segment')
     created.push(route.request().postDataJSON())
+    listSegment(page, fixtureData('segment-create'))
     return answer(route, load('segment-create'), 201)
   })
   // A moved range leaves the segment without a stem for it.
@@ -60,16 +47,14 @@ async function serveSection(page: Page, failure: unknown) {
     calls.push('patch segment')
     patched.push(range)
     status = load('status-nothing-requested')
-    const segment = load('segment-create') as { data: object }
-    return answer(route, {
-      ...segment,
-      data: {
-        ...segment.data,
-        ...range,
-        duration_ms: range.end_ms - range.start_ms,
-        version: 2,
-      },
-    })
+    const segment = {
+      ...fixtureData('segment-create'),
+      ...range,
+      duration_ms: range.end_ms - range.start_ms,
+      version: 2,
+    }
+    listSegment(page, segment)
+    return answer(route, { success: true, data: segment })
   })
   await page.route(`${API}/segments/31/processing-status`, (route) =>
     answer(route, status),
@@ -300,4 +285,66 @@ test('a tab result that fails offers 다시 시도 and draws on the next answer'
     tabPanel(page).getByRole('img', { name: '타브 악보 2마디' }),
   ).toBeVisible()
   expect(asked).toEqual(['GET', 'GET'])
+})
+
+test('a workspace entered again lists its sections from the server and opens one', async ({
+  page,
+}) => {
+  // Track 7 with 코러스 (31) finished and an unnamed section (33) separating.
+  const listed = (name: string) =>
+    fixtureData(name).items as Record<string, unknown>[]
+  listTrack(page, listed('tracks')[1])
+  for (const segment of listed('segments')) listSegment(page, segment)
+  await page.route(`${API}/segments/31/processing-status`, (route) =>
+    answer(route, load('status-completed')),
+  )
+  await page.route(`${API}/segments/33/processing-status`, (route) =>
+    answer(route, load('status-separating')),
+  )
+  await serveResult(page, [() => [load('tab-result'), 200]])
+  // Requests that would change something on the server, past the sign-in.
+  const changes: string[] = []
+  page.on('request', (request) => {
+    const { pathname } = new URL(request.url())
+    if (
+      pathname.startsWith('/api/v1/') &&
+      pathname !== '/api/v1/auth/tester-login' &&
+      request.method() !== 'GET'
+    )
+      changes.push(`${request.method()} ${pathname}`)
+  })
+
+  await signIn(page)
+  const song = sidebar(page).getByRole('button', {
+    name: '봄날 커버 v2',
+    exact: true,
+  })
+  await expect(song).toHaveAttribute('aria-expanded', 'true')
+  const rows = sidebar(page).getByRole('button', { name: /^(코러스|솔로)/ })
+  await expect(rows).toHaveCount(2)
+  await expect(rows.first()).toHaveAccessibleName(/^코러스/)
+  await expect(rows.last()).toHaveAccessibleName(/^솔로/)
+
+  await rows.first().click()
+  await expect(page).toHaveURL(`${HARNESS}?view=task&task=31`)
+  await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+    '코러스',
+  )
+  // The server keeps no part, so the task says so.
+  await expect(main(page).getByText('파트 미정', { exact: true })).toBeVisible()
+  await expect(
+    tabPanel(page).getByRole('img', { name: '타브 악보 2마디' }),
+  ).toBeVisible()
+  // Only a song chosen on this page has audio to draw.
+  const original = main(page)
+    .getByRole('region', { name: '트랙' })
+    .getByRole('listitem')
+    .filter({ hasText: /^원곡/ })
+    .locator('[data-state]')
+  await expect(original).toHaveAttribute('data-state', 'failed', {
+    timeout: 15_000,
+  })
+  await expect(original).toContainText('파형을 불러오지 못했어요.')
+  // Entering again only reads.
+  expect(changes).toEqual([])
 })
