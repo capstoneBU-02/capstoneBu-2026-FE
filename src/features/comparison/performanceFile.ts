@@ -2,6 +2,8 @@ import {
   formatClockDuration,
   formatFileSize,
   songFileAccept,
+  songFileMessage,
+  songUploadFile,
 } from '../add-song/songFile.ts'
 import { UPLOAD_POLICY } from '../add-song/uploadPolicy.ts'
 import { checkPerformanceLength } from './comparisonRules.ts'
@@ -12,6 +14,7 @@ export type PerformanceFileCheck =
   | { readonly status: 'too-short'; readonly durationSeconds: number }
   | { readonly status: 'too-long'; readonly durationSeconds: number }
   | { readonly status: 'invalid-format' }
+  | { readonly status: 'too-large' }
   | { readonly status: 'unreadable' }
   | { readonly status: 'timed-out' }
 
@@ -38,6 +41,16 @@ export function performanceFileAccept(): string {
   return songFileAccept()
 }
 
+// A recording has no file name; the server tells formats by extension.
+const RECORDING_FILE_NAME = 'take.wav'
+
+// The bytes sent for a take. A chosen file keeps its name and declares the
+// type the server accepts for it; a recording goes as WAV.
+export function performanceUploadFile(take: { readonly audio: Blob }): File {
+  if (take.audio instanceof File) return songUploadFile(take.audio)
+  return new File([take.audio], RECORDING_FILE_NAME, { type: 'audio/wav' })
+}
+
 export function performanceUploadGuide(
   sectionName: string,
   sectionSeconds: number,
@@ -61,6 +74,8 @@ export function performanceFileMessage(
       return `구간(${sectionSecondsLabel(sectionSeconds)}초)보다 많이 길어요. 구간만 연주한 파일을 올려 주세요.`
     case 'invalid-format':
       return `${formatLabels()} 파일만 올릴 수 있어요. 형식을 바꿔서 다시 올려 주세요.`
+    case 'too-large':
+      return songFileMessage(check)
     case 'unreadable':
       return '이 파일은 재생할 수 없어요. 손상되지 않은 파일인지 확인하고 다시 올려 주세요.'
     case 'timed-out':
@@ -87,6 +102,7 @@ export function performanceFileMeta(
     case 'timed-out':
       return `길이 알 수 없음 · ${size}`
     case 'invalid-format':
+    case 'too-large':
       return size
   }
 }

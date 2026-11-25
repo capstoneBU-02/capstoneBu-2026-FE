@@ -15,9 +15,12 @@ export interface ComparisonRepository {
     signal: AbortSignal,
   ): Promise<readonly SavedPerformance[]>
   // Saving stores the take only; comparing is a separate request.
+  // `onProgress` hears whole percents of the file sent, where the
+  // repository can tell.
   savePerformance(
     input: NewPerformanceInput,
     signal: AbortSignal,
+    onProgress?: (percent: number) => void,
   ): Promise<SavedPerformance>
   // A take that already finished returns that comparison instead of a new one.
   // The stages are read with loadStatus, as the API reports them only there.
@@ -72,6 +75,7 @@ const ERROR_MESSAGES = {
   'file-too-large': '파일 용량이 너무 커요.',
   'storage-limit': '저장 공간이 부족해요.',
   'save-failed': '연주를 저장하지 못했어요. 다시 시도해 주세요.',
+  'list-failed': '연주 기록을 불러오지 못했어요.',
   'enqueue-failed': '비교를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.',
   'audio-unavailable': '음원을 불러오지 못했어요.',
 } as const

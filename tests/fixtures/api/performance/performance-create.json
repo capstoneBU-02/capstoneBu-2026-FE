@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "data": {
+    "performance_id": 12,
+    "workspace_id": 5,
+    "track_id": 7,
+    "segment_id": 31,
+    "source": "UPLOAD",
+    "start_ms": 12000,
+    "end_ms": 27500,
+    "created_at": "2026-11-25T05:14:08.402913Z"
+  }
+}

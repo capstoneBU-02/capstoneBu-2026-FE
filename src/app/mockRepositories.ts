@@ -12,6 +12,7 @@ export function createMockRepositories(search: string): AppRepositories {
       access: createMockAccessRepository(),
       entryNotice: null,
       entrySearch: '',
+      comparison: null,
       preview: {
         repository: createMockWorkspaceRepository(mode.scenario),
         scenario: mode.scenario,
@@ -22,6 +23,7 @@ export function createMockRepositories(search: string): AppRepositories {
     access: createMockAccessRepository(mode.scenario),
     entryNotice: mode.scenario === 'session-expired' ? 'expired' : null,
     entrySearch: mode.scenario === 'default' ? '' : `?access=${mode.scenario}`,
+    comparison: null,
     preview: null,
   }
 }

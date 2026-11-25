@@ -1,6 +1,7 @@
 import type { ApiConfig } from '../api/config.ts'
 import { createHttpClient } from '../api/http.ts'
 import { createHttpAccessRepository } from '../features/access/httpRepository.ts'
+import { createHttpComparisonRepository } from '../features/comparison/httpRepository.ts'
 import type { AppRepositories } from './repositories.ts'
 
 // Http mode: the real API. It always opens at code entry, as the session
@@ -14,6 +15,7 @@ export function createHttpRepositories({
     access: createHttpAccessRepository({ client }),
     entryNotice: null,
     entrySearch: '',
+    comparison: createHttpComparisonRepository({ client }),
     preview: null,
   }
 }

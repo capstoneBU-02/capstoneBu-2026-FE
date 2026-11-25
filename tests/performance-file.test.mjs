@@ -8,6 +8,7 @@ import {
   performanceFileAccept,
   performanceFileMessage,
   performanceFileMeta,
+  performanceUploadFile,
   performanceUploadGuide,
   performanceUploadHint,
 } from '../src/features/comparison/performanceFile.ts'
@@ -109,6 +110,10 @@ test('each refused file explains what to do next', () => {
     'MP3, MP4 파일만 올릴 수 있어요. 형식을 바꿔서 다시 올려 주세요.',
   )
   assert.equal(
+    performanceFileMessage({ status: 'too-large' }, 23.7),
+    '50MB 이하 파일만 올릴 수 있어요. 용량을 줄여서 다시 올려 주세요.',
+  )
+  assert.equal(
     performanceFileMessage({ status: 'unreadable' }, 23.7),
     '이 파일은 재생할 수 없어요. 손상되지 않은 파일인지 확인하고 다시 올려 주세요.',
   )
@@ -184,4 +189,31 @@ test('the file card says why the length is missing', () => {
     '길이 알 수 없음 · 1.5KB',
   )
   assert.equal(performanceFileMeta(file, { status: 'invalid-format' }), '1.5KB')
+})
+
+test('a file over the size limit shows only its size', () => {
+  assert.equal(
+    performanceFileMeta({ size: 60 * 1024 * 1024 }, { status: 'too-large' }),
+    '60.0MB',
+  )
+})
+
+test('a chosen file goes with its name and the type the server accepts', () => {
+  const chosen = new File(['take'], '연습 3.mp3', { type: 'audio/mp3' })
+  const sent = performanceUploadFile({ audio: chosen })
+  assert.equal(sent.name, '연습 3.mp3')
+  assert.equal(sent.type, 'audio/mpeg')
+
+  const exact = new File(['take'], '연습.mp4', { type: 'video/mp4' })
+  assert.equal(performanceUploadFile({ audio: exact }), exact)
+})
+
+test('a recording goes as a WAV file with a name', async () => {
+  const sent = performanceUploadFile({
+    audio: new Blob(['wave'], { type: 'audio/wav' }),
+  })
+  assert.ok(sent instanceof File)
+  assert.equal(sent.name, 'take.wav')
+  assert.equal(sent.type, 'audio/wav')
+  assert.equal(await sent.text(), 'wave')
 })

@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_INPUT",
+    "message": "지원하지 않는 음원 파일입니다."
+  },
+  "meta": { "trace_id": "9b4d2e6f8a1c3057" }
+}

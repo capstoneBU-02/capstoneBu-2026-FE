@@ -15,6 +15,8 @@ test('mock mode starts at code entry with a working mock access repository', asy
   assert.equal(repositories.entryNotice, null)
   assert.equal(repositories.entrySearch, '')
   assert.equal(repositories.preview, null)
+  // Comparisons run on mock data over the open workspace.
+  assert.equal(repositories.comparison, null)
   const entered = await repositories.access.enter(
     DEMO_ACCESS_CODES.newWorkspace,
     signal(),
@@ -39,6 +41,7 @@ test('access selectors keep their scenario for the next entry', async () => {
 test('a demo selector opens the workspace preview directly', async () => {
   const repositories = createMockRepositories('?demo=task-states')
   assert.equal(repositories.preview?.scenario, 'task-states')
+  assert.equal(repositories.comparison, null)
   assert.equal(repositories.entrySearch, '')
   const snapshot = await repositories.preview.repository.loadWorkspace(signal())
   assert.ok(snapshot.tasks.length > 0)
@@ -98,4 +101,26 @@ test('http mode starts at code entry and logs in through the API base', async ()
     globalThis.fetch = original
   }
   assert.deepEqual(urls, ['/api/v1/auth/tester-login'])
+})
+
+test('http mode saves and lists takes through the same API base', async () => {
+  const repositories = await loadAppRepositories(HTTP, '')
+  const urls = []
+  const original = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    urls.push(url)
+    return jsonResponse(200, {
+      success: true,
+      data: { segment_id: 31, performances: [] },
+    })
+  }
+  try {
+    assert.deepEqual(
+      await repositories.comparison.listPerformances('31', signal()),
+      [],
+    )
+  } finally {
+    globalThis.fetch = original
+  }
+  assert.deepEqual(urls, ['/api/v1/segments/31/performances'])
 })

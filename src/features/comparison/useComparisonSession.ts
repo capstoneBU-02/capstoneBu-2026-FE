@@ -52,7 +52,11 @@ export interface ComparisonSession {
   // Why the last action on the open take failed.
   readonly notice: string | null
   select(performanceId: string): void
-  submitTake(take: NewTake): Promise<SubmitTakeOutcome>
+  // `onProgress` hears whole percents of the file sent.
+  submitTake(
+    take: NewTake,
+    onProgress?: (percent: number) => void,
+  ): Promise<SubmitTakeOutcome>
   requestSelected(): void
   retry(): void
   markRegion(regionId: string, checked: boolean): void
@@ -219,7 +223,10 @@ export function useComparisonSession({
     }
   }
 
-  async function submitTake(take: NewTake): Promise<SubmitTakeOutcome> {
+  async function submitTake(
+    take: NewTake,
+    onProgress?: (percent: number) => void,
+  ): Promise<SubmitTakeOutcome> {
     const signal = lifetime.current?.signal
     if (!repository || !taskId || !signal)
       return { saved: false, message: SAVE_FAILED }
@@ -227,6 +234,7 @@ export function useComparisonSession({
       const performance = await repository.savePerformance(
         { ...take, taskId },
         signal,
+        onProgress,
       )
       if (signal.aborted) return { saved: true, message: null }
       dispatch({ type: 'saved', performance })
