@@ -15,7 +15,7 @@ export type SongFileCheck =
   | { readonly status: 'timed-out' }
 
 // A song also has to fit the upload size limit, which is checked before the
-// length is read. Performance takes are not uploaded this way.
+// length is read. A chosen performance file is checked against it too.
 export type AddSongFileCheck = SongFileCheck | { readonly status: 'too-large' }
 
 // Browsers report no MIME, or a generic one, for some local files. Such files
