@@ -17,6 +17,9 @@ const TIMED_OUT =
   '파일 길이를 확인하는 데 시간이 너무 오래 걸렸어요. 다시 확인하거나 다른 파일을 올려 주세요.'
 const MANY_FILES = '파일은 한 번에 하나만 올릴 수 있어요.'
 const REFUSED = '이 파일은 연주로 사용할 수 없어요.'
+const TOO_LARGE =
+  '50MB 이하 파일만 올릴 수 있어요. 용량을 줄여서 다시 올려 주세요.'
+const MB = 1024 * 1024
 
 const main = (page: Page) => page.locator('#workspace-content')
 const opener = (page: Page) =>
@@ -88,15 +91,20 @@ async function chooseLength(page: Page, seconds: number, size?: number) {
   )
 }
 
-async function dropFiles(page: Page, names: readonly string[]) {
-  const dataTransfer = await page.evaluateHandle((list) => {
-    const transfer = new DataTransfer()
-    for (const name of list)
-      transfer.items.add(
-        new File([new Uint8Array(1536)], name, { type: 'audio/mpeg' }),
-      )
-    return transfer
-  }, names)
+// Files are made in the page, so one can be larger than Playwright lets
+// setFiles carry (50MB).
+async function dropFiles(page: Page, names: readonly string[], size = 1536) {
+  const dataTransfer = await page.evaluateHandle(
+    ({ list, bytes }) => {
+      const transfer = new DataTransfer()
+      for (const name of list)
+        transfer.items.add(
+          new File([new Uint8Array(bytes)], name, { type: 'audio/mpeg' }),
+        )
+      return transfer
+    },
+    { list: names, bytes: size },
+  )
   for (const type of ['dragenter', 'dragover', 'drop'])
     await dropzone(page).dispatchEvent(type, { dataTransfer })
 }
@@ -155,6 +163,21 @@ test('dropping two files asks for one and keeps the drop area', async ({
   await expect(alertText(page)).toHaveText(MANY_FILES)
   await expect(dropzone(page)).toBeVisible()
   await expect(compare(page)).toHaveAttribute('aria-disabled', 'true')
+})
+
+test('a file over 50MB is refused before its length is read', async ({
+  page,
+}) => {
+  await openDialog(page)
+
+  await dropFiles(page, ['huge_take.mp3'], 50 * MB + 1)
+
+  await expect(alertText(page)).toHaveText(TOO_LARGE)
+  await expect(dialog(page).getByText('50.0MB', { exact: true })).toBeVisible()
+  await expect(compare(page)).toHaveAttribute('aria-disabled', 'true')
+  expect(await page.evaluate(() => window.workspaceTest.probeCalls())).toEqual(
+    [],
+  )
 })
 
 test('a format that cannot be uploaded is refused without reading its length', async ({

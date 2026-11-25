@@ -3,6 +3,7 @@ import type { AppRepositories } from './app/repositories.ts'
 import { AccessPage } from './features/access/AccessPage.tsx'
 import { useAccess } from './features/access/useAccess.ts'
 import { useDemoComparisonRepository } from './features/comparison/demoComparison.ts'
+import type { ComparisonRepository } from './features/comparison/repository.ts'
 import { OnboardingPage } from './features/onboarding/OnboardingPage.tsx'
 import type { DemoScenario } from './features/workspace/model.ts'
 import type { WorkspaceRepository } from './features/workspace/repository.ts'
@@ -12,28 +13,27 @@ import { clearWorkspaceHistory } from './features/workspace/navigation.ts'
 
 function WorkspaceSession({
   repository,
+  comparison,
   scenario = 'default',
   onReenter,
   onLeave,
   focusOnEntry = false,
 }: {
   repository: WorkspaceRepository
+  comparison: ComparisonRepository | null
   scenario?: DemoScenario
   onReenter(): void
   onLeave(): void
   focusOnEntry?: boolean
 }) {
   const workspace = useWorkspace(repository, scenario)
-  // Mock comparisons over this workspace until the comparison API is wired.
-  const comparisonRepository = useDemoComparisonRepository(
-    repository,
-    workspace,
-  )
+  // Without a comparison API, mock comparisons over this workspace.
+  const demoComparison = useDemoComparisonRepository(repository, workspace)
   return (
     <WorkspacePage
       workspace={workspace}
       repository={repository}
-      comparisonRepository={comparisonRepository}
+      comparisonRepository={comparison ?? demoComparison}
       onReenter={onReenter}
       onLeave={onLeave}
       focusOnEntry={focusOnEntry}
@@ -75,6 +75,7 @@ function App({ repositories }: { repositories: AppRepositories }) {
     return (
       <WorkspaceSession
         repository={preview.repository}
+        comparison={repositories.comparison}
         scenario={preview.scenario}
         onReenter={reenter}
         onLeave={leave}
@@ -116,6 +117,7 @@ function App({ repositories }: { repositories: AppRepositories }) {
     <WorkspaceSession
       key={access.session.sessionId}
       repository={access.session.repository}
+      comparison={repositories.comparison}
       onReenter={reenter}
       onLeave={leave}
       focusOnEntry

@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "data": {
+    "segment_id": 31,
+    "performances": [
+      {
+        "performance_id": 12,
+        "track_id": 7,
+        "source": "UPLOAD",
+        "start_ms": 12000,
+        "end_ms": 27500,
+        "created_at": "2026-11-25T05:14:08.402913Z"
+      },
+      {
+        "performance_id": 9,
+        "track_id": 7,
+        "source": "RECORDING",
+        "start_ms": 10000,
+        "end_ms": 25000,
+        "created_at": "2026-11-24T09:02:51.118064Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "FILE_TOO_LARGE",
+    "message": "파일 크기가 최대 허용 용량을 초과했습니다."
+  },
+  "meta": { "trace_id": "3e9a1c7b5d2f4086" }
+}

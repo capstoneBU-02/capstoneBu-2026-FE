@@ -1,5 +1,6 @@
 import type { ApiConfig } from '../api/config.ts'
 import type { AccessRepository } from '../features/access/repository.ts'
+import type { ComparisonRepository } from '../features/comparison/repository.ts'
 import type { DemoScenario } from '../features/workspace/model.ts'
 import type { WorkspaceRepository } from '../features/workspace/repository.ts'
 
@@ -10,6 +11,9 @@ export interface AppRepositories {
   readonly entryNotice: 'expired' | null
   // Kept in the address when leaving the workspace.
   readonly entrySearch: string
+  // Takes and their comparisons. Null compares with mock data over the open
+  // workspace.
+  readonly comparison: ComparisonRepository | null
   // A workspace opened directly from the address (mock only).
   readonly preview: {
     readonly repository: WorkspaceRepository

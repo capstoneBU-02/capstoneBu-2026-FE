@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "연주 데이터 저장에 실패했습니다."
+  },
+  "meta": { "trace_id": "d07f3b2a6c9e1458" }
+}

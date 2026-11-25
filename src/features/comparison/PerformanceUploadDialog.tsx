@@ -13,7 +13,11 @@ import { Button } from '../../shared/ui/Button.tsx'
 import { canFocus, restoreFocus } from '../../shared/ui/dialogFocus.ts'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import type { MediaDurationProbe } from '../add-song/mediaDuration.ts'
-import type { SongFileCheck } from '../add-song/songFile.ts'
+import {
+  precheckSongFile,
+  uploadProgressLabel,
+  type SongFileCheck,
+} from '../add-song/songFile.ts'
 import { useSongFileCheck } from '../add-song/useSongFileCheck.ts'
 import pageStyles from '../workspace/WorkspacePage.module.css'
 import {
@@ -34,7 +38,11 @@ export interface PerformanceUploadDialogProps {
   readonly sectionSeconds: number
   readonly probeDuration: MediaDurationProbe
   // Closes the dialog once the take is saved; a refused save keeps it open.
-  readonly onSubmit: (take: NewTake) => Promise<SubmitTakeOutcome>
+  // `onProgress` hears whole percents of the file sent.
+  readonly onSubmit: (
+    take: NewTake,
+    onProgress?: (percent: number) => void,
+  ) => Promise<SubmitTakeOutcome>
   readonly onClose: () => void
   // True while leaving the screen would lose the take being saved.
   readonly onUnsavedChange?: (unsaved: boolean) => void
@@ -58,9 +66,10 @@ function toPerformanceCheck(
 async function saveTake(
   onSubmit: PerformanceUploadDialogProps['onSubmit'],
   take: NewTake,
+  onProgress: (percent: number) => void,
 ): Promise<SubmitTakeOutcome> {
   try {
-    return await onSubmit(take)
+    return await onSubmit(take, onProgress)
   } catch {
     return { saved: false, message: null }
   }
@@ -250,10 +259,20 @@ export function PerformanceUploadDialog({
   const [pickError, setPickError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Upload progress in whole percents, null until the repository reports.
+  const [progress, setProgress] = useState<number | null>(null)
   // Each pick gets a fresh alert so a repeated message is announced again.
   const [attempt, setAttempt] = useState(0)
-  const { check: songCheck, recheck } = useSongFileCheck(file, probeDuration)
-  const check = songCheck && toPerformanceCheck(songCheck, sectionSeconds)
+  // A file over the size limit is refused without reading its length.
+  const tooLarge =
+    file !== null && precheckSongFile(file)?.status === 'too-large'
+  const { check: songCheck, recheck } = useSongFileCheck(
+    tooLarge ? null : file,
+    probeDuration,
+  )
+  const check: PerformanceFileCheck | null = tooLarge
+    ? { status: 'too-large' }
+    : songCheck && toPerformanceCheck(songCheck, sectionSeconds)
   const titleId = useId()
   const guideId = useId()
   const errorId = useId()
@@ -324,16 +343,20 @@ export function PerformanceUploadDialog({
     if (!file || check?.status !== 'valid' || submittingRef.current) return
     submittingRef.current = true
     setSubmitting(true)
+    setProgress(null)
     setPickError(null)
     setSubmitError(null)
-    const outcome = await saveTake(onSubmit, {
-      source: 'upload',
-      audio: file,
-      durationSeconds: check.durationSeconds,
-    })
+    const outcome = await saveTake(
+      onSubmit,
+      { source: 'upload', audio: file, durationSeconds: check.durationSeconds },
+      (percent) => {
+        if (mountedRef.current) setProgress(percent)
+      },
+    )
     if (!mountedRef.current) return
     submittingRef.current = false
     setSubmitting(false)
+    setProgress(null)
     if (outcome.saved) onClose()
     else setSubmitError(outcome.message ?? SAVE_FAILED_MESSAGE)
   }
@@ -417,7 +440,11 @@ export function PerformanceUploadDialog({
         </span>
       </div>
       <div className={`${pageStyles.dialogFooter} ${styles.footer}`}>
-        <p className={styles.footerNote}>{PERFORMANCE_PRIVACY_NOTE}</p>
+        <p className={styles.footerNote} data-busy={submitting}>
+          {submitting
+            ? uploadProgressLabel(progress)
+            : PERFORMANCE_PRIVACY_NOTE}
+        </p>
         <Button variant="ghost" compact onClick={dismiss} disabled={submitting}>
           취소
         </Button>
