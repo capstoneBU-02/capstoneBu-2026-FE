@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "data": {
+    "comparison_id": 41,
+    "status": "queued",
+    "retry_from": "transcription",
+    "retry_count": 2,
+    "max_retries": 3,
+    "retries_left": 1
+  }
+}

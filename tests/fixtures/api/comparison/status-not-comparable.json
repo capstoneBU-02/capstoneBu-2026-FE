@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "data": {
+    "comparison_id": 41,
+    "status": "not_comparable",
+    "current_stage": "align",
+    "not_comparable_reason": "RERECORD_TOO_LONG",
+    "stages": [
+      { "stage": "align", "status": "success" },
+      { "stage": "transcription", "status": "skipped" },
+      { "stage": "compare", "status": "skipped" }
+    ],
+    "failure": null,
+    "updated_at": "2026-11-25T05:15:20.551902Z"
+  }
+}

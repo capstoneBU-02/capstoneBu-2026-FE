@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "COMPARISON_NOT_FOUND",
+    "message": "비교 결과를 찾을 수 없습니다."
+  },
+  "meta": { "trace_id": "b60d3e8f41c27a95" }
+}

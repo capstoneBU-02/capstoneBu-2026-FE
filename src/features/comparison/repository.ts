@@ -77,6 +77,9 @@ const ERROR_MESSAGES = {
   'save-failed': '연주를 저장하지 못했어요. 다시 시도해 주세요.',
   'list-failed': '연주 기록을 불러오지 못했어요.',
   'enqueue-failed': '비교를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.',
+  // The server did not answer, as against a comparison that is gone.
+  'load-failed': '비교를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+  'mark-failed': '확인 표시를 저장하지 못했어요. 다시 시도해 주세요.',
   'audio-unavailable': '음원을 불러오지 못했어요.',
 } as const
 

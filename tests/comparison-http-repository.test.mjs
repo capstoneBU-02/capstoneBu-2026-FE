@@ -411,27 +411,3 @@ test('a cancelled list or save stays an AbortError', async () => {
     { name: 'AbortError' },
   )
 })
-
-test('comparing without an API yet fails with its own code and sends nothing', async () => {
-  const { repository, calls } = setup(() => assert.fail('no request'))
-  for (const [call, code] of [
-    [() => repository.requestComparison('12', signal()), 'enqueue-failed'],
-    [() => repository.loadStatus('1', signal()), 'comparison-unavailable'],
-    [() => repository.loadResult('1', signal()), 'comparison-unavailable'],
-    [() => repository.loadPlayback('1', signal()), 'comparison-unavailable'],
-    [
-      () => repository.loadTrackAudio('1', 'reference', signal()),
-      'audio-unavailable',
-    ],
-    [
-      () => repository.markRegion('1', 'r1', true, signal()),
-      'region-unavailable',
-    ],
-    [() => repository.retry('1', signal()), 'comparison-unavailable'],
-  ]) {
-    const error = await failureOf(call())
-    assert.equal(error.name, 'ComparisonRepositoryError')
-    assert.equal(error.code, code)
-  }
-  assert.equal(calls.length, 0)
-})

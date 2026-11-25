@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "data": {
+    "comparison_id": 41,
+    "status": "failed",
+    "current_stage": "align",
+    "not_comparable_reason": null,
+    "stages": [
+      { "stage": "align", "status": "failed" },
+      { "stage": "transcription", "status": "queued" },
+      { "stage": "compare", "status": "queued" }
+    ],
+    "failure": {
+      "stage": "align",
+      "error_code": "PERFORMANCE_INVALID_AUDIO",
+      "message": "연주 음원을 읽을 수 없습니다.",
+      "retryable": false,
+      "retry_count": 0,
+      "max_retries": 3,
+      "retries_left": 3
+    },
+    "updated_at": "2026-11-25T05:15:20.551902Z"
+  }
+}

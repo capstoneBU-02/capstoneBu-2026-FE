@@ -1,0 +1,65 @@
+{
+  "success": true,
+  "data": {
+    "comparison_id": 41,
+    "status": "success",
+    "is_draft": true,
+    "not_comparable_reason": null,
+    "baseline": {
+      "source": "original_song",
+      "stem_id": 54,
+      "tab_id": 88,
+      "segment": {
+        "segment_id": 31,
+        "name": "CHORUS",
+        "start_ms": 12000,
+        "end_ms": 27500
+      }
+    },
+    "overall_tempo": { "is_slow": true, "slope": 1.18 },
+    "summary": { "difference_count": 3, "unavailable_count": 1 },
+    "regions": [
+      {
+        "region_id": 501,
+        "type": "pitch_difference",
+        "start_ms": 400,
+        "end_ms": 700,
+        "performance_start_ms": 420,
+        "performance_end_ms": 730,
+        "reason": null,
+        "is_checked": false
+      },
+      {
+        "region_id": 502,
+        "type": "missing_note",
+        "start_ms": 1100,
+        "end_ms": 1350,
+        "performance_start_ms": 1150,
+        "performance_end_ms": 1400,
+        "reason": null,
+        "is_checked": false
+      },
+      {
+        "region_id": 503,
+        "type": "timing_difference",
+        "start_ms": 1800,
+        "end_ms": 2050,
+        "performance_start_ms": 1880,
+        "performance_end_ms": 2140,
+        "reason": null,
+        "is_checked": true
+      },
+      {
+        "region_id": 504,
+        "type": "unavailable",
+        "start_ms": 2400,
+        "end_ms": 2800,
+        "performance_start_ms": 2500,
+        "performance_end_ms": 2900,
+        "reason": "LOW_CONFIDENCE",
+        "is_checked": false
+      }
+    ],
+    "config_version": "2026-11-19"
+  }
+}

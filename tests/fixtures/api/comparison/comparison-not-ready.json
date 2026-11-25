@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "COMPARISON_NOT_READY",
+    "message": "비교가 아직 끝나지 않았습니다."
+  },
+  "meta": { "trace_id": "43e9a0d7c1f852b6" }
+}

@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "COMPARISON_IN_PROGRESS",
+    "message": "같은 연주를 이미 비교하고 있습니다."
+  },
+  "meta": { "trace_id": "7d4c0a91f2e63b85" }
+}

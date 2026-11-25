@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "JOB_ENQUEUE_FAILED",
+    "message": "작업을 등록하지 못했습니다. 잠시 후 다시 시도해 주세요."
+  },
+  "meta": { "trace_id": "2f81c6e0a7d95b34" }
+}

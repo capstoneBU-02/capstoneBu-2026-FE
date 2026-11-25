@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "data": {
+    "comparison_id": 41,
+    "status": "not_comparable",
+    "is_draft": true,
+    "not_comparable_reason": "RERECORD_TOO_LONG",
+    "baseline": {
+      "source": "separated_input",
+      "stem_id": 54,
+      "tab_id": null,
+      "segment": {
+        "segment_id": 31,
+        "name": "CHORUS",
+        "start_ms": 12000,
+        "end_ms": 27500
+      }
+    },
+    "overall_tempo": null,
+    "summary": { "difference_count": 0, "unavailable_count": 0 },
+    "regions": [],
+    "config_version": "2026-11-19"
+  }
+}
