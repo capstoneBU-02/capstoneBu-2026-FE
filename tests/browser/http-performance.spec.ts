@@ -97,8 +97,13 @@ async function serveTakes(
   return { sent, release: () => release() }
 }
 
-// Track 7 with 코러스 finished, opened on its comparison view.
-async function openComparison(page: Page) {
+// Track 7 with 코러스 finished, opened on its comparison view. `serve` routes
+// the section's takes after sign-in, so it wins over the empty list every
+// workspace in these specs answers with.
+async function openComparison<T>(
+  page: Page,
+  serve: () => Promise<T>,
+): Promise<T> {
   const listed = (name: string) => fixtureData(name).items as Json[]
   listTrack(page, listed('tracks')[1])
   listSegment(page, { ...listed('segments')[0], ...RANGE, duration_ms: 3000 })
@@ -112,10 +117,12 @@ async function openComparison(page: Page) {
     answer(route, load('stem-not-ready'), 409),
   )
   await signIn(page)
+  const server = await serve()
   await sidebar(page)
     .getByRole('button', { name: /^코러스/ })
     .click()
   await main(page).getByRole('tab', { name: /^비교/ }).click()
+  return server
 }
 
 async function chooseTone(page: Page) {
@@ -134,18 +141,16 @@ async function chooseTone(page: Page) {
 test('an uploaded take is sent as a form, then listed as the newest take', async ({
   page,
 }) => {
-  const server = await serveTakes(page, [])
-  await openComparison(page)
+  const server = await openComparison(page, () => serveTakes(page, []))
   await expect(
     main(page).getByText('아직 비교한 연주가 없어요', { exact: true }),
   ).toBeVisible()
   await chooseTone(page)
 
   await compare(page).click()
-  // A request held by the test sends no progress, so the count waits.
-  await expect(
-    dialog(page).getByText('파일 올리는 중', { exact: true }),
-  ).toBeVisible()
+  // A request held by the test may report no progress, so only the start of
+  // the footer is fixed; tests/comparison-http-repository covers the percent.
+  await expect(dialog(page).getByText(/^파일 올리는 중/)).toBeVisible()
   await expect.poll(() => server.sent.length).toBe(1)
   const [{ contentType, body }] = server.sent
   expect(contentType).toMatch(/^multipart\/form-data; boundary=/)
@@ -169,11 +174,12 @@ test('an uploaded take is sent as a form, then listed as the newest take', async
 test('takes saved before are listed from the server, newest first', async ({
   page,
 }) => {
-  const server = await serveTakes(page, [
-    listedTake(12, 'UPLOAD', '2026-11-02T03:00:00.402913Z'),
-    listedTake(9, 'RECORDING', '2026-11-01T03:00:00.118064Z'),
-  ])
-  await openComparison(page)
+  const server = await openComparison(page, () =>
+    serveTakes(page, [
+      listedTake(12, 'UPLOAD', '2026-11-02T03:00:00.402913Z'),
+      listedTake(9, 'RECORDING', '2026-11-01T03:00:00.118064Z'),
+    ]),
+  )
 
   await expect(takes(page)).toHaveCount(2)
   await expect(takes(page).first()).toContainText('파일 #1')
@@ -186,12 +192,10 @@ test('takes saved before are listed from the server, newest first', async ({
 test('a file the server refuses keeps the dialog with the reason', async ({
   page,
 }) => {
-  const server = await serveTakes(page, [], () => [
-    performanceFixture('unsupported-audio'),
-    400,
-  ])
+  const server = await openComparison(page, () =>
+    serveTakes(page, [], () => [performanceFixture('unsupported-audio'), 400]),
+  )
   server.release()
-  await openComparison(page)
   await chooseTone(page)
 
   await compare(page).click()

@@ -92,6 +92,15 @@ async function serveLists(page: Page) {
     const items = listsOf(page).segments.get(Number(path.at(-2))) ?? []
     return answer(route, { success: true, data: { items } })
   })
+  // A finished task lists its takes. Without this the request would reach the
+  // dev server's proxy; a spec that saves takes routes its own section later.
+  await page.route(`${API}/segments/*/performances`, (route) => {
+    const path = new URL(route.request().url()).pathname.split('/')
+    return answer(route, {
+      success: true,
+      data: { segment_id: Number(path.at(-2)), performances: [] },
+    })
+  })
 }
 
 // Signs in with a tester code and passes the first-run notices.
