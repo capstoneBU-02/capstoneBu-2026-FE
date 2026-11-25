@@ -37,6 +37,18 @@ const mark = (page: Page, number: number) =>
 
 const listed = [listedTake(12, 'UPLOAD', '2026-11-25T05:10:00.402913Z')]
 
+// The fixture's not-comparable answers, for a take shorter than its section.
+function shortTake(name: string) {
+  const body = comparisonFixture(name)
+  return {
+    ...body,
+    data: {
+      ...(body.data as object),
+      not_comparable_reason: 'RERECORD_TOO_SHORT',
+    },
+  }
+}
+
 test('a listed take is compared, then its result and sounds load', async ({
   page,
 }) => {
@@ -162,18 +174,21 @@ test('a failed comparison is retried from the stage that failed', async ({
   await expect(rows(page)).toHaveCount(4, SETTLED)
 })
 
-test('a take saved here that runs long says why it was not compared', async ({
+test('a take saved here that runs short says why it was not compared', async ({
   page,
 }) => {
-  const [takeServer] = await openComparison(page, () =>
-    Promise.all([
+  const [takeServer] = await openComparison(page, async () => {
+    const served = await Promise.all([
       serveTakes(page, []),
       serveComparison(page, {
-        status: 'status-not-comparable',
-        result: comparisonAnswer('result-not-comparable'),
+        result: [shortTake('result-not-comparable'), 200],
       }),
-    ]),
-  )
+    ])
+    await page.route(`${API}/comparisons/41`, (route) =>
+      answer(route, shortTake('status-not-comparable')),
+    )
+    return served
+  })
   takeServer.release()
   await chooseTakeFile(page)
 
@@ -183,11 +198,11 @@ test('a take saved here that runs long says why it was not compared', async ({
     '올린 음원과 맞춰 보지 못했어요',
     SETTLED,
   )
-  await expect(status(page)).toContainText('연주가 구간보다 많이 길어요.')
-  // A take saved on this page knows its own length.
-  await expect(status(page)).toContainText(
-    /연주 \d\d:\d\d\.\d · 구간 \d\d:\d\d\.\d/,
-  )
+  await expect(status(page)).toContainText('연주가 구간보다 많이 짧아요.')
+  // A take saved on this page knows its own length: the two-second tone
+  // against the three-second section. WebKit counts the MP3's padding, so
+  // the tone may read a tenth longer there.
+  await expect(status(page)).toContainText(/연주 00:02\.\d · 구간 00:03\.0/)
 })
 
 test('a status that keeps failing to load stops being asked for', async ({
