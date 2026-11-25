@@ -10,7 +10,7 @@ import {
   serveTakes,
   type Answer,
 } from './http-takes.ts'
-import { main } from './http-workspace.ts'
+import { API, answer, main } from './http-workspace.ts'
 
 // Comparison 41 of take 12 through the http repositories against a faked
 // API. The status is asked for every 2.5 seconds, so a change the server
@@ -188,6 +188,42 @@ test('a take saved here that runs long says why it was not compared', async ({
   await expect(status(page)).toContainText(
     /연주 \d\d:\d\d\.\d · 구간 \d\d:\d\d\.\d/,
   )
+})
+
+test('a status that keeps failing to load stops being asked for', async ({
+  page,
+}) => {
+  let readable = false
+  let asked = 0
+  await openComparison(page, async () => {
+    await serveTakes(page, listed)
+    const served = await serveComparison(page, { status: 'status-success' })
+    // A status the page cannot read stays unreadable however often it asks.
+    await page.route(`${API}/comparisons/41`, (route) => {
+      if (readable) return route.fallback()
+      asked += 1
+      return answer(route, {
+        success: true,
+        data: { comparison_id: 41, status: 'paused' },
+      })
+    })
+    return served
+  })
+
+  await button(page, '비교하기').click()
+
+  await expect(status(page)).toContainText(
+    '비교 결과를 불러오지 못했어요',
+    SETTLED,
+  )
+  const askedBefore = asked
+  await page.waitForTimeout(3_000)
+  expect(asked).toBe(askedBefore)
+
+  readable = true
+  await button(page, '다시 시도').click()
+
+  await expect(rows(page)).toHaveCount(4, SETTLED)
 })
 
 test('a take the server is already comparing says so', async ({ page }) => {

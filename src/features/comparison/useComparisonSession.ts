@@ -31,6 +31,8 @@ import {
 
 // CMP asks for a status every two to three seconds.
 const POLL_MS = 2_500
+// Status loads in a row that may fail before the user is asked to try again.
+const STATUS_TRIES = 3
 
 const SAVE_FAILED = '연주를 저장하지 못했어요. 다시 시도해 주세요.'
 const REQUEST_FAILED = '비교를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.'
@@ -142,11 +144,15 @@ export function useComparisonSession({
       if (!signal.aborted) dispatch({ type: 'result-loaded', result, playback })
     }
 
+    // Status loads that failed in a row since the last one that worked.
+    let missed = 0
+
     async function check(signal: AbortSignal): Promise<RefreshStep> {
       let running = true
       try {
         const status = await source.loadStatus(id, signal)
         if (signal.aborted) return 'stop'
+        missed = 0
         dispatch({ type: 'status-loaded', status })
         running = isComparisonRunning(status.state)
         if (!running && status.state !== 'failed') await loadFinished(signal)
@@ -157,9 +163,16 @@ export function useComparisonSession({
           reportExpired()
           return 'stop'
         }
-        // A status that failed to load is asked for again; a comparison that
-        // is gone, or a finished one whose result failed, waits for the user.
-        if (running && !hasCode(error, 'comparison-unavailable'))
+        // A status that failed to load is asked for again, but only a few
+        // times: an answer the page cannot read stays unreadable. That, a
+        // comparison that is gone, or a finished one whose result failed,
+        // waits for the user to try again.
+        missed += 1
+        if (
+          running &&
+          missed < STATUS_TRIES &&
+          !hasCode(error, 'comparison-unavailable')
+        )
           return 'continue'
         dispatch({
           type: 'result-failed',
