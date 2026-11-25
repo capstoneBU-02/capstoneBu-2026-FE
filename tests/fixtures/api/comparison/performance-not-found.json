@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "PERFORMANCE_NOT_FOUND",
+    "message": "연주를 찾을 수 없습니다."
+  },
+  "meta": { "trace_id": "5a0e2c71b9d84f36" }
+}

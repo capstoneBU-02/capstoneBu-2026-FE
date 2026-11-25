@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "REGION_NOT_FOUND",
+    "message": "구간을 찾을 수 없습니다."
+  },
+  "meta": { "trace_id": "c7f20b5e93a4d618" }
+}

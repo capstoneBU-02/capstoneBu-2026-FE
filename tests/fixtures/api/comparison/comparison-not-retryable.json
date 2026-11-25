@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "COMPARISON_NOT_RETRYABLE",
+    "message": "다시 시도할 수 없는 비교입니다."
+  },
+  "meta": { "trace_id": "98a4e1f06c3d2b57" }
+}

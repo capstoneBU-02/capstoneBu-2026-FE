@@ -27,8 +27,7 @@ function roundToMillisecond(seconds: number) {
   return Math.round(seconds * 1_000) / 1_000
 }
 
-// The API lists no code of its own for a take that is too long yet, so that
-// case uses the general code for a take that could not be matched.
+// The length checks the server makes before aligning (B28).
 export function mockOutcomesFor(
   durationSeconds: number,
   sectionSeconds: number,
@@ -40,7 +39,7 @@ export function mockOutcomesFor(
     ]
   if (length === 'too-long')
     return [
-      { kind: 'not-comparable', stage: 'align', reason: 'LOW_MATCH_RATE' },
+      { kind: 'not-comparable', stage: 'align', reason: 'RERECORD_TOO_LONG' },
     ]
   if (length === 'unreadable')
     return [

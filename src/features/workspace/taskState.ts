@@ -100,7 +100,7 @@ function stagesOf(status: Status, inputKind: SongInputKind): TaskStage[] {
 
 // A failure that cannot be sent again offers no retry, except one whose
 // tries ran out, which still shows the limit (TaskDetail.retry).
-function retryOf(failure: FailureView | null): TaskRetry | null {
+export function retryOf(failure: FailureView | null): TaskRetry | null {
   if (!failure) return null
   if (failure.retryable)
     return { left: failure.retries_left, limit: failure.max_retries }

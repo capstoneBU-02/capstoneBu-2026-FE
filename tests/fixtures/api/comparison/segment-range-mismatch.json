@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "SEGMENT_RANGE_MISMATCH",
+    "message": "구간이 바뀌기 전에 녹음한 연주입니다. 다시 녹음해 주세요."
+  },
+  "meta": { "trace_id": "e3b7190c4d2a6f58" }
+}

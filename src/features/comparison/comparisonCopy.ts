@@ -41,16 +41,21 @@ export function comparisonProgressLabel(
     : stageLabels[status.currentStage]
 }
 
+// The server's reasons (B28). REFERENCE_LOW_CONFIDENCE is about the
+// baseline's own notes, so it sends the player to another section rather
+// than another take.
 export function notComparableCopy(
   reason: string | null,
   baseline: Baseline,
 ): TitledCopy {
+  const label = baselineLabel(baseline)
+  const notLinedUp = `${label}과 맞춰 보지 못했어요`
   switch (reason) {
     case 'RERECORD_TOO_SHORT':
-      return {
-        title: `${baselineLabel(baseline)}과 맞춰 보지 못했어요`,
-        description: '연주가 구간보다 많이 짧아요.',
-      }
+      return { title: notLinedUp, description: '연주가 구간보다 많이 짧아요.' }
+    case 'RERECORD_TOO_LONG':
+      return { title: notLinedUp, description: '연주가 구간보다 많이 길어요.' }
+    case 'RERECORD_TOO_QUIET':
     case 'RERECORD_FEW_NOTES':
       return {
         title: '소리가 거의 녹음되지 않았어요',
@@ -58,8 +63,18 @@ export function notComparableCopy(
       }
     case 'LOW_MATCH_RATE':
       return {
-        title: `${baselineLabel(baseline)}과 맞춰 보지 못했어요`,
+        title: notLinedUp,
         description: '같은 구간을 연주했는지 확인해 주세요.',
+      }
+    case 'TEMPO_OUT_OF_RANGE':
+      return {
+        title: notLinedUp,
+        description: `연주 빠르기가 ${label}과 많이 달라요.`,
+      }
+    case 'REFERENCE_LOW_CONFIDENCE':
+      return {
+        title: `${label}의 기타 음을 또렷하게 읽지 못했어요`,
+        description: '연주 때문은 아니에요. 다른 구간을 골라 비교해 보세요.',
       }
     default:
       return { title: '이 연주는 비교하지 못했어요', description: nextTake }

@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "data": {
+    "comparison_id": 41,
+    "status": "failed",
+    "current_stage": null,
+    "not_comparable_reason": null,
+    "stages": [
+      { "stage": "align", "status": "queued" },
+      { "stage": "transcription", "status": "queued" },
+      { "stage": "compare", "status": "queued" }
+    ],
+    "failure": {
+      "stage": null,
+      "error_code": "AI_WORKER_TIMEOUT",
+      "message": "분석 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
+      "retryable": true,
+      "retry_count": 0,
+      "max_retries": 3,
+      "retries_left": 3
+    },
+    "updated_at": "2026-11-25T05:15:20.551902Z"
+  }
+}
