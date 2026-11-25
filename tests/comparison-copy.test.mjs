@@ -70,12 +70,46 @@ test('a take much shorter than the section could not be lined up', () => {
   }
 })
 
-test('a take with almost no sound points at the input device', () => {
-  for (const [baseline] of baselines) {
-    assert.deepEqual(notComparableCopy('RERECORD_FEW_NOTES', baseline), {
-      title: '소리가 거의 녹음되지 않았어요',
-      description: '입력 장치와 볼륨을 확인해 주세요.',
+test('a take much longer than the section could not be lined up', () => {
+  for (const [baseline, label] of baselines) {
+    assert.deepEqual(notComparableCopy('RERECORD_TOO_LONG', baseline), {
+      title: `${label}과 맞춰 보지 못했어요`,
+      description: '연주가 구간보다 많이 길어요.',
     })
+  }
+})
+
+// Few notes read, or mostly silence: both point at the input device.
+test('a take with almost no sound points at the input device', () => {
+  for (const reason of ['RERECORD_FEW_NOTES', 'RERECORD_TOO_QUIET']) {
+    for (const [baseline] of baselines) {
+      assert.deepEqual(notComparableCopy(reason, baseline), {
+        title: '소리가 거의 녹음되지 않았어요',
+        description: '입력 장치와 볼륨을 확인해 주세요.',
+      })
+    }
+  }
+})
+
+test('a take at a far different speed could not be lined up', () => {
+  for (const [baseline, label] of baselines) {
+    assert.deepEqual(notComparableCopy('TEMPO_OUT_OF_RANGE', baseline), {
+      title: `${label}과 맞춰 보지 못했어요`,
+      description: `연주 빠르기가 ${label}과 많이 달라요.`,
+    })
+  }
+})
+
+// The baseline's own notes were unclear: another take would not help, and
+// the wording must not blame accompaniment bleed.
+test('a baseline that could not be read does not point at the take', () => {
+  for (const [baseline, label] of baselines) {
+    const copy = notComparableCopy('REFERENCE_LOW_CONFIDENCE', baseline)
+    assert.deepEqual(copy, {
+      title: `${label}의 기타 음을 또렷하게 읽지 못했어요`,
+      description: '연주 때문은 아니에요. 다른 구간을 골라 비교해 보세요.',
+    })
+    assert.doesNotMatch(copy.title + copy.description, /반주|다시 녹음/)
   }
 })
 
@@ -219,8 +253,12 @@ test('only a slow take gets a tempo note, without numbers', () => {
 test('no copy judges the take as right, wrong or complete (COPY-04)', () => {
   const reasons = [
     'RERECORD_TOO_SHORT',
+    'RERECORD_TOO_LONG',
+    'RERECORD_TOO_QUIET',
     'RERECORD_FEW_NOTES',
     'LOW_MATCH_RATE',
+    'TEMPO_OUT_OF_RANGE',
+    'REFERENCE_LOW_CONFIDENCE',
     'LOW_CONFIDENCE',
     'UNCLEAR_ALIGNMENT',
     null,

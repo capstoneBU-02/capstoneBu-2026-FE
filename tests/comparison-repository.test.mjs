@@ -312,7 +312,7 @@ test('a take outside the length the server accepts ends as it would there', asyn
     long.comparisonId,
     signal(),
   )
-  assert.equal(longStatus.notComparableReason, 'LOW_MATCH_RATE')
+  assert.equal(longStatus.notComparableReason, 'RERECORD_TOO_LONG')
 
   const longest = setup()
   const edge = await compared(longest, { durationSeconds: 40 })

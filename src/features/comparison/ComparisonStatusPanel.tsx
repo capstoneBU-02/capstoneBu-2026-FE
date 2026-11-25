@@ -44,12 +44,18 @@ const LOADING_RESULT: PanelMessage = {
   description: null,
 }
 
-// Only a take cut short is explained by its length (Figma 33:130).
+// Only a take cut short or run long is explained by its length (Figma
+// 33:130). A take listed from another visit has no length to show.
+const LENGTH_REASONS: ReadonlySet<string | null> = new Set([
+  'RERECORD_TOO_SHORT',
+  'RERECORD_TOO_LONG',
+])
+
 function lengthDetail(
   selected: SavedPerformance | null,
   reason: string | null,
 ): string | null {
-  if (reason !== 'RERECORD_TOO_SHORT' || selected?.durationSeconds == null)
+  if (!LENGTH_REASONS.has(reason) || selected?.durationSeconds == null)
     return null
   const sectionSeconds = selected.rangeEndSeconds - selected.rangeStartSeconds
   return `연주 ${formatTime(selected.durationSeconds)} · 구간 ${formatTime(sectionSeconds)}`
