@@ -1,5 +1,10 @@
 import { readFileSync } from 'node:fs'
-import { expect, type Page, type Route } from '@playwright/test'
+import {
+  expect,
+  type FileChooser,
+  type Page,
+  type Route,
+} from '@playwright/test'
 
 // Shared by the specs that drive the http repositories against a faked API.
 export const HARNESS = '/tests/browser/http-harness.html'
@@ -131,14 +136,21 @@ export async function openWorkspace(page: Page) {
   ).toBeVisible()
 }
 
-export async function chooseTone(page: Page) {
+export async function chooseSongFile(
+  page: Page,
+  file: Parameters<FileChooser['setFiles']>[0],
+) {
   const chooser = page.waitForEvent('filechooser')
   await addSongDialog(page)
     .getByRole('button', {
       name: /^(파일을 끌어다 놓거나 선택하세요|파일 바꾸기)$/,
     })
     .click()
-  await (await chooser).setFiles(TONE)
+  await (await chooser).setFiles(file)
+}
+
+export async function chooseTone(page: Page) {
+  await chooseSongFile(page, TONE)
   await expect(addSongNext(page)).toHaveAttribute('aria-disabled', 'false')
 }
 

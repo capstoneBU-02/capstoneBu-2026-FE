@@ -15,6 +15,7 @@ import type { MediaDurationProbe } from './mediaDuration.ts'
 import {
   addSongFailureMessage,
   isFileRefusal,
+  isSameFile,
   precheckSongFile,
   songFileMessage,
   uploadProgressLabel,
@@ -83,7 +84,8 @@ export function AddSongDialog({
   const [submitError, setSubmitError] = useState<string | null>(null)
   // Upload progress in whole percents, null until the repository reports.
   const [progress, setProgress] = useState<number | null>(null)
-  // The server refused this file for its content; only another file can go.
+  // The server refused this file for its content; only another file can go,
+  // and choosing the same file again names the reason again.
   const [refusedFile, setRefusedFile] = useState<{
     file: File
     reason: AddSongFailureCode
@@ -101,10 +103,16 @@ export function AddSongDialog({
   const guideId = useId()
   const errorId = useId()
   const fileError = check ? songFileMessage(check) : null
-  const error = pickError ?? fileError ?? submitError
   const refusal =
-    file !== null && refusedFile?.file === file ? refusedFile.reason : null
+    file !== null && refusedFile !== null && isSameFile(refusedFile.file, file)
+      ? refusedFile.reason
+      : null
   const refused = refusal !== null
+  const error =
+    pickError ??
+    fileError ??
+    (refusal ? addSongFailureMessage(refusal) : null) ??
+    submitError
   const canSubmit = check?.status === 'valid' && !submitting && !refused
 
   useEffect(() => {

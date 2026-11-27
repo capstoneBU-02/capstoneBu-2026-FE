@@ -196,6 +196,17 @@ export function isFileRefusal(reason: AddSongFailureCode): boolean {
   )
 }
 
+// A file chosen again from disk is a new File object; one whose name, size,
+// format and modified time all match is taken as the same file.
+export function isSameFile(a: File, b: File): boolean {
+  return (
+    a.name === b.name &&
+    a.size === b.size &&
+    a.type === b.type &&
+    a.lastModified === b.lastModified
+  )
+}
+
 const SIZE_UNITS = ['KB', 'MB', 'GB'] as const
 
 // Binary units, as browsers' download lists show them (8.4MB).
