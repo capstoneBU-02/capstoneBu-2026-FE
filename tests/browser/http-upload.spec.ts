@@ -44,10 +44,10 @@ test('an uploaded song is listed from the server answer and opens its new-sectio
   await chooseTone(page)
   await next(page).click()
 
-  // A routed request is held before it reaches the network, so browsers
-  // report no upload progress for it; tests/api-upload covers the percent.
+  // Whether a browser reports progress for a routed request varies, so any
+  // sending label passes; tests/api-upload covers the percent.
   await expect.poll(() => bodies.length).toBe(1)
-  await expect(dialog(page).getByText('파일 올리는 중')).toBeVisible()
+  await expect(dialog(page).getByText(/^파일 (올리는|확인) 중/)).toBeVisible()
   expect(bodies[0]).toContain(
     'name="file"; filename="tone-2s.mp3"\r\nContent-Type: audio/mpeg',
   )

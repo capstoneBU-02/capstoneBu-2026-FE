@@ -24,7 +24,8 @@ import { taskDetail } from './server.ts'
 //   comparison-take-audio=fails-then-slow  and takes a while to load again
 //   comparison-save=hangs      saving a take never finishes
 //   comparison-save=held       saving a take waits for releaseTakeSaves() or
-//                              failTakeSaves()
+//                              failTakeSaves(); reportTakeSaveProgress()
+//                              reports how much of it is sent
 //   comparison-seed-range=<start>,<end>  the seeded take was played on that
 //                              range, so it opens as a take from an earlier
 //                              section; its sound lasts as long as that range
@@ -95,7 +96,10 @@ const OUTCOMES: Readonly<Record<string, readonly ComparisonOutcome[]>> = {
 
 // Saves that comparison-save=held keeps until releaseTakeSaves() or
 // failTakeSaves().
-const heldSaves: Array<(fail: boolean) => void> = []
+const heldSaves: Array<{
+  settle: (fail: boolean) => void
+  onProgress?: (percent: number) => void
+}> = []
 
 function savingAsAsked(
   repository: ComparisonRepository,
@@ -103,15 +107,17 @@ function savingAsAsked(
   if (saveHangs) return () => new Promise(() => {})
   if (query.get('comparison-save') !== 'held') return repository.savePerformance
   // The seeded take is saved before the test begins.
-  return (input, signal) =>
+  return (input, signal, onProgress) =>
     seeding
       ? repository.savePerformance(input, signal)
       : new Promise((resolve, reject) => {
-          heldSaves.push((fail) =>
-            fail
-              ? reject(new Error('The held save failed.'))
-              : resolve(repository.savePerformance(input, signal)),
-          )
+          heldSaves.push({
+            settle: (fail) =>
+              fail
+                ? reject(new Error('The held save failed.'))
+                : resolve(repository.savePerformance(input, signal)),
+            onProgress,
+          })
         })
 }
 
@@ -200,10 +206,13 @@ export const comparisonControls = {
     takeAudioFails = true
   },
   releaseTakeSaves() {
-    heldSaves.splice(0).forEach((release) => release(false))
+    heldSaves.splice(0).forEach((save) => save.settle(false))
   },
   failTakeSaves() {
-    heldSaves.splice(0).forEach((release) => release(true))
+    heldSaves.splice(0).forEach((save) => save.settle(true))
+  },
+  reportTakeSaveProgress(percent) {
+    heldSaves.forEach((save) => save.onProgress?.(percent))
   },
 } satisfies Partial<TestControls>
 
