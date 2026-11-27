@@ -300,7 +300,7 @@ test('a finished section shows no 카피 완료 while the server keeps none', as
   await expect(page).toHaveURL(`${HARNESS}?view=edit-section&task=31`)
   const editor = main(page).getByRole('form', { name: '구간 수정' })
   await expect(editor).toHaveAccessibleDescription(
-    '구간·파트·튜닝을 바꾸면 타브를 새로 만들어요. 이전 구간과 비교 상태는 이전 결과 목록에 남아요.',
+    '구간·파트·튜닝을 바꾸면 타브를 새로 만들어요. 이전 구간은 이전 결과 목록에 남아요.',
   )
   const end = editor.getByLabel('끝', { exact: true })
   await end.fill('00:25.0')

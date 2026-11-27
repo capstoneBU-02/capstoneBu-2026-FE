@@ -81,7 +81,7 @@ const REDEFINE_UNREADABLE: Pick<EditText, 'intro' | 'blocked'> = {
 
 const REVISE_WITHOUT_COPY: Pick<EditText, 'intro'> = {
   intro:
-    '구간·파트·튜닝을 바꾸면 타브를 새로 만들어요. 이전 구간과 비교 상태는 이전 결과 목록에 남아요.',
+    '구간·파트·튜닝을 바꾸면 타브를 새로 만들어요. 이전 구간은 이전 결과 목록에 남아요.',
 }
 
 function editText(

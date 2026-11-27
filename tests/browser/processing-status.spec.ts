@@ -99,8 +99,8 @@ test('a queued task follows the server until its tab is done', async ({
     '기타 분리, 진행 중',
     '타브 생성, 기다리는 중',
   ])
-  // The server asks for the tab only once the guitar is ready, so the page
-  // has to be open for it.
+  // The page asks for the tab only once the guitar is ready, so it has to be
+  // open for the server to make one.
   await expect(panel(page).getByText(TAB_WAITS, { exact: true })).toBeVisible()
   await expect(panel(page).getByText(GOES_ON, { exact: true })).toHaveCount(0)
   await expect(announcement(page)).toHaveText('기타 분리를 시작했어요.')
