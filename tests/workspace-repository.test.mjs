@@ -499,6 +499,8 @@ test('a created task moves from the queue to a finished tab over time', async ()
     'separation:waiting',
     'transcription:waiting',
   ])
+  // As on the server, the tab is asked for once the guitar is ready.
+  assert.equal(detail.tabWaitsForPage, true)
 
   detail = await detailAt(150)
   assert.equal(detail.task.processingStatus, 'processing')
@@ -509,6 +511,7 @@ test('a created task moves from the queue to a finished tab over time', async ()
     'separation:running',
     'transcription:waiting',
   ])
+  assert.equal(detail.tabWaitsForPage, true)
 
   detail = await detailAt(600)
   assert.equal(detail.task.progressPercent, 50)
@@ -517,6 +520,7 @@ test('a created task moves from the queue to a finished tab over time', async ()
     'separation:done',
     'transcription:running',
   ])
+  assert.equal(detail.tabWaitsForPage, false)
   // The list shows the same state as the task.
   const listed = (await repository.loadWorkspace(signal())).tasks.find(
     (item) => item.id === task.id,
@@ -578,6 +582,7 @@ test('separated-guitar input skips separation in the mock too (JOB-02)', async (
     'separation:skipped',
     'transcription:running',
   ])
+  assert.equal(detail.tabWaitsForPage, false)
   clock.now = 700
   assert.equal(
     (await repository.loadTask(task.id, signal())).task.processingStatus,

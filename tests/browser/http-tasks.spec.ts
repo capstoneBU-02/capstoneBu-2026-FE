@@ -134,6 +134,10 @@ test('a new section asks the server for its guitar, fails and goes again on 다�
 
   server.show('status-separating')
   await refreshUntilVisible(page, region(page, '기타 분리 중'))
+  // The tab is asked for from this page once the guitar is ready.
+  await expect(region(page, '기타 분리 중')).toContainText(
+    '창을 닫으면 타브는 다시 들어왔을 때 이어서 만들어요.',
+  )
 
   server.show('status-stem-failed')
   const failed = region(page, '기타를 분리하지 못했어요')

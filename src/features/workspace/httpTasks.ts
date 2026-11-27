@@ -373,6 +373,8 @@ export function createHttpTasks({
         stages: state.stages,
         queueAhead: null,
         retry: state.retry,
+        // Also while a refused tab request waits for the next read.
+        tabWaitsForPage: status.tab === null,
       },
     }
   }
