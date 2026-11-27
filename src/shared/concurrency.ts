@@ -30,3 +30,22 @@ export async function mapConcurrently<T, R>(
   await Promise.all(Array.from({ length: workers }, worker))
   return results
 }
+
+// Waits for work the caller does not own, giving up with the signal's reason
+// once it aborts. The work itself goes on.
+export function untilAborted<T>(
+  work: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason)
+    if (signal.aborted) {
+      abort()
+      return
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    work
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener('abort', abort))
+  })
+}

@@ -251,6 +251,7 @@ export function createHttpTasks({
     if (!fetched) return 'missing'
     if (isStopped(record.task.id, fetched)) return 'stopped'
     const status = await work.requestMissing(record.task, fetched, signal)
+    if (!status) return 'missing'
     // Also stopped while the request was on its way.
     if (isStopped(record.task.id, status)) return 'stopped'
     const failure = await work.failureFor(status, signal)
@@ -563,13 +564,13 @@ export function createHttpTasks({
     record: PageTask,
     signal: AbortSignal,
   ): Promise<WorkspaceTask | null> {
-    // A task no longer in progress is not read again; only its time label
-    // moves on.
-    if (!isTaskInProgress(record.task))
-      return {
-        ...record.task,
-        updatedAtLabel: updatedAtLabel(record.updatedAt, clock()),
-      }
+    // A task no longer in progress is not read again, and one that cannot
+    // be read keeps its last state; only their time label moves on.
+    const relabeled = () => ({
+      ...record.task,
+      updatedAtLabel: updatedAtLabel(record.updatedAt, clock()),
+    })
+    if (!isTaskInProgress(record.task)) return relabeled()
     try {
       const result = await read(record, signal)
       if (typeof result === 'string') {
@@ -580,7 +581,7 @@ export function createHttpTasks({
       return result.record.task
     } catch (error) {
       if (signal.aborted || isSessionRejected(error)) throw error
-      return record.task
+      return relabeled()
     }
   }
 
