@@ -20,6 +20,13 @@ function queueHint(queueAhead: number | null): string {
   return `앞에 작업 ${queueAhead}개가 있어요. ${keepsPlace}`
 }
 
+// What a closed window leaves running: the tab waits for the page to ask.
+function processingHint({ tabWaitsForPage }: TaskDetail): string {
+  return tabWaitsForPage
+    ? '창을 닫으면 타브는 다시 들어왔을 때 이어서 만들어요.'
+    : '창을 닫아도 계속 진행돼요.'
+}
+
 // The body of a queued or processing task (Figma 84:3197, 27:49). Progress
 // is the repository's value for the whole task; the screen never adds to it.
 export function ProcessingPanel({
@@ -98,7 +105,7 @@ export function ProcessingPanel({
         ))}
       </ol>
       <p className={styles.hint}>
-        {queued ? queueHint(queueAhead) : '창을 닫아도 계속 진행돼요.'}
+        {queued ? queueHint(queueAhead) : processingHint(detail)}
       </p>
       {/* Present from the start so a failed refresh is read when it shows. */}
       <p className={styles.notice} role="status">

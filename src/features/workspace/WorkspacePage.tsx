@@ -641,6 +641,7 @@ export function WorkspacePage({
               repository.loadSongAudio(songId, signal)
             }
             onExpired={workspace.markExpired}
+            keepsCopyStatus={copy !== null}
             notice={consentFeedback}
           />
         )}

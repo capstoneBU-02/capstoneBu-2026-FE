@@ -59,6 +59,16 @@ export function taskStages(
   ]
 }
 
+// The mock and the test harness ask for the tab as the server does, once the
+// guitar is ready. Separated input has no separation to wait for here.
+export function tabWaitsForGuitar(stages: readonly TaskStage[]): boolean {
+  return stages.some(
+    (stage) =>
+      stage.id === 'separation' &&
+      (stage.status === 'waiting' || stage.status === 'running'),
+  )
+}
+
 const STAGE_LABELS: Record<TaskStageId, string> = {
   separation: '기타 분리',
   transcription: '타브 생성',

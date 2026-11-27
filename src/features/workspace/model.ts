@@ -116,6 +116,10 @@ export interface TaskDetail {
   // Set only for a failed task that can be sent again, even with no tries
   // left; null when its failure cannot be retried or the task did not fail.
   readonly retry: TaskRetry | null
+  // The server makes the tab only when the page asks for it once the guitar
+  // is ready (B4). Until then a closed window leaves the tab to the next
+  // visit.
+  readonly tabWaitsForPage: boolean
 }
 
 export interface WorkspaceSnapshot {

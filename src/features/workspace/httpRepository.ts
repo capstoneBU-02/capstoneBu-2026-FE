@@ -25,8 +25,6 @@ import {
   type WorkspaceRepository,
 } from './repository.ts'
 
-type FailureCode = WorkspaceRepositoryError['code']
-
 // Consent has no API yet. The access repository keeps it for this page, and
 // onboarding and the settings dialog both change the same record.
 export interface LocalConsent {
@@ -99,8 +97,8 @@ function addSongError(error: unknown): WorkspaceRepositoryError {
 }
 
 // The workspace API so far: the session check, the song and section lists,
-// song upload, tasks with their separated guitar and tab. The copy status
-// fails with its own code until its API is connected.
+// song upload, tasks with their separated guitar and tab. The server keeps
+// no copy status yet, so the repository has none to save.
 export function createHttpWorkspaceRepository({
   client,
   workspace,
@@ -213,13 +211,5 @@ export function createHttpWorkspaceRepository({
     retryTask: work.retryTask,
     loadSeparatedAudio: work.loadSeparatedAudio,
     loadTab: work.loadTab,
-    saveCopyStatus: () => notConnected('copy-status-failed'),
   }
-}
-
-async function notConnected(code: FailureCode): Promise<never> {
-  throw new WorkspaceRepositoryError(
-    code,
-    '아직 API에 연결하지 않은 기능이에요.',
-  )
 }

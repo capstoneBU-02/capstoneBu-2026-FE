@@ -134,6 +134,10 @@ test('a new section asks the server for its guitar, fails and goes again on 다�
 
   server.show('status-separating')
   await refreshUntilVisible(page, region(page, '기타 분리 중'))
+  // The tab is asked for from this page once the guitar is ready.
+  await expect(region(page, '기타 분리 중')).toContainText(
+    '창을 닫으면 타브는 다시 들어왔을 때 이어서 만들어요.',
+  )
 
   server.show('status-stem-failed')
   const failed = region(page, '기타를 분리하지 못했어요')
@@ -269,6 +273,48 @@ test('a finished section draws its tab from the result notes', async ({
   await expect(tabPanel(page)).toContainText('초안 · 자동 생성')
   expect(asked).toEqual(['GET'])
   expect(server.calls).toEqual(['create segment', 'request stem'])
+})
+
+test('a finished section shows no 카피 완료 while the server keeps none', async ({
+  page,
+}) => {
+  await openWorkspace(page)
+  await uploadSong(page)
+  const server = await serveSection(page, load('stem-failed'))
+  await serveResult(page, [() => [load('tab-result'), 200]])
+  await createChorus(page)
+
+  server.show('status-completed')
+  await refreshUntilVisible(
+    page,
+    tabPanel(page).getByRole('img', { name: '타브 악보 2마디' }),
+  )
+  await expect(
+    main(page).getByRole('button', { name: '내려받기', exact: true }),
+  ).toBeVisible()
+  await expect(main(page).getByRole('checkbox', { name: /카피/ })).toHaveCount(
+    0,
+  )
+
+  await main(page).getByRole('button', { name: '구간 수정' }).click()
+  await expect(page).toHaveURL(`${HARNESS}?view=edit-section&task=31`)
+  const editor = main(page).getByRole('form', { name: '구간 수정' })
+  await expect(editor).toHaveAccessibleDescription(
+    '구간·파트·튜닝을 바꾸면 타브를 새로 만들어요. 이전 구간은 이전 결과 목록에 남아요.',
+  )
+  const end = editor.getByLabel('끝', { exact: true })
+  await end.fill('00:25.0')
+  await end.press('Tab')
+  await main(page).getByRole('button', { name: '타브 다시 만들기' }).click()
+
+  await expect(page).toHaveURL(`${HARNESS}?view=task&task=31`)
+  const kept = main(page)
+    .getByRole('region', { name: '이전 결과' })
+    .getByRole('listitem')
+  await expect(kept).toHaveCount(1)
+  await expect(kept).toContainText('00:12.3–00:27.8')
+  await expect(kept).toContainText('비교 0회')
+  await expect(kept).not.toContainText('카피')
 })
 
 test('a tab result that fails offers 다시 시도 and draws on the next answer', async ({

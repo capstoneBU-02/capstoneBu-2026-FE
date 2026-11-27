@@ -36,7 +36,7 @@ import {
 } from './mockProcessing.ts'
 import { mockRetryOf, waitForMockRequest } from './mockServer.ts'
 import { mockTabInput } from './mockTab.ts'
-import { taskStages } from './processing.ts'
+import { tabWaitsForGuitar, taskStages } from './processing.ts'
 import { keptResult, newTaskLabels } from './taskLabels.ts'
 import {
   WorkspaceRepositoryError,
@@ -228,15 +228,17 @@ export function createMockWorkspaceRepository(
         )
       }
       const state = current.states.get(taskId)
+      const stages = taskStages(task, song.inputKind)
       return {
         task,
         song: { ...song },
         previousResults: (previousResults.get(taskId) ?? []).map((result) => ({
           ...result,
         })),
-        stages: taskStages(task, song.inputKind),
+        stages,
         queueAhead: state?.status === 'queued' ? state.ahead : null,
         retry: retryOf(task),
+        tabWaitsForPage: tabWaitsForGuitar(stages),
       }
     },
     async addSong(input, signal, onProgress) {

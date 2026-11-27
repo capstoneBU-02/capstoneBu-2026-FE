@@ -276,13 +276,9 @@ test('consent is kept on this device and sends nothing', async () => {
   assert.equal(calls.length, 0)
 })
 
-test('the copy status without an API yet fails with its own code and sends nothing', async () => {
-  const { repository, calls } = setup(() => assert.fail('no request'))
-  await assert.rejects(repository.saveCopyStatus('1', true, signal()), {
-    name: 'WorkspaceRepositoryError',
-    code: 'copy-status-failed',
-  })
-  assert.equal(calls.length, 0)
+test('the copy status has no API yet, so the repository offers none', () => {
+  const { repository } = setup(() => assert.fail('no request'))
+  assert.equal(repository.saveCopyStatus, undefined)
 })
 
 test('an uploaded track becomes a song named after its file', () => {

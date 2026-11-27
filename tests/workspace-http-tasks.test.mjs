@@ -336,6 +336,8 @@ test('loading a task reads its processing status', async () => {
     ],
     queueAhead: null,
     retry: null,
+    // No tab is asked for until the guitar is ready.
+    tabWaitsForPage: true,
   })
   // The page keeps what it read for the list.
   const listed = await repository.loadWorkspace(signal())
@@ -363,6 +365,8 @@ test('a ready guitar asks for the tab with the task tuning', async () => {
     { id: 'separation', status: 'done' },
     { id: 'transcription', status: 'running' },
   ])
+  // The server goes on with the tab without the page.
+  assert.equal(detail.tabWaitsForPage, false)
 })
 
 for (const [name, answer] of [
@@ -378,6 +382,15 @@ for (const [name, answer] of [
     assert.equal(detail.task.processingStatus, 'processing')
   })
 }
+
+test('a refused tab request leaves the tab to the next visit', async () => {
+  const { repository } = setup(
+    { [STATUS]: fixture(200, 'status-stem-ready'), [TABS]: serverError },
+    { tasks: tasksWith({ stemId: 54 }) },
+  )
+  const detail = await repository.loadTask('31', signal())
+  assert.equal(detail.tabWaitsForPage, true)
+})
 
 for (const [failure, expected] of [
   ['stem-failed', { failureKind: null, retry: { left: 2, limit: 3 } }],

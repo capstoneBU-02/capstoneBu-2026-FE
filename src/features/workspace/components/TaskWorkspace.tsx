@@ -161,7 +161,7 @@ function TaskWorkspace({
   refreshFailed: boolean
   source: TaskSource
   recovery: TaskRecoveryActions
-  copy: CopyStatus
+  copy: CopyStatus | null
   actions: HTMLElement | null
   comparison: ComparisonRepository | null
   probeDuration: MediaDurationProbe | undefined
@@ -297,7 +297,7 @@ function TaskWorkspace({
               <span className={styles.truncate}>{song.fileName}</span>
             </p>
           </div>
-          {task.processingStatus === 'completed' && (
+          {copy && task.processingStatus === 'completed' && (
             <CopyToggle task={task} copy={copy} />
           )}
         </header>
@@ -382,13 +382,15 @@ function TaskWorkspace({
                     <span>{result.partLabel}</span>
                     <span>{result.tuningLabel}</span>
                     <span>비교 {result.comparisonCount}회</span>
-                    <span>
-                      {result.copyStatus === 'confirmed'
-                        ? '카피 완료'
-                        : result.copyStatus === 'needs-review'
-                          ? '확인 필요'
-                          : '카피 미확인'}
-                    </span>
+                    {copy && (
+                      <span>
+                        {result.copyStatus === 'confirmed'
+                          ? '카피 완료'
+                          : result.copyStatus === 'needs-review'
+                            ? '확인 필요'
+                            : '카피 미확인'}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -469,7 +471,8 @@ type TaskPanelProps = {
   | {
       source: TaskSource
       recovery: TaskRecoveryActions
-      copy: CopyStatus
+      // Without copy status a finished task shows no 카피 완료.
+      copy: CopyStatus | null
       // Where the top bar keeps the task's actions, for 내려받기.
       actions: HTMLElement | null
       // Without a repository a finished task shows its tab alone.

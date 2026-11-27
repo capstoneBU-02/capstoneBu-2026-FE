@@ -4,7 +4,10 @@ import { isTaskInProgress } from '../../../src/features/workspace/format.ts'
 import { mockRetriesUsed } from '../../../src/features/workspace/mockFixtures.ts'
 import { mockRetryOf } from '../../../src/features/workspace/mockServer.ts'
 import { createMockWorkspaceRepository } from '../../../src/features/workspace/mockRepository.ts'
-import { taskStages } from '../../../src/features/workspace/processing.ts'
+import {
+  tabWaitsForGuitar,
+  taskStages,
+} from '../../../src/features/workspace/processing.ts'
 import { keptResult } from '../../../src/features/workspace/taskLabels.ts'
 import type {
   NewSongInput,
@@ -99,19 +102,20 @@ export function taskDetail(taskId: string): TaskDetail | null {
   const song = [...snapshot.songs, ...sessionSongs].find(
     (candidate) => candidate.id === task?.songId,
   )
-  return task && song
-    ? {
-        task,
-        song,
-        previousResults: keptResults.get(taskId) ?? [],
-        stages: detailStages.get(taskId) ?? taskStages(task, song.inputKind),
-        queueAhead:
-          task.processingStatus === 'queued'
-            ? (queueAhead.get(taskId) ?? null)
-            : null,
-        retry: retryOf(task),
-      }
-    : null
+  if (!task || !song) return null
+  const stages = detailStages.get(taskId) ?? taskStages(task, song.inputKind)
+  return {
+    task,
+    song,
+    previousResults: keptResults.get(taskId) ?? [],
+    stages,
+    queueAhead:
+      task.processingStatus === 'queued'
+        ? (queueAhead.get(taskId) ?? null)
+        : null,
+    retry: retryOf(task),
+    tabWaitsForPage: tabWaitsForGuitar(stages),
+  }
 }
 
 let addedSongs = 0

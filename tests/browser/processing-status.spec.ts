@@ -18,6 +18,8 @@ const announcement = (page: Page) =>
 const editButton = (page: Page) =>
   main(page).getByRole('button', { name: '구간 수정' })
 const REFRESH_FAILED = '지금 상태를 불러오지 못했어요. 잠시 후 다시 확인할게요.'
+const TAB_WAITS = '창을 닫으면 타브는 다시 들어왔을 때 이어서 만들어요.'
+const GOES_ON = '창을 닫아도 계속 진행돼요.'
 
 type Change = Parameters<Window['workspaceTest']['updateTaskOnServer']>[1]
 
@@ -97,9 +99,10 @@ test('a queued task follows the server until its tab is done', async ({
     '기타 분리, 진행 중',
     '타브 생성, 기다리는 중',
   ])
-  await expect(
-    panel(page).getByText('창을 닫아도 계속 진행돼요.'),
-  ).toBeVisible()
+  // The page asks for the tab only once the guitar is ready, so it has to be
+  // open for the server to make one.
+  await expect(panel(page).getByText(TAB_WAITS, { exact: true })).toBeVisible()
+  await expect(panel(page).getByText(GOES_ON, { exact: true })).toHaveCount(0)
   await expect(announcement(page)).toHaveText('기타 분리를 시작했어요.')
   await expect(main(page).getByText('진행 중', { exact: true })).toBeVisible()
   await expect(sidebarTask(page, /^벌스 1/)).toContainText('12%')
@@ -112,6 +115,8 @@ test('a queued task follows the server until its tab is done', async ({
     '기타 분리, 완료',
     '타브 생성, 진행 중',
   ])
+  await expect(panel(page).getByText(GOES_ON, { exact: true })).toBeVisible()
+  await expect(panel(page).getByText(TAB_WAITS, { exact: true })).toHaveCount(0)
   await expect(announcement(page)).toHaveText('타브 생성을 시작했어요.')
   // Progress alone is not read out again.
   await updateOnServer(page, 'task-verse', { progressPercent: 80 })
