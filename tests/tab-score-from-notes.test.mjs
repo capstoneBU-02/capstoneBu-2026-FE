@@ -96,7 +96,7 @@ test('a note across a bar line goes on as a tie in the next bar', () => {
   const score = convert(transcription([note(3, 2, 3, 2)]))
   assert.deepEqual(score.bars, [
     bar(1, 0.25, [beat(2, [], true), beat(4, [[3, 2]])]),
-    bar(2, 2.25, [beat(4, [[3, 2, true]]), beat(2, [], true)]),
+    bar(2, 2.25, [beat(4, [[3, 2, true]]), beat(4), beat(2)]),
   ])
   assert.equal(score.endSeconds, 4.25)
 })
@@ -107,7 +107,7 @@ test('a note stops at the next onset and silence becomes rests', () => {
   )
   assert.deepEqual(score.bars, [
     bar(1, 0.25, [beat(2, [[1, 3]]), beat(4, [[2, 2]]), beat(4)]),
-    bar(2, 2.25, [beat(4, [[1, 0]]), beat(2, [], true)]),
+    bar(2, 2.25, [beat(4, [[1, 0]]), beat(4), beat(2)]),
   ])
 })
 
@@ -153,8 +153,8 @@ test('a note ends where its own end snaps, not after its rounded length', () => 
   assert.deepEqual(score.bars[0].beats, [
     beat(16),
     beat(4, [[1, 0]], true),
-    beat(2),
     beat(16),
+    beat(2),
   ])
 })
 
@@ -162,13 +162,48 @@ test('a chord lasts as long as the notes it keeps', () => {
   const score = convert(
     transcription([note(0, 4, 1, 0, { confidence: 0.5 }), note(0, 1, 1, 5)]),
   )
-  assert.deepEqual(score.bars[0].beats, [beat(4, [[1, 5]]), beat(2, [], true)])
+  assert.deepEqual(score.bars[0].beats, [beat(4, [[1, 5]]), beat(4), beat(2)])
+})
+
+// A rest is split at the beats so the bar reads by beat; a note keeps its split.
+test('a rest under a beat stays in its beat and a longer one starts on a multiple of its length', () => {
+  const sixteenth = convert(transcription([note(0, 0.25, 1, 0)]))
+  assert.deepEqual(sixteenth.bars[0].beats, [
+    beat(16, [[1, 0]]),
+    beat(8, [], true),
+    beat(4),
+    beat(2),
+  ])
+
+  // An eighth rest between two sixteenths, then quarter rests on beats 2
+  // and 3, where a half rest would hide the middle of the bar.
+  const between = convert(
+    transcription([
+      note(0, 0.25, 1, 0),
+      note(0.75, 0.25, 1, 2),
+      note(3, 1, 1, 3),
+    ]),
+  )
+  assert.deepEqual(between.bars[0].beats, [
+    beat(16, [[1, 0]]),
+    beat(8),
+    beat(16, [[1, 2]]),
+    beat(4),
+    beat(4),
+    beat(4, [[1, 3]]),
+  ])
+
+  // In 3/4 the second and third beats rest apart too.
+  const triple = convert(
+    transcription([note(0, 1, 1, 0)], { timeSignature: [3, 4] }),
+  )
+  assert.deepEqual(triple.bars[0].beats, [beat(4, [[1, 0]]), beat(4), beat(4)])
 })
 
 test('the score starts at the bar of the first note and numbers it 1', () => {
   const score = convert(transcription([note(4.5, 0.5, 2, 5)]))
   assert.deepEqual(score.bars, [
-    bar(1, 2.25, [beat(8), beat(8, [[2, 5]]), beat(2, [], true)]),
+    bar(1, 2.25, [beat(8), beat(8, [[2, 5]]), beat(4), beat(2)]),
   ])
   assert.equal(score.endSeconds, 4.25)
 })
@@ -250,6 +285,23 @@ test('a transcription longer than the screen draws gives no score', () => {
   assert.equal(
     convert(transcription([note(0, 1, 1, 0), last(1000)])).bars.length,
     1000,
+  )
+})
+
+test('a bar of more beats than the screen draws gives no score', () => {
+  const one = [note(0, 1, 1, 0)]
+  assert.equal(
+    convert(transcription(one, { timeSignature: [32, 4] })).bars.length,
+    1,
+  )
+  assert.equal(
+    scoreFromNotes(transcription(one, { timeSignature: [33, 4] })),
+    null,
+  )
+  // Far past it the rests alone would run the converter out of stack.
+  assert.equal(
+    scoreFromNotes(transcription(one, { timeSignature: [100000, 4] })),
+    null,
   )
 })
 
