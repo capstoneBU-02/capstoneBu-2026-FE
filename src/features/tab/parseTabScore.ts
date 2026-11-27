@@ -16,7 +16,7 @@ export type TabParseResult =
 const MIN_STRINGS = 4
 const MAX_STRINGS = 8
 const MAX_FRET = 24
-const MAX_BEATS_PER_BAR = 32
+export const MAX_BEATS_PER_BAR = 32
 export const MAX_BARS = 1000
 // Note values from whole to sixteenth, for durations and beat units alike.
 const NOTE_VALUES: readonly number[] = [1, 2, 4, 8, 16]

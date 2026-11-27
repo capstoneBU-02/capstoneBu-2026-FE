@@ -359,6 +359,43 @@ test('a tab result that fails offers 다시 시도 and draws on the next answer'
   expect(asked).toEqual(['GET', 'GET'])
 })
 
+test('a tab the server no longer has says so without 다시 시도', async ({
+  page,
+}) => {
+  await openWorkspace(page)
+  await uploadSong(page)
+  const server = await serveSection(page, load('stem-failed'))
+  await serveResult(page, [() => [load('tab-not-found'), 404]])
+  await createChorus(page)
+
+  server.show('status-completed')
+  const failure = tabPanel(page).getByRole('alert')
+  await refreshUntilVisible(page, failure)
+  await expect(failure).toHaveText('타브를 찾을 수 없어요.')
+  await expect(tabPanel(page).getByRole('button')).toHaveCount(0)
+})
+
+test('a tab opened again is drawn from the result already read', async ({
+  page,
+}) => {
+  await openWorkspace(page)
+  await uploadSong(page)
+  const server = await serveSection(page, load('stem-failed'))
+  const asked = await serveResult(page, [() => [load('tab-result'), 200]])
+  await createChorus(page)
+
+  server.show('status-completed')
+  const staff = tabPanel(page).getByRole('img', { name: '타브 악보 2마디' })
+  await refreshUntilVisible(page, staff)
+  await sidebar(page).getByRole('button', { name: '내 작업' }).click()
+  await expect(tabPanel(page)).toHaveCount(0)
+  await sidebar(page)
+    .getByRole('button', { name: /^코러스 1/ })
+    .click()
+  await expect(staff).toBeVisible()
+  expect(asked).toEqual(['GET'])
+})
+
 test('a workspace entered again lists its sections from the server and opens one', async ({
   page,
 }) => {

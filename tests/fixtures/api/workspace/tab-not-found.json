@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "error": {
+    "code": "TAB_NOT_FOUND",
+    "message": "타브를 찾을 수 없습니다."
+  },
+  "meta": { "trace_id": "8d41b7e2c05a4f19" }
+}

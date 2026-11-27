@@ -5,12 +5,12 @@ import type {
   TabNote,
   TabScore,
 } from './model.ts'
-import { MAX_BARS } from './parseTabScore.ts'
+import { MAX_BARS, MAX_BEATS_PER_BAR } from './parseTabScore.ts'
 
 // Turns notes already placed on a beat grid into bars the renderer can draw.
 // Onsets snap to the sixteenth, so triplets land on the nearest one; notes
 // on one onset form a chord, and a length that no single value holds or that
-// crosses a bar line goes on as ties.
+// crosses a bar line goes on as ties. Rests keep to the beats.
 
 export interface PlacedNote {
   // Seconds from the start of the section.
@@ -137,10 +137,46 @@ function piecesOf(ticks: number): readonly Piece[] {
   return piece ? [piece, ...piecesOf(ticks - piece.ticks)] : []
 }
 
-// The part of a span from one tick to another. Every piece after the span's
-// first holds the sound on.
-function beatsOf(span: Span, from: number, to: number): TabBeat[] {
-  return piecesOf(to - from).map((piece, index) => {
+// A rest of a beat or more starts a multiple of its own length into the bar,
+// so a half rest takes the first or the second half of a 4/4 bar; a shorter
+// one stays inside its beat. In 4/4 the rest after a sixteenth on the first
+// beat reads 8. 4 2, where the longest values first would give 2. 8.
+// Rests leave out the dotted quarter.
+const REST_PIECES = PIECES.filter((piece) => piece.ticks !== 6)
+
+function fitsRest(ticks: number, at: number, to: number, barStart: number) {
+  const intoBar = at - barStart
+  return (
+    at + ticks <= to &&
+    (ticks >= TICKS_PER_BEAT
+      ? intoBar % ticks === 0
+      : (intoBar % TICKS_PER_BEAT) + ticks <= TICKS_PER_BEAT)
+  )
+}
+
+// A sixteenth always fits, so every tick from `from` to `to` is taken.
+function restPiecesOf(from: number, to: number, barStart: number): Piece[] {
+  const pieces: Piece[] = []
+  for (let at = from; at < to; at += pieces.at(-1)!.ticks)
+    pieces.push(
+      REST_PIECES.find((piece) => fitsRest(piece.ticks, at, to, barStart))!,
+    )
+  return pieces
+}
+
+// The part of a span from one tick to another, in the bar that starts at
+// `barStart`. Every piece after the span's first holds the sound on.
+function beatsOf(
+  span: Span,
+  from: number,
+  to: number,
+  barStart: number,
+): TabBeat[] {
+  const pieces =
+    span.notes.length === 0
+      ? restPiecesOf(from, to, barStart)
+      : piecesOf(to - from)
+  return pieces.map((piece, index) => {
     const tied = index > 0 || from > span.start
     return {
       duration: piece.duration,
@@ -155,7 +191,12 @@ function barBeats(spans: readonly Span[], start: number, end: number) {
   return spans
     .filter((span) => span.start < end && span.end > start)
     .flatMap((span) =>
-      beatsOf(span, Math.max(span.start, start), Math.min(span.end, end)),
+      beatsOf(
+        span,
+        Math.max(span.start, start),
+        Math.min(span.end, end),
+        start,
+      ),
     )
 }
 
@@ -227,6 +268,8 @@ function forward(times: readonly number[], gap: number): readonly number[] {
   }, [])
 }
 
+// The screen draws at most MAX_BEATS_PER_BAR beats to a bar, and a far
+// longer bar could split a held note one call deep for every whole note.
 function canConvert({ notes, timeSignature, tempoBpm }: NoteTranscription) {
   const [beatsPerBar, unit] = timeSignature
   return (
@@ -234,6 +277,7 @@ function canConvert({ notes, timeSignature, tempoBpm }: NoteTranscription) {
     unit === 4 &&
     Number.isInteger(beatsPerBar) &&
     beatsPerBar > 0 &&
+    beatsPerBar <= MAX_BEATS_PER_BAR &&
     Number.isFinite(tempoBpm) &&
     tempoBpm > 0 &&
     notes.every((note) => note.beat >= 0)
@@ -241,7 +285,7 @@ function canConvert({ notes, timeSignature, tempoBpm }: NoteTranscription) {
 }
 
 // Null when there is nothing to draw, the meter is not in quarter notes or
-// the notes run past the bars the screen draws.
+// the notes run past the bars or beats the screen draws.
 export function scoreFromNotes(input: NoteTranscription): TabScore | null {
   if (!canConvert(input)) return null
   const [beatsPerBar] = input.timeSignature

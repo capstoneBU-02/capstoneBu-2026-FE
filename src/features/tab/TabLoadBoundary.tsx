@@ -10,7 +10,7 @@ interface TabLoadBoundaryState {
   readonly failed: boolean
 }
 
-export const TAB_DRAW_FAILED = '타브를 표시하지 못했어요. 다시 시도해 주세요.'
+const TAB_DRAW_FAILED = '타브를 표시하지 못했어요. 다시 시도해 주세요.'
 
 // Keeps a failed tab download, or a drawing error, inside the tab area: the
 // rest of the workspace and the player stay usable. React logs the error.

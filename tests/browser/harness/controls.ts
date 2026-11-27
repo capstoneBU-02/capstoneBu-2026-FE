@@ -84,7 +84,7 @@ export interface TestControls {
   resolveTab(): void
   // Answers the open tab requests with a tab the screen cannot read.
   resolveTabWithBadFormat(): void
-  failTab(code: 'tab-unavailable' | 'expired'): void
+  failTab(code: 'tab-unavailable' | 'tab-missing' | 'expired'): void
   // Copy status saves, oldest first, and whether each was cancelled.
   copyCalls(): Array<{ taskId: string; confirmed: boolean; aborted: boolean }>
   // pending-copy keeps saveCopyStatus requests open until settled here.

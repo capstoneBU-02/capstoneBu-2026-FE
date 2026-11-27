@@ -6,6 +6,7 @@
 import { isSessionRejected, type HttpClient } from '../../api/http.ts'
 import type { RemoteFiles } from '../../api/remoteFile.ts'
 import { mapConcurrently, REQUESTS_AT_ONCE } from '../../shared/concurrency.ts'
+import type { TabScore } from '../tab/model.ts'
 import { scoreFromNotes } from '../tab/scoreFromNotes.ts'
 import {
   canSendSectionEdit,
@@ -66,6 +67,7 @@ const MESSAGES = {
   'cancel-task-failed': '작업을 멈추지 못했어요.',
   'audio-unavailable': '분리한 기타 음원을 불러오지 못했어요.',
   'tab-unavailable': '타브를 불러오지 못했어요.',
+  'tab-missing': '타브를 찾을 수 없어요.',
 } as const
 
 type TaskFailureCode = keyof typeof MESSAGES
@@ -147,6 +149,11 @@ export function createHttpTasks({
 }): HttpTasks {
   const songOf = (songId: string) =>
     songs.list().find((song) => song.id === songId)
+  // A finished tab's result does not change: the server never runs a
+  // finished tab again and retries only a failed one, under the same id and
+  // version. So each tab is read and converted once; a failed read is not
+  // kept. A code entered again makes these tasks anew and reads again.
+  const tabScores = new Map<number, TabScore | null>()
 
   // A segment as a task waiting for its stem, before its status is read.
   function queuedRecord(
@@ -542,21 +549,30 @@ export function createHttpTasks({
 
   // The result's notes turned into bars. A result with nothing to draw
   // resolves null, which the screen's check reports as a tab it cannot show.
+  // The server does not find a tab of another workspace either, as after
+  // another code's session took the cookie; that failure is not kept, so the
+  // task opened again asks once more.
   async function loadTab(taskId: string, signal: AbortSignal) {
     signal.throwIfAborted()
     const record = tasks.get(taskId)
     const tabId = record?.tabId
     if (record?.task.processingStatus !== 'completed' || tabId == null)
       throw refused('tab-unavailable')
+    if (tabScores.has(tabId)) return tabScores.get(tabId)
     try {
       const { data } = await client.request('GET', `/tabs/${tabId}/result`, {
         signal,
         read: readTabResult,
       })
-      return scoreFromNotes(tabTranscriptionOf(data))
+      const score = scoreFromNotes(tabTranscriptionOf(data))
+      tabScores.set(tabId, score)
+      return score
     } catch (error) {
       if (signal.aborted) throw error
-      throw failed('tab-unavailable', error)
+      throw failed(
+        codeOf(error) === 'TAB_NOT_FOUND' ? 'tab-missing' : 'tab-unavailable',
+        error,
+      )
     }
   }
 
