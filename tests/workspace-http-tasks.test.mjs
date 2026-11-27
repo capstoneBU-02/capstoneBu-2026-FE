@@ -1812,6 +1812,58 @@ for (const [name, route, code] of [
   })
 }
 
+// A finished tab's result stays as it is: only a failed tab is tried
+// again, and it keeps its id.
+test('a finished tab is read once and drawn again from what was read', async () => {
+  const { repository, calls } = setup(
+    { [RESULT]: fixture(200, 'tab-result') },
+    { tasks: tasksWith(COMPLETED) },
+  )
+  const first = await repository.loadTab('31', signal())
+  const again = await repository.loadTab('31', signal())
+  assert.deepEqual(keys(calls), [RESULT])
+  assert.deepEqual(again, first)
+  assert.equal(parseTabScore(again).ok, true)
+})
+
+test('a result with nothing to draw is not read again either', async () => {
+  const result = readFixture('workspace/tab-result.json')
+  result.data.time_signature = '6/8'
+  const { repository, calls } = setup(
+    { [RESULT]: () => jsonResponse(200, result) },
+    { tasks: tasksWith(COMPLETED) },
+  )
+  assert.equal(await repository.loadTab('31', signal()), null)
+  assert.equal(await repository.loadTab('31', signal()), null)
+  assert.deepEqual(keys(calls), [RESULT])
+})
+
+test('each tab is read on its own and a failed read is asked again', async () => {
+  const OTHER = `GET ${API}/tabs/89/result`
+  const { repository, calls } = setup(
+    {
+      [RESULT]: [serverError, fixture(200, 'tab-result')],
+      [OTHER]: fixture(200, 'tab-result'),
+    },
+    {
+      tasks: tasksWith(COMPLETED, {
+        ...COMPLETED,
+        task: { ...COMPLETED.task, id: '32' },
+        stemId: 55,
+        tabId: 89,
+      }),
+    },
+  )
+  await assert.rejects(repository.loadTab('31', signal()), {
+    code: 'tab-unavailable',
+  })
+  assert.ok(await repository.loadTab('32', signal()))
+  assert.ok(await repository.loadTab('31', signal()))
+  assert.ok(await repository.loadTab('32', signal()))
+  assert.ok(await repository.loadTab('31', signal()))
+  assert.deepEqual(keys(calls), [RESULT, OTHER, RESULT])
+})
+
 test('a task without a finished tab has none to load', async () => {
   const { repository, calls } = setup(
     {},

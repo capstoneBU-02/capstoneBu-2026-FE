@@ -6,6 +6,7 @@
 import { isSessionRejected, type HttpClient } from '../../api/http.ts'
 import type { RemoteFiles } from '../../api/remoteFile.ts'
 import { mapConcurrently, REQUESTS_AT_ONCE } from '../../shared/concurrency.ts'
+import type { TabScore } from '../tab/model.ts'
 import { scoreFromNotes } from '../tab/scoreFromNotes.ts'
 import {
   canSendSectionEdit,
@@ -148,6 +149,11 @@ export function createHttpTasks({
 }): HttpTasks {
   const songOf = (songId: string) =>
     songs.list().find((song) => song.id === songId)
+  // A finished tab's result does not change: the server retries only a
+  // failed tab, under the same id and version, and a section changed again
+  // gets a new tab. So each tab is read and converted once; a failed read is
+  // not kept.
+  const tabScores = new Map<number, TabScore | null>()
 
   // A segment as a task waiting for its stem, before its status is read.
   function queuedRecord(
@@ -550,12 +556,15 @@ export function createHttpTasks({
     const tabId = record?.tabId
     if (record?.task.processingStatus !== 'completed' || tabId == null)
       throw refused('tab-unavailable')
+    if (tabScores.has(tabId)) return tabScores.get(tabId)
     try {
       const { data } = await client.request('GET', `/tabs/${tabId}/result`, {
         signal,
         read: readTabResult,
       })
-      return scoreFromNotes(tabTranscriptionOf(data))
+      const score = scoreFromNotes(tabTranscriptionOf(data))
+      tabScores.set(tabId, score)
+      return score
     } catch (error) {
       if (signal.aborted) throw error
       throw failed(
