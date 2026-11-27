@@ -53,7 +53,9 @@ export interface WorkspaceRepository {
   // 카피 완료 표시·해제 (COPY-04): kept apart from processing and accepted
   // only for a finished task. Returns the task as the server keeps it; what
   // an unmarked task becomes is the server's call, as the contract is open.
-  saveCopyStatus(
+  // Absent while the server keeps no copy status (B25); the screens then
+  // show none.
+  saveCopyStatus?(
     taskId: string,
     confirmed: boolean,
     signal: AbortSignal,

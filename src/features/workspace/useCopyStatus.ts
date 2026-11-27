@@ -53,11 +53,12 @@ function settled(
 }
 
 // 카피 완료 for every task of the workspace, kept apart from processing
-// (COPY-04): only the user marks or unmarks it.
+// (COPY-04): only the user marks or unmarks it. Null while the repository
+// keeps no copy status.
 export function useCopyStatus(
   repository: Pick<WorkspaceRepository, 'saveCopyStatus'>,
   { expired, onSaved, onExpired }: CopyStatusOptions,
-): CopyStatus {
+): CopyStatus | null {
   const [saving, setSaving] = useState(NOTHING_SAVING)
   const [failed, setFailed] = useState(NOTHING_FAILED)
   const requests = useRef(new Map<string, AbortController>())
@@ -73,10 +74,13 @@ export function useCopyStatus(
     }
   }, [repository, expired])
 
-  async function save(
+  const saveCopyStatus = repository.saveCopyStatus
+  if (!saveCopyStatus) return null
+
+  const save = async (
     taskId: string,
     confirmed: boolean,
-  ): Promise<CopySaveResult> {
+  ): Promise<CopySaveResult> => {
     if (expired || requests.current.has(taskId)) return 'cancelled'
     const controller = new AbortController()
     const { signal } = controller
@@ -84,7 +88,7 @@ export function useCopyStatus(
     setSaving((previous) => new Map(previous).set(taskId, confirmed))
     setFailed((previous) => settled(previous, taskId, false))
     try {
-      const saved = await repository.saveCopyStatus(taskId, confirmed, signal)
+      const saved = await saveCopyStatus(taskId, confirmed, signal)
       if (signal.aborted) return 'cancelled'
       onSaved(saved)
       return 'saved'

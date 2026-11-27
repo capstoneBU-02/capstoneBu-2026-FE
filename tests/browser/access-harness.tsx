@@ -89,6 +89,7 @@ const repository: AccessRepository = {
     const workspace = base.workspaceFor(sessionId)
     let wrapper = wrappers.get(workspace)
     if (!wrapper) {
+      const saveCopyStatus = workspace.saveCopyStatus
       wrapper = {
         loadWorkspace(signal) {
           workspaceLoads += 1
@@ -175,13 +176,23 @@ const repository: AccessRepository = {
               )
             : workspace.loadTab(taskId, signal)
         },
-        saveCopyStatus(taskId, confirmed, signal) {
-          return expired
-            ? Promise.reject(
-                new WorkspaceRepositoryError('expired', 'Expired test session'),
-              )
-            : workspace.saveCopyStatus(taskId, confirmed, signal)
-        },
+        // Only a workspace that keeps copy status offers to save it.
+        ...(saveCopyStatus && {
+          saveCopyStatus(
+            taskId: string,
+            confirmed: boolean,
+            signal: AbortSignal,
+          ) {
+            return expired
+              ? Promise.reject(
+                  new WorkspaceRepositoryError(
+                    'expired',
+                    'Expired test session',
+                  ),
+                )
+              : saveCopyStatus(taskId, confirmed, signal)
+          },
+        }),
       }
       wrappers.set(workspace, wrapper)
     }

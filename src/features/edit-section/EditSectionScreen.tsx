@@ -33,6 +33,9 @@ type Props = {
   onRevised: (task: WorkspaceTask) => void
   loadAudio: (songId: string, signal: AbortSignal) => Promise<Blob>
   onExpired: () => void
+  // Whether 이전 결과 keeps the 카피 status; without a server copy status it
+  // keeps none.
+  keepsCopyStatus: boolean
   notice?: ReactNode
 }
 
@@ -76,10 +79,21 @@ const REDEFINE_UNREADABLE: Pick<EditText, 'intro' | 'blocked'> = {
     '시작이나 끝을 바꿔야 타브를 만들 수 있어요. 같은 범위에서는 소리를 다시 읽지 못할 수 있어요.',
 }
 
-function editText(kind: SectionEditKind, task: WorkspaceTask) {
-  return kind === 'redefine' && task.failureKind === 'invalid-audio'
-    ? { ...TEXT.redefine, ...REDEFINE_UNREADABLE }
-    : TEXT[kind]
+const REVISE_WITHOUT_COPY: Pick<EditText, 'intro'> = {
+  intro:
+    '구간·파트·튜닝을 바꾸면 타브를 새로 만들어요. 이전 구간과 비교 상태는 이전 결과 목록에 남아요.',
+}
+
+function editText(
+  kind: SectionEditKind,
+  task: WorkspaceTask,
+  keepsCopyStatus: boolean,
+) {
+  if (kind === 'redefine' && task.failureKind === 'invalid-audio')
+    return { ...TEXT.redefine, ...REDEFINE_UNREADABLE }
+  if (kind === 'revise' && !keepsCopyStatus)
+    return { ...TEXT.revise, ...REVISE_WITHOUT_COPY }
+  return TEXT[kind]
 }
 
 // The change is not kept as a draft: leaving the screen drops it, and the
@@ -94,6 +108,7 @@ export function EditSectionScreen({
   onRevised,
   loadAudio,
   onExpired,
+  keepsCopyStatus,
   notice,
 }: Props) {
   // Both follow the task as it was opened, as the form does.
@@ -102,7 +117,7 @@ export function EditSectionScreen({
     replaced: replacedSectionNotice(task),
   }))
   const [form, dispatch] = useReducer(reducer, task, sectionFormFromTask)
-  const { intro, blocked, ...text } = editText(kind, task)
+  const { intro, blocked, ...text } = editText(kind, task, keepsCopyStatus)
   return (
     <SectionEditor
       song={song}
