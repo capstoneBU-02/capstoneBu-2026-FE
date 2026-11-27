@@ -72,13 +72,14 @@ async function serveSection(page: Page, failure: unknown) {
   await page.route(`${API}/segments/31/stems`, (route) => {
     calls.push('request stem')
     status = load('status-queued')
-    return answer(route, load('stem-created'), 201)
+    return answer(route, load('stem-created'), 202)
   })
   await page.route(`${API}/stems/54`, (route) => answer(route, failure))
+  // The server queues the stem again and keeps the stage it failed in.
   await page.route(`${API}/stems/54/retry`, (route) => {
     calls.push('retry stem')
-    status = load('status-queued')
-    return answer(route, load('stem-retry'))
+    status = load('status-retried')
+    return answer(route, load('stem-retry'), 202)
   })
   return {
     calls,
@@ -145,7 +146,9 @@ test('a new section asks the server for its guitar, fails and goes again on 다�
   await expect(failed.getByText('2회 남음')).toBeVisible()
 
   await failed.getByRole('button', { name: '다시 시도' }).click()
-  await expect(region(page, '순서를 기다리고 있어요')).toBeVisible()
+  // Queued again from the stage it failed in, which shows as under way.
+  await expect(region(page, '기타 분리 중')).toBeVisible()
+  await expect(region(page, '순서를 기다리고 있어요')).toHaveCount(0)
   expect(server.calls).toEqual(['create segment', 'request stem', 'retry stem'])
 })
 
