@@ -149,10 +149,10 @@ export function createHttpTasks({
 }): HttpTasks {
   const songOf = (songId: string) =>
     songs.list().find((song) => song.id === songId)
-  // A finished tab's result does not change: the server retries only a
-  // failed tab, under the same id and version, and a section changed again
-  // gets a new tab. So each tab is read and converted once; a failed read is
-  // not kept.
+  // A finished tab's result does not change: the server never runs a
+  // finished tab again and retries only a failed one, under the same id and
+  // version. So each tab is read and converted once; a failed read is not
+  // kept. A code entered again makes these tasks anew and reads again.
   const tabScores = new Map<number, TabScore | null>()
 
   // A segment as a task waiting for its stem, before its status is read.
@@ -548,8 +548,10 @@ export function createHttpTasks({
   }
 
   // The result's notes turned into bars. A result with nothing to draw
-  // resolves null, which the screen's check reports as a tab it cannot show;
-  // a tab the server no longer has is one no retry brings back.
+  // resolves null, which the screen's check reports as a tab it cannot show.
+  // The server does not find a tab of another workspace either, as after
+  // another code's session took the cookie; that failure is not kept, so the
+  // task opened again asks once more.
   async function loadTab(taskId: string, signal: AbortSignal) {
     signal.throwIfAborted()
     const record = tasks.get(taskId)

@@ -15,8 +15,9 @@ import styles from './TabPanel.module.css'
 import type { TabStaffProps } from './TabStaff.tsx'
 
 // The tab as its request stands. A request that failed can be asked for
-// again; an answer the screen could not read, or a tab the server no longer
-// has, comes back the same however often it is asked.
+// again. An answer the screen could not read comes back the same however
+// often it is asked; a tab the server does not find, as after another code's
+// session took the cookie, is asked for again when the task opens again.
 export type TabSource =
   | { readonly status: 'loading' }
   | {
