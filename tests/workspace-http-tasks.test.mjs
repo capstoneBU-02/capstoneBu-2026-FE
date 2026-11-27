@@ -248,7 +248,6 @@ for (const [name, input] of [
 for (const [name, answer] of [
   ['a server error', serverError],
   ['no response', noResponse],
-  ['a stem already under way', fixture(409, 'stem-in-progress')],
 ]) {
   test(`${name} on the stem request still opens the created task`, async () => {
     const { repository, calls } = setup({
@@ -266,6 +265,69 @@ for (const [name, answer] of [
     assert.equal(detail.task.processingStatus, 'queued')
   })
 }
+
+// As when another browser tab asked for the same range first: the server is
+// making it, and the status read again names it.
+for (const [name, status, check] of [
+  [
+    'turns out stopped leaves the page',
+    fixture(200, 'status-canceled'),
+    (tasks) => assert.ok(tasks.isGone('31')),
+  ],
+  [
+    'turns out deleted is left out of this list',
+    fixture(404, 'segment-not-found'),
+    (tasks) => {
+      assert.equal(tasks.get('31'), undefined)
+      assert.equal(tasks.isGone('31'), false)
+    },
+  ],
+]) {
+  test(`a stem already under way that ${name}`, async () => {
+    const { repository, calls, tasks } = setup(
+      {
+        [STATUS]: [fixture(200, 'status-nothing-requested'), status],
+        [STEMS]: fixture(409, 'stem-in-progress'),
+      },
+      { tasks: tasksWith({}) },
+    )
+    const error = await failureOf(repository.loadTask('31', signal()))
+    assert.equal(error.code, 'task-unavailable')
+    assert.deepEqual(keys(calls), [STATUS, STEMS, STATUS])
+    check(tasks)
+  })
+}
+
+test('a rejected session on the read after a stem already under way ends the workspace', async () => {
+  const { repository } = setup(
+    {
+      [STATUS]: [
+        fixture(200, 'status-nothing-requested'),
+        common(401, 'unauthorized-session'),
+      ],
+      [STEMS]: fixture(409, 'stem-in-progress'),
+    },
+    { tasks: tasksWith({}) },
+  )
+  await assert.rejects(repository.loadTask('31', signal()), {
+    code: 'expired',
+  })
+})
+
+test('a stem already under way is read again and not asked for twice', async () => {
+  const { repository, calls, tasks } = setup({
+    [`POST ${API}/tracks/7/segments`]: fixture(201, 'segment-create'),
+    [STEMS]: fixture(409, 'stem-in-progress'),
+    [STATUS]: fixture(200, 'status-queued'),
+  })
+  const task = await repository.createTask(NEW_TASK, signal())
+  assert.equal(task.processingStatus, 'queued')
+  assert.deepEqual(keys(calls).slice(1), [STEMS, STATUS])
+  assert.equal(tasks.get('31').stemId, 54)
+
+  await repository.loadTask('31', signal())
+  assert.deepEqual(keys(calls).slice(3), [STATUS])
+})
 
 for (const [name, answer, code] of [
   [
@@ -369,26 +431,47 @@ test('a ready guitar asks for the tab with the task tuning', async () => {
   assert.equal(detail.tabWaitsForPage, false)
 })
 
-for (const [name, answer] of [
-  ['already under way', fixture(409, 'tab-in-progress')],
-  ['refused for now', serverError],
-]) {
-  test(`a tab request ${name} waits for the next read`, async () => {
-    const { repository } = setup(
-      { [STATUS]: fixture(200, 'status-stem-ready'), [TABS]: answer },
-      { tasks: tasksWith({ stemId: 54 }) },
-    )
-    const detail = await repository.loadTask('31', signal())
-    assert.equal(detail.task.processingStatus, 'processing')
-  })
-}
-
-test('a refused tab request leaves the tab to the next visit', async () => {
-  const { repository } = setup(
+test('a tab request refused for now waits for the next read', async () => {
+  const { repository, calls } = setup(
     { [STATUS]: fixture(200, 'status-stem-ready'), [TABS]: serverError },
     { tasks: tasksWith({ stemId: 54 }) },
   )
   const detail = await repository.loadTask('31', signal())
+  assert.deepEqual(keys(calls), [STATUS, TABS])
+  assert.equal(detail.task.processingStatus, 'processing')
+  // The tab is left to the next visit.
+  assert.equal(detail.tabWaitsForPage, true)
+})
+
+test('a tab already under way is read again and goes on without the page', async () => {
+  const { repository, calls, tasks } = setup(
+    {
+      [STATUS]: [
+        fixture(200, 'status-stem-ready'),
+        fixture(200, 'status-tab-running'),
+      ],
+      [TABS]: fixture(409, 'tab-in-progress'),
+    },
+    { tasks: tasksWith({ stemId: 54 }) },
+  )
+  const detail = await repository.loadTask('31', signal())
+  assert.deepEqual(keys(calls), [STATUS, TABS, STATUS])
+  assert.equal(detail.task.processingStatus, 'processing')
+  assert.equal(detail.tabWaitsForPage, false)
+  assert.equal(tasks.get('31').tabId, 88)
+})
+
+test('a tab already under way that cannot be read again waits for the next read', async () => {
+  const { repository, calls } = setup(
+    {
+      [STATUS]: [fixture(200, 'status-stem-ready'), serverError],
+      [TABS]: fixture(409, 'tab-in-progress'),
+    },
+    { tasks: tasksWith({ stemId: 54 }) },
+  )
+  const detail = await repository.loadTask('31', signal())
+  assert.deepEqual(keys(calls), [STATUS, TABS, STATUS])
+  assert.equal(detail.task.processingStatus, 'processing')
   assert.equal(detail.tabWaitsForPage, true)
 })
 
@@ -532,12 +615,35 @@ test('the list reads only the known tasks in progress again', async () => {
 })
 
 test('a known task that fails to refresh keeps its last state in the list', async () => {
-  const { repository } = setup(
+  const later = new Date('2026-11-21T09:13:30Z')
+  const { repository, setClock } = setup(
     { ...listing(SEGMENT_31), [STATUS]: serverError },
     { tasks: tasksWith({}) },
   )
+  setClock(later)
   const { tasks } = await repository.loadWorkspace(signal())
-  assert.deepEqual(tasks, [TASK])
+  // Only its time label moves on.
+  assert.deepEqual(tasks, [
+    {
+      ...TASK,
+      updatedAtLabel: updatedAtLabel('2026-11-21T06:10:02.114820Z', later),
+    },
+  ])
+})
+
+test('a finished task is not read again but its time label moves on', async () => {
+  const later = new Date('2026-11-21T09:13:30Z')
+  const { repository, calls, setClock } = setup(listing(SEGMENT_31), {
+    tasks: tasksWith(COMPLETED),
+  })
+  setClock(later)
+  const { tasks } = await repository.loadWorkspace(signal())
+  assert.deepEqual(keys(calls), LISTED)
+  assert.equal(
+    tasks[0].updatedAtLabel,
+    updatedAtLabel('2026-11-21T06:10:02.114820Z', later),
+  )
+  assert.notEqual(tasks[0].updatedAtLabel, TASK.updatedAtLabel)
 })
 
 test('a rejected session while refreshing ends the workspace', async () => {
@@ -848,6 +954,50 @@ test('a task stopped while the list reads it is left out and asked for nothing',
   assert.deepEqual((await listed).tasks, [])
   // No stem for the stopped section.
   assert.deepEqual(keys(calls), [...LISTED, STATUS, STATUS])
+})
+
+// A read held until the test answers it, as a slow processing status.
+function held() {
+  let release
+  const answered = new Promise((resolve) => {
+    release = resolve
+  })
+  return {
+    route: () => answered,
+    answer: (status, name) =>
+      release(fixtureResponse(status, `workspace/${name}.json`)),
+  }
+}
+
+test('a read that ends after the task changed keeps the change', async () => {
+  const read = held()
+  const { repository, tasks } = setup(
+    { [STATUS]: read.route },
+    { tasks: tasksWith({ stemId: 54 }) },
+  )
+  const loading = repository.loadTask('31', signal())
+  const changed = { ...tasks.get('31'), stemId: null }
+  tasks.put(changed)
+  read.answer(200, 'status-separating')
+
+  assert.equal((await loading).task.processingStatus, 'processing')
+  assert.equal(tasks.get('31'), changed)
+})
+
+test('a section gone after the task changed leaves the change in place', async () => {
+  const read = held()
+  const { repository, tasks } = setup(
+    { [STATUS]: read.route },
+    { tasks: tasksWith({ stemId: 54 }) },
+  )
+  const loading = repository.loadTask('31', signal())
+  const changed = { ...tasks.get('31'), stemId: null }
+  tasks.put(changed)
+  read.answer(404, 'segment-not-found')
+
+  await assert.rejects(loading, { code: 'task-unavailable' })
+  assert.equal(tasks.get('31'), changed)
+  assert.equal(tasks.isGone('31'), false)
 })
 
 for (const [name, routes] of [
@@ -1277,6 +1427,186 @@ test('a task already running cannot be stopped', async () => {
   const error = await failureOf(repository.cancelTask('31', signal()))
   assert.equal(error.code, 'cancel-task-failed')
   assert.equal((await repository.loadWorkspace(signal())).tasks.length, 1)
+})
+
+const CANCEL = `POST ${API}/stems/54/cancel`
+
+test('a stem asked for when the stop begins is stopped with the task', async () => {
+  const stem = held()
+  const { repository, calls } = setup(
+    {
+      ...listing(SEGMENT_31),
+      [STATUS]: [
+        fixture(200, 'status-nothing-requested'),
+        fixture(200, 'status-queued'),
+      ],
+      [STEMS]: stem.route,
+      [CANCEL]: fixture(200, 'stem-cancel'),
+    },
+    { tasks: tasksWith({}) },
+  )
+  const loading = repository.loadTask('31', signal()).catch(() => {})
+  await until(() => calls.length === 2)
+  const stopping = repository.cancelTask('31', signal())
+  // The stop waits for the stem the server is about to make.
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.deepEqual(keys(calls), [STATUS, STEMS])
+  stem.answer(202, 'stem-created')
+
+  await stopping
+  await loading
+  assert.deepEqual(keys(calls), [STATUS, STEMS, STATUS, CANCEL])
+  assert.deepEqual((await repository.loadWorkspace(signal())).tasks, [])
+})
+
+// Held like held(), and like a browser's fetch it gives up once its signal
+// aborts.
+function heldUntilAborted() {
+  let release
+  const answered = new Promise((resolve) => {
+    release = resolve
+  })
+  return {
+    route: ({ signal: aborting }) =>
+      new Promise((resolve, reject) => {
+        aborting?.addEventListener('abort', () => reject(aborting.reason), {
+          once: true,
+        })
+        answered.then(resolve)
+      }),
+    answer: (status, name) =>
+      release(fixtureResponse(status, `workspace/${name}.json`)),
+  }
+}
+
+test('a stem asked for by a read that gave up is still stopped with the task', async () => {
+  const stem = heldUntilAborted()
+  const { repository, calls } = setup(
+    {
+      ...listing(SEGMENT_31),
+      [STATUS]: [
+        fixture(200, 'status-nothing-requested'),
+        fixture(200, 'status-queued'),
+      ],
+      [STEMS]: stem.route,
+      [CANCEL]: fixture(200, 'stem-cancel'),
+    },
+    { tasks: tasksWith({}) },
+  )
+  const reading = new AbortController()
+  const loading = repository.loadTask('31', reading.signal)
+  await until(() => calls.length === 2)
+  // The screen moves on, but the server already has the request.
+  reading.abort()
+  await assert.rejects(loading, { name: 'AbortError' })
+
+  const stopping = repository.cancelTask('31', signal())
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.deepEqual(keys(calls), [STATUS, STEMS])
+  stem.answer(202, 'stem-created')
+
+  await stopping
+  assert.deepEqual(keys(calls), [STATUS, STEMS, STATUS, CANCEL])
+  assert.deepEqual((await repository.loadWorkspace(signal())).tasks, [])
+})
+
+test('a stop waits for every stem still on its way', async () => {
+  const first = held()
+  const { repository, calls } = setup(
+    {
+      [STATUS]: [
+        fixture(200, 'status-nothing-requested'),
+        fixture(200, 'status-nothing-requested'),
+        fixture(200, 'status-queued'),
+      ],
+      [STEMS]: [first.route, serverError],
+      [CANCEL]: fixture(200, 'stem-cancel'),
+    },
+    { tasks: tasksWith({}) },
+  )
+  // The list and the open task each ask; the later one fails first.
+  const reads = [
+    repository.loadTask('31', signal()).catch(() => {}),
+    repository.loadTask('31', signal()).catch(() => {}),
+  ]
+  await until(() => calls.length === 4)
+  await new Promise((resolve) => setImmediate(resolve))
+
+  const stopping = repository.cancelTask('31', signal())
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.deepEqual(keys(calls), [STATUS, STATUS, STEMS, STEMS])
+  first.answer(202, 'stem-created')
+
+  await stopping
+  await Promise.all(reads)
+  assert.deepEqual(keys(calls).slice(4), [STATUS, CANCEL])
+})
+
+test('a stop that gives up while a stem is on its way ends at once', async () => {
+  const stem = held()
+  const { repository, calls } = setup(
+    {
+      [STATUS]: fixture(200, 'status-nothing-requested'),
+      [STEMS]: stem.route,
+    },
+    { tasks: tasksWith({}) },
+  )
+  const loading = repository.loadTask('31', signal()).catch(() => {})
+  await until(() => calls.length === 2)
+
+  const stopping = new AbortController()
+  let ended = false
+  const stop = failureOf(repository.cancelTask('31', stopping.signal)).then(
+    (error) => {
+      ended = true
+      return error
+    },
+  )
+  stopping.abort()
+  await until(() => ended)
+  assert.equal((await stop).name, 'AbortError')
+  assert.deepEqual(keys(calls), [STATUS, STEMS])
+
+  stem.answer(202, 'stem-created')
+  await loading
+})
+
+test('a task being stopped asks for nothing new', async () => {
+  const stopRead = held()
+  const { repository, calls } = setup(
+    {
+      ...listing(SEGMENT_31),
+      [STATUS]: [stopRead.route, fixture(200, 'status-nothing-requested')],
+      [STEMS]: fixture(202, 'stem-created'),
+    },
+    { tasks: tasksWith({}) },
+  )
+  const stopping = repository.cancelTask('31', signal())
+  await until(() => calls.length === 1)
+  await repository.loadTask('31', signal()).catch(() => {})
+  stopRead.answer(200, 'status-nothing-requested')
+  await stopping
+
+  assert.deepEqual(keys(calls), [STATUS, STATUS])
+  assert.deepEqual((await repository.loadWorkspace(signal())).tasks, [])
+})
+
+test('a task whose stop failed asks for its stem again', async () => {
+  const { repository, calls } = setup(
+    {
+      [STATUS]: [
+        fixture(200, 'status-queued'),
+        fixture(200, 'status-nothing-requested'),
+      ],
+      [CANCEL]: serverError,
+      [STEMS]: fixture(202, 'stem-created'),
+    },
+    { tasks: tasksWith({ stemId: 54 }) },
+  )
+  const error = await failureOf(repository.cancelTask('31', signal()))
+  assert.equal(error.code, 'cancel-task-failed')
+  await repository.loadTask('31', signal())
+  assert.deepEqual(keys(calls), [STATUS, CANCEL, STATUS, STEMS])
 })
 
 test('an unknown task cannot be stopped', async () => {

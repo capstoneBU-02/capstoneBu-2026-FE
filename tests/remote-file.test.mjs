@@ -132,6 +132,35 @@ test('a cancelled download stays an AbortError', async () => {
   await assert.rejects(pending, { name: 'AbortError' })
 })
 
+test('a cancelled download keeps its URL for the next one', async () => {
+  const { fetch, calls } = fakeFetch((_url, init, index) =>
+    index === 1
+      ? new Promise((_resolve, reject) => {
+          init.signal.addEventListener(
+            'abort',
+            () => reject(init.signal.reason),
+            { once: true },
+          )
+        })
+      : new Response('bytes'),
+  )
+  const files = createRemoteFiles({ fetch, now: () => T0 })
+  const { sign, signed } = signer(URL_A, URL_B)
+  await files.fetch('a', signal(), sign)
+  const controller = new AbortController()
+  const cancelled = files.fetch('a', controller.signal, sign)
+  await Promise.resolve()
+  controller.abort()
+  await assert.rejects(cancelled, { name: 'AbortError' })
+
+  await files.fetch('a', signal(), sign)
+  assert.deepEqual(signed, [URL_A])
+  assert.deepEqual(
+    calls.map(({ url }) => url),
+    [URL_A, URL_A, URL_A],
+  )
+})
+
 test('a download cancelled before signing sends nothing', async () => {
   const { fetch, calls } = fakeFetch(() => new Response('bytes'))
   const files = createRemoteFiles({ fetch, now: () => T0 })

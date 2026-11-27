@@ -804,6 +804,7 @@ export function WorkspacePage({
       {support && support.workspaceId === workspaceId && (
         <SupportDialog
           topic={support.topic}
+          copyStatusKept={copy !== null}
           onClose={() => setSupport(null)}
           returnFocusRef={supportReturnFocusRef}
           fallbackFocusRef={mainContentRef}

@@ -262,6 +262,12 @@ for (const [statusName, options, expected] of [
     {},
     { processingStatus: 'processing', stages: stages('running', 'waiting') },
   ],
+  // A retry queues the stem again with the stage it failed in.
+  [
+    'status-retried',
+    {},
+    { processingStatus: 'processing', stages: stages('running', 'waiting') },
+  ],
   // The tab is requested once the guitar is ready.
   [
     'status-stem-ready',

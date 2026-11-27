@@ -72,13 +72,14 @@ async function serveSection(page: Page, failure: unknown) {
   await page.route(`${API}/segments/31/stems`, (route) => {
     calls.push('request stem')
     status = load('status-queued')
-    return answer(route, load('stem-created'), 201)
+    return answer(route, load('stem-created'), 202)
   })
   await page.route(`${API}/stems/54`, (route) => answer(route, failure))
+  // The server queues the stem again and keeps the stage it failed in.
   await page.route(`${API}/stems/54/retry`, (route) => {
     calls.push('retry stem')
-    status = load('status-queued')
-    return answer(route, load('stem-retry'))
+    status = load('status-retried')
+    return answer(route, load('stem-retry'), 202)
   })
   return {
     calls,
@@ -145,7 +146,9 @@ test('a new section asks the server for its guitar, fails and goes again on 다�
   await expect(failed.getByText('2회 남음')).toBeVisible()
 
   await failed.getByRole('button', { name: '다시 시도' }).click()
-  await expect(region(page, '순서를 기다리고 있어요')).toBeVisible()
+  // Queued again from the stage it failed in, which shows as under way.
+  await expect(region(page, '기타 분리 중')).toBeVisible()
+  await expect(region(page, '순서를 기다리고 있어요')).toHaveCount(0)
   expect(server.calls).toEqual(['create segment', 'request stem', 'retry stem'])
 })
 
@@ -315,6 +318,19 @@ test('a finished section shows no 카피 완료 while the server keeps none', as
   await expect(kept).toContainText('00:12.3–00:27.8')
   await expect(kept).toContainText('비교 0회')
   await expect(kept).not.toContainText('카피')
+})
+
+test('the FAQ leaves out 카피 완료 while the server keeps none', async ({
+  page,
+}) => {
+  await openWorkspace(page)
+  await page.getByRole('button', { name: '도움말', exact: true }).click()
+  await page.getByRole('menuitem', { name: '자주 묻는 질문' }).click()
+  const faq = page.getByRole('dialog', { name: '자주 묻는 질문' })
+  await expect(faq).toContainText(
+    '타브는 자동으로 만든 초안이에요. 원음과 함께 음과 리듬을 확인해 주세요.',
+  )
+  await expect(faq).not.toContainText('카피')
 })
 
 test('a tab result that fails offers 다시 시도 and draws on the next answer', async ({

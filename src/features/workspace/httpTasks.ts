@@ -3,11 +3,7 @@
 // file shows them as one task (taskState.ts). The server lists the segments;
 // the page keeps what the server does not, such as the part (PageTasks).
 
-import {
-  apiErrorOf,
-  isSessionRejected,
-  type HttpClient,
-} from '../../api/http.ts'
+import { isSessionRejected, type HttpClient } from '../../api/http.ts'
 import type { RemoteFiles } from '../../api/remoteFile.ts'
 import { mapConcurrently, REQUESTS_AT_ONCE } from '../../shared/concurrency.ts'
 import { scoreFromNotes } from '../tab/scoreFromNotes.ts'
@@ -17,13 +13,18 @@ import {
 } from '../edit-section/sectionEdit.ts'
 import { parseSectionName } from '../new-section/sectionForm.ts'
 import type {
-  FailureView,
-  ProcessingStatusResponse,
   SegmentCreateRequest,
   SegmentResponse,
   SegmentUpdateRequest,
 } from './apiTypes.ts'
 import { failureOf } from './httpErrors.ts'
+import {
+  ALREADY_RUNNING,
+  codeOf,
+  createTaskWork,
+  NOTHING_REQUESTED,
+  type Status,
+} from './httpTaskWork.ts'
 import { isTaskInProgress, serverTime, updatedAtLabel } from './format.ts'
 import type { PageSongs } from './httpRepository.ts'
 import type {
@@ -38,15 +39,11 @@ import {
   type WorkspaceRepository,
 } from './repository.ts'
 import {
-  readCancel,
-  readProcessingStatus,
   readRetry,
   readSegment,
-  readStemCreated,
   readStemPlayback,
   readTabCreated,
   readTabResult,
-  readWorkFailure,
   sectionNameOf,
   segmentNameValue,
   tabRequestFor,
@@ -58,7 +55,7 @@ import {
   newTaskLabels,
   RESTORED_TASK_LABELS,
 } from './taskLabels.ts'
-import { isWorkReady, taskStateOf } from './taskState.ts'
+import { taskStateOf } from './taskState.ts'
 
 const MESSAGES = {
   'task-unavailable': '작업을 찾을 수 없어요.',
@@ -78,19 +75,6 @@ const refused = (code: TaskFailureCode) =>
 
 const failed = (code: TaskFailureCode, error: unknown) =>
   failureOf(code, MESSAGES[code], error)
-
-type Status = Pick<ProcessingStatusResponse, 'stem' | 'tab' | 'updated_at'>
-
-// A new segment has neither; createTask passes this instead of reading it.
-const NOTHING_REQUESTED: Status = { stem: null, tab: null, updated_at: null }
-
-// Another tab or an earlier request already started the same work.
-const ALREADY_RUNNING: ReadonlySet<string> = new Set([
-  'STEM_IN_PROGRESS',
-  'TAB_IN_PROGRESS',
-])
-
-const codeOf = (error: unknown) => apiErrorOf(error)?.code ?? ''
 
 // A segment from its track's list, with the song it belongs to.
 export interface ListedSegment {
@@ -247,90 +231,10 @@ export function createHttpTasks({
     }
   }
 
-  async function getStatus(
-    taskId: string,
-    signal: AbortSignal,
-  ): Promise<Status | null> {
-    try {
-      const { data } = await client.request(
-        'GET',
-        `/segments/${taskId}/processing-status`,
-        { signal, read: readProcessingStatus },
-      )
-      return data
-    } catch (error) {
-      if (codeOf(error) === 'SEGMENT_NOT_FOUND') return null
-      throw error
-    }
-  }
+  const work = createTaskWork(client)
 
-  // The server makes a stem or a tab only when asked (B4): the stem once the
-  // segment exists, the tab once the guitar is ready. A request that fails
-  // leaves the status as it was, and the next read asks again.
-  async function requestMissing(
-    task: WorkspaceTask,
-    status: Status,
-    signal: AbortSignal,
-  ): Promise<Status> {
-    const tabRequest = tabRequestFor(task.tuningId)
-    try {
-      if (status.stem === null) {
-        const { data } = await client.request(
-          'POST',
-          `/segments/${task.id}/stems`,
-          { signal, read: readStemCreated },
-        )
-        const stem = {
-          stem_id: data.stem_id,
-          status: data.status,
-          current_stage: null,
-          playable: false,
-          retryable: false,
-        }
-        return { ...status, stem }
-      }
-      if (
-        isWorkReady(status.stem.status) &&
-        status.tab === null &&
-        tabRequest
-      ) {
-        const { data } = await client.request(
-          'POST',
-          `/segments/${task.id}/tabs`,
-          { signal, json: tabRequest, read: readTabCreated },
-        )
-        const tab = {
-          tab_id: data.tab_id,
-          status: data.status,
-          current_stage: null,
-          retryable: false,
-        }
-        return { ...status, tab }
-      }
-    } catch (error) {
-      if (signal.aborted || isSessionRejected(error)) throw error
-    }
-    return status
-  }
-
-  // The failed side's failure: the stem's, or the tab's after a ready stem.
-  async function failureFor(
-    { stem, tab }: Status,
-    signal: AbortSignal,
-  ): Promise<FailureView | null> {
-    const path =
-      stem?.status === 'failed'
-        ? `/stems/${stem.stem_id}`
-        : stem && isWorkReady(stem.status) && tab?.status === 'failed'
-          ? `/tabs/${tab.tab_id}`
-          : null
-    if (!path) return null
-    const { data } = await client.request('GET', path, {
-      signal,
-      read: readWorkFailure,
-    })
-    return data.failure
-  }
+  const isStopped = (taskId: string, status: Status) =>
+    status.stem?.status === 'canceled' || tasks.isGone(taskId)
 
   // The task as the server has it now, or why it is gone: stopped, or
   // deleted, out of this session or its song no longer on this page. A
@@ -343,12 +247,14 @@ export function createHttpTasks({
   ): Promise<ReadResult | Absence> {
     const song = songOf(record.task.songId)
     if (!song) return 'missing'
-    const fetched = known ?? (await getStatus(record.task.id, signal))
+    const fetched = known ?? (await work.getStatus(record.task.id, signal))
     if (!fetched) return 'missing'
-    if (fetched.stem?.status === 'canceled' || tasks.isGone(record.task.id))
-      return 'stopped'
-    const status = await requestMissing(record.task, fetched, signal)
-    const failure = await failureFor(status, signal)
+    if (isStopped(record.task.id, fetched)) return 'stopped'
+    const status = await work.requestMissing(record.task, fetched, signal)
+    if (!status) return 'missing'
+    // Also stopped while the request was on its way.
+    if (isStopped(record.task.id, status)) return 'stopped'
+    const failure = await work.failureFor(status, signal)
     const updatedAt = status.updated_at ?? record.updatedAt
     const state = taskStateOf({
       task: record.task,
@@ -410,14 +316,6 @@ export function createHttpTasks({
       if (isSessionRejected(error)) throw failed('load-failed', error)
     }
     return { ...record.task }
-  }
-
-  function retryPathOf({ stem, tab }: Status): string | null {
-    if (stem?.status === 'failed')
-      return stem.retryable ? `/stems/${stem.stem_id}/retry` : null
-    const tabFailed =
-      stem && isWorkReady(stem.status) && tab?.status === 'failed'
-    return tabFailed && tab.retryable ? `/tabs/${tab.tab_id}/retry` : null
   }
 
   async function loadTask(taskId: string, signal: AbortSignal) {
@@ -571,12 +469,12 @@ export function createHttpTasks({
     const record = tasks.get(taskId)
     if (!record) throw refused('task-unavailable')
     try {
-      const status = await getStatus(taskId, signal)
+      const status = await work.getStatus(taskId, signal)
       if (!status || status.stem?.status === 'canceled') {
         drop(record, status ? 'stopped' : 'missing')
         throw refused('task-unavailable')
       }
-      const path = retryPathOf(status)
+      const path = work.retryPathOf(status)
       if (!path) throw refused('retry-task-failed')
       try {
         await client.request('POST', path, { signal, read: readRetry })
@@ -607,12 +505,7 @@ export function createHttpTasks({
     signal.throwIfAborted()
     if (!tasks.get(taskId)) throw refused('task-unavailable')
     try {
-      const stem = (await getStatus(taskId, signal))?.stem
-      if (stem && stem.status !== 'canceled')
-        await client.request('POST', `/stems/${stem.stem_id}/cancel`, {
-          signal,
-          read: readCancel,
-        })
+      await work.stop(taskId, signal)
     } catch (error) {
       if (signal.aborted) throw error
       throw failed('cancel-task-failed', error)
@@ -671,7 +564,13 @@ export function createHttpTasks({
     record: PageTask,
     signal: AbortSignal,
   ): Promise<WorkspaceTask | null> {
-    if (!isTaskInProgress(record.task)) return record.task
+    // A task no longer in progress is not read again, and one that cannot
+    // be read keeps its last state; only their time label moves on.
+    const relabeled = () => ({
+      ...record.task,
+      updatedAtLabel: updatedAtLabel(record.updatedAt, clock()),
+    })
+    if (!isTaskInProgress(record.task)) return relabeled()
     try {
       const result = await read(record, signal)
       if (typeof result === 'string') {
@@ -682,7 +581,7 @@ export function createHttpTasks({
       return result.record.task
     } catch (error) {
       if (signal.aborted || isSessionRejected(error)) throw error
-      return record.task
+      return relabeled()
     }
   }
 
