@@ -93,6 +93,8 @@ export function createRemoteFiles({
       try {
         return await download(file.url, signal)
       } catch (error) {
+        // A download stopped by the page says nothing about its URL.
+        if (signal.aborted) throw error
         signedUrls.delete(key)
         // A kept URL can be refused before its time (a clock apart, a key
         // revoked); signing once more tells that from a file that is gone.
@@ -105,7 +107,7 @@ export function createRemoteFiles({
       try {
         return await download(fresh.url, signal)
       } catch (error) {
-        signedUrls.delete(key)
+        if (!signal.aborted) signedUrls.delete(key)
         throw error
       }
     },
