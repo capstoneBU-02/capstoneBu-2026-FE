@@ -91,7 +91,9 @@ function failureOf(
   if (error instanceof ComparisonRepositoryError) return error
   if (isSessionRejected(error))
     return new ComparisonRepositoryError('expired', { cause: error })
-  const code = refusals[apiErrorOf(error)?.code ?? ''] ?? fallback
+  const apiCode = apiErrorOf(error)?.code ?? ''
+  // Only codes in the table itself; toString and the like are not refusals.
+  const code = Object.hasOwn(refusals, apiCode) ? refusals[apiCode] : fallback
   return new ComparisonRepositoryError(code, { cause: error })
 }
 
