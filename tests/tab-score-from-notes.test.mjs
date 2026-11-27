@@ -198,6 +198,23 @@ test('a rest under a beat stays in its beat and a longer one starts on a multipl
     transcription([note(0, 1, 1, 0)], { timeSignature: [3, 4] }),
   )
   assert.deepEqual(triple.bars[0].beats, [beat(4, [[1, 0]]), beat(4), beat(4)])
+
+  // A dotted quarter rest would run past the third beat.
+  const dotted = convert(transcription([note(0, 1.5, 1, 0)]))
+  assert.deepEqual(dotted.bars[0].beats, [
+    beat(4, [[1, 0]], true),
+    beat(8),
+    beat(2),
+  ])
+
+  // The beats count from each bar's own start: the second 3/4 bar, from
+  // beat 3, rests a quarter at a time where a half would fit beat 4.
+  const second = convert(
+    transcription([note(0, 3, 1, 0), note(3, 1, 1, 2)], {
+      timeSignature: [3, 4],
+    }),
+  )
+  assert.deepEqual(second.bars[1].beats, [beat(4, [[1, 2]]), beat(4), beat(4)])
 })
 
 test('the score starts at the bar of the first note and numbers it 1', () => {
@@ -298,7 +315,7 @@ test('a bar of more beats than the screen draws gives no score', () => {
     scoreFromNotes(transcription(one, { timeSignature: [33, 4] })),
     null,
   )
-  // Far past it the rests alone would run the converter out of stack.
+  // Far past it as well, where a held note could split past the call stack.
   assert.equal(
     scoreFromNotes(transcription(one, { timeSignature: [100000, 4] })),
     null,
