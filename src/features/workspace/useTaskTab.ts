@@ -9,10 +9,13 @@ export interface TaskTabSource {
   onExpired(): void
 }
 
-// What the request settled with; a failure gets its retry when shown.
+// What the request settled with; a failed request gets its retry when shown.
 type Answer =
-  | Extract<TabSource, { readonly status: 'ready' }>
-  | Omit<Extract<TabSource, { readonly status: 'failed' }>, 'retry'>
+  | Exclude<
+      TabSource,
+      { readonly status: 'loading' } | { readonly reason: 'request' }
+    >
+  | { readonly status: 'failed'; readonly reason: 'request' }
 
 interface Request {
   readonly madeFrom: string
@@ -88,7 +91,17 @@ export function useTaskTab(
           reportExpired()
           return
         }
-        setResult({ request, answer: { status: 'failed', reason: 'request' } })
+        setResult({
+          request,
+          answer: {
+            status: 'failed',
+            reason:
+              error instanceof WorkspaceRepositoryError &&
+              error.code === 'tab-missing'
+                ? 'missing'
+                : 'request',
+          },
+        })
       },
     )
     return () => controller.abort()
@@ -101,7 +114,7 @@ export function useTaskTab(
   )
     return LOADING
   const { answer } = result
-  if (answer.status !== 'failed') return answer
+  if (answer.status !== 'failed' || answer.reason !== 'request') return answer
   return {
     ...answer,
     retry: () => setVersion((previous) => previous + 1),

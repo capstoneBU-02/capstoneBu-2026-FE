@@ -92,6 +92,7 @@ type RepositoryErrorCode =
   | 'retry-task-failed'
   | 'audio-unavailable'
   | 'tab-unavailable'
+  | 'tab-missing'
   | 'copy-status-failed'
 
 export class WorkspaceRepositoryError extends Error {

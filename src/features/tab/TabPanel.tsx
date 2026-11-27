@@ -10,19 +10,21 @@ import {
 import type { TabScore } from './model.ts'
 import { restoreFocus } from '../../shared/ui/dialogFocus.ts'
 import { TabFailure } from './TabFailure.tsx'
-import { TAB_DRAW_FAILED, TabLoadBoundary } from './TabLoadBoundary.tsx'
+import { TabLoadBoundary } from './TabLoadBoundary.tsx'
 import styles from './TabPanel.module.css'
 import type { TabStaffProps } from './TabStaff.tsx'
 
-// The tab as its request stands: a request that failed, or an answer the
-// screen could not read, can be asked for again.
+// The tab as its request stands. A request that failed can be asked for
+// again; an answer the screen could not read, or a tab the server no longer
+// has, comes back the same however often it is asked.
 export type TabSource =
   | { readonly status: 'loading' }
   | {
       readonly status: 'failed'
-      readonly reason: 'request' | 'format'
+      readonly reason: 'request'
       retry(): void
     }
+  | { readonly status: 'failed'; readonly reason: 'format' | 'missing' }
   | { readonly status: 'ready'; readonly score: TabScore }
 
 export interface TabPanelProps extends Omit<TabStaffProps, 'score'> {
@@ -39,7 +41,8 @@ interface StaffModule {
 
 const FAILURE_MESSAGES = {
   request: '타브를 불러오지 못했어요. 다시 시도해 주세요.',
-  format: TAB_DRAW_FAILED,
+  format: '타브를 표시하지 못했어요.',
+  missing: '타브를 찾을 수 없어요.',
 } as const
 
 // A lazy component keeps a failed load for good, so a failure swaps in a
@@ -123,7 +126,7 @@ export function TabPanel({
       {tab.status === 'failed' && (
         <TabFailure
           message={FAILURE_MESSAGES[tab.reason]}
-          onRetry={retryWith(tab.retry)}
+          onRetry={tab.reason === 'request' ? retryWith(tab.retry) : undefined}
         />
       )}
       {tab.status === 'ready' && (

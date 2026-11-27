@@ -66,6 +66,7 @@ const MESSAGES = {
   'cancel-task-failed': '작업을 멈추지 못했어요.',
   'audio-unavailable': '분리한 기타 음원을 불러오지 못했어요.',
   'tab-unavailable': '타브를 불러오지 못했어요.',
+  'tab-missing': '타브를 찾을 수 없어요.',
 } as const
 
 type TaskFailureCode = keyof typeof MESSAGES
@@ -541,7 +542,8 @@ export function createHttpTasks({
   }
 
   // The result's notes turned into bars. A result with nothing to draw
-  // resolves null, which the screen's check reports as a tab it cannot show.
+  // resolves null, which the screen's check reports as a tab it cannot show;
+  // a tab the server no longer has is one no retry brings back.
   async function loadTab(taskId: string, signal: AbortSignal) {
     signal.throwIfAborted()
     const record = tasks.get(taskId)
@@ -556,7 +558,10 @@ export function createHttpTasks({
       return scoreFromNotes(tabTranscriptionOf(data))
     } catch (error) {
       if (signal.aborted) throw error
-      throw failed('tab-unavailable', error)
+      throw failed(
+        codeOf(error) === 'TAB_NOT_FOUND' ? 'tab-missing' : 'tab-unavailable',
+        error,
+      )
     }
   }
 

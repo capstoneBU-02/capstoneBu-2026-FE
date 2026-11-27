@@ -1794,6 +1794,11 @@ for (const [name, route, code] of [
     'tab-unavailable',
   ],
   ['a rejected session', common(401, 'unauthorized-session'), 'expired'],
+  [
+    'a tab the server no longer has',
+    fixture(404, 'tab-not-found'),
+    'tab-missing',
+  ],
 ]) {
   test(`${name} fails the tab as ${code}`, async () => {
     const { repository } = setup(

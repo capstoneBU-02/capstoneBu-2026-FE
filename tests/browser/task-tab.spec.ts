@@ -158,21 +158,39 @@ test('the tab area waits for its tab and retries a failed request', async ({
   await expect(staff(page)).toHaveAccessibleName('타브 악보 12마디')
 })
 
-test('a tab the screen cannot read fails inside the tab area', async ({
-  page,
-}) => {
-  await openTask(page, 'task-verse', '&scenario=pending-tab')
-  await expect(panel(page).getByRole('status')).toBeVisible()
-  await page.evaluate(() => window.workspaceTest.resolveTabWithBadFormat())
-  await expect(panel(page).getByRole('alert')).toContainText(
-    '타브를 표시하지 못했어요. 다시 시도해 주세요.',
-  )
-  await expect(tracks(page)).toBeVisible()
+// Asking again brings the same answer, so neither failure offers 다시 시도;
+// opening the task again asks once more.
+for (const [name, settle, message] of [
+  [
+    'a tab the screen cannot read',
+    () => window.workspaceTest.resolveTabWithBadFormat(),
+    '타브를 표시하지 못했어요.',
+  ],
+  [
+    'a tab the server no longer has',
+    () => window.workspaceTest.failTab('tab-missing'),
+    '타브를 찾을 수 없어요.',
+  ],
+] as const) {
+  test(`${name} fails inside the tab area without 다시 시도`, async ({
+    page,
+  }) => {
+    await openTask(page, 'task-verse', '&scenario=pending-tab')
+    await expect(panel(page).getByRole('status')).toBeVisible()
+    await page.evaluate(settle)
+    await expect(panel(page).getByRole('alert')).toHaveText(message)
+    await expect(panel(page).getByRole('button')).toHaveCount(0)
+    await expect(tracks(page)).toBeVisible()
 
-  await panel(page).getByRole('button', { name: '다시 시도' }).click()
-  await page.evaluate(() => window.workspaceTest.resolveTab())
-  await expect(staff(page)).toHaveAccessibleName('타브 악보 12마디')
-})
+    await sidebar(page).getByRole('button', { name: '내 작업' }).click()
+    await sidebar(page)
+      .getByRole('button', { name: /^벌스 1/ })
+      .click()
+    await expect(panel(page).getByRole('status')).toBeVisible()
+    await page.evaluate(() => window.workspaceTest.resolveTab())
+    await expect(staff(page)).toHaveAccessibleName('타브 악보 12마디')
+  })
+}
 
 test('an expired session while loading the tab closes the workspace', async ({
   page,
