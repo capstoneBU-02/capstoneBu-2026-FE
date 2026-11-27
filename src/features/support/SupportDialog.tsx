@@ -12,6 +12,9 @@ export type SupportTopic = 'faq' | 'usage' | 'contact' | 'deletion'
 
 export type SupportDialogProps = {
   topic: SupportTopic
+  // Whether the workspace keeps a copy status. The FAQ tells the copy apart
+  // from the tab only where the screens show one.
+  copyStatusKept: boolean
   onClose: () => void
   returnFocusRef: RefObject<HTMLElement | null>
   fallbackFocusRef?: RefObject<HTMLElement | null>
@@ -24,10 +27,16 @@ const titles: Record<SupportTopic, string> = {
   deletion: '자료 삭제 요청 안내',
 }
 
-const questions = [
+const DRAFT_ANSWER =
+  '타브는 자동으로 만든 초안이에요. 원음과 함께 음과 리듬을 확인해 주세요.'
+const COPY_STATUS_ANSWER = '타브 생성과 카피 완료는 별개예요.'
+
+const questionsFor = (
+  copyStatusKept: boolean,
+): readonly (readonly [string, string])[] => [
   [
     '타브는 얼마나 정확한가요?',
-    '타브는 자동으로 만든 초안이에요. 원음과 함께 음과 리듬을 확인해 주세요. 타브 생성과 카피 완료는 별개예요.',
+    copyStatusKept ? `${DRAFT_ANSWER} ${COPY_STATUS_ANSWER}` : DRAFT_ANSWER,
   ],
   [
     '올린 음원은 누가 볼 수 있나요?',
@@ -41,10 +50,11 @@ const questions = [
     '코드를 잃어버렸어요.',
     '코드를 받은 안내를 먼저 확인해 주세요. 코드 재발급 절차와 문의 채널은 준비 중이에요.',
   ],
-] as const
+]
 
 export function SupportDialog({
   topic,
+  copyStatusKept,
   onClose,
   returnFocusRef,
   fallbackFocusRef,
@@ -123,7 +133,7 @@ export function SupportDialog({
         )}
         {topic === 'faq' && (
           <dl className="support-faq">
-            {questions.map(([question, answer]) => (
+            {questionsFor(copyStatusKept).map(([question, answer]) => (
               <div key={question}>
                 <dt>{question}</dt>
                 <dd>{answer}</dd>

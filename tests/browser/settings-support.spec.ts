@@ -356,6 +356,8 @@ test('mobile support restores drawer trigger focus and settings closes navigatio
   await page.getByRole('menuitem', { name: '자주 묻는 질문' }).click()
   const faq = page.getByRole('dialog', { name: '자주 묻는 질문' })
   await expect(faq).toBeVisible()
+  // The demo keeps a copy status, so the answer tells it from the tab.
+  await expect(faq).toContainText('타브 생성과 카피 완료는 별개예요.')
   await page.keyboard.press('Escape')
   await expect(faq).toHaveCount(0)
   await expect(

@@ -317,6 +317,19 @@ test('a finished section shows no 카피 완료 while the server keeps none', as
   await expect(kept).not.toContainText('카피')
 })
 
+test('the FAQ leaves out 카피 완료 while the server keeps none', async ({
+  page,
+}) => {
+  await openWorkspace(page)
+  await page.getByRole('button', { name: '도움말', exact: true }).click()
+  await page.getByRole('menuitem', { name: '자주 묻는 질문' }).click()
+  const faq = page.getByRole('dialog', { name: '자주 묻는 질문' })
+  await expect(faq).toContainText(
+    '타브는 자동으로 만든 초안이에요. 원음과 함께 음과 리듬을 확인해 주세요.',
+  )
+  await expect(faq).not.toContainText('카피')
+})
+
 test('a tab result that fails offers 다시 시도 and draws on the next answer', async ({
   page,
 }) => {
