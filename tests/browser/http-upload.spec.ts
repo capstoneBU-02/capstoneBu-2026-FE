@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url'
-import { expect, test, type Route } from '@playwright/test'
+import type { Route } from '@playwright/test'
+import { expect, test } from './http-test.ts'
 import {
   addSongDialog as dialog,
   addSongNext as next,
@@ -134,8 +135,8 @@ test('a refused file chosen again stays refused until another file comes', async
   await next(page).click()
   await expect(alertText(page)).toHaveText(TOO_LONG)
 
-  // The same file from disk is a new File object with the same name, size,
-  // format and modified time.
+  // The same file from disk is a new File object with the same name, size
+  // and modified time.
   await chooseSongFile(page, TONE_PATH)
   await expect(dialog(page).getByText(/^00:02 · /)).toBeVisible()
   await expect(alertText(page)).toHaveText(TOO_LONG)

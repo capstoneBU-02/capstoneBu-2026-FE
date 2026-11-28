@@ -211,6 +211,16 @@ for (const [name, answer] of [
   })
 }
 
+test('a session that belongs to another workspace keeps both ids behind the expiry', async () => {
+  const { repository } = setup(() =>
+    jsonResponse(200, { success: true, data: { workspace_id: 7 } }),
+  )
+  const error = await failureOf(repository.loadWorkspace(signal()))
+  assert.equal(error.cause.name, 'WorkspaceMismatchError')
+  assert.equal(error.cause.expectedWorkspaceId, '42')
+  assert.equal(error.cause.receivedWorkspaceId, '7')
+})
+
 test('a rejected session keeps the server failure behind it', async () => {
   const { repository } = setup(() =>
     fixtureResponse(401, 'common/unauthorized-session.json'),

@@ -2,13 +2,9 @@ import { apiErrorOf, type HttpClient } from '../../api/http.ts'
 import { createRemoteFiles, type RemoteFiles } from '../../api/remoteFile.ts'
 import { mapConcurrently, REQUESTS_AT_ONCE } from '../../shared/concurrency.ts'
 import { songUploadFile } from '../add-song/songFile.ts'
-import {
-  readTrackList,
-  readTrackUpload,
-  readWorkspaceMe,
-  toWorkspaceSong,
-} from './adapter.ts'
-import { expiredError, failureOf } from './httpErrors.ts'
+import { readTrackList, readTrackUpload, toWorkspaceSong } from './adapter.ts'
+import { failureOf } from './httpErrors.ts'
+import { confirmSession } from './httpSession.ts'
 import { createHttpTasks, type ListedSegment } from './httpTasks.ts'
 import { readSegmentList } from './taskAdapter.ts'
 import type {
@@ -150,13 +146,9 @@ export function createHttpWorkspaceRepository({
     async loadWorkspace(signal) {
       let listed: WorkspaceTask[]
       try {
-        const { data } = await client.request('GET', '/workspaces/me', {
-          signal,
-          read: readWorkspaceMe,
-        })
-        // Entering another code in another tab replaces the session cookie,
-        // so this page would act on a different workspace.
-        if (String(data.workspace_id) !== workspace.id) throw expiredError()
+        // A session of another workspace ends this one: the page would act
+        // on that workspace.
+        await confirmSession(client, workspace.id, signal)
         listed = await work.list(await listSegments(signal), signal)
       } catch (error) {
         if (signal.aborted) throw error

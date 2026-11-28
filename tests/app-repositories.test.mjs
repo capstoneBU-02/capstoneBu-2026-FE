@@ -100,7 +100,7 @@ test('http mode starts at code entry and logs in through the API base', async ()
   } finally {
     globalThis.fetch = original
   }
-  assert.deepEqual(urls, ['/api/v1/auth/tester-login'])
+  assert.deepEqual(urls, ['/api/v1/auth/tester-login', '/api/v1/workspaces/me'])
 })
 
 test('http mode saves and lists takes through the same API base', async () => {
