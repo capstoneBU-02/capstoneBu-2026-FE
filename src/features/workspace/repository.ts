@@ -93,6 +93,7 @@ type RepositoryErrorCode =
   | 'audio-unavailable'
   | 'tab-unavailable'
   | 'tab-missing'
+  | 'tab-outdated'
   | 'copy-status-failed'
 
 export class WorkspaceRepositoryError extends Error {

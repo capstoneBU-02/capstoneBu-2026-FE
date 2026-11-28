@@ -1861,6 +1861,25 @@ test('a finished tab is read once and drawn again from what was read', async () 
   assert.equal(parseTabScore(again).ok, true)
 })
 
+// The section moved after its status was read, as from another device: the
+// tab is of the range before, so it is neither drawn nor kept.
+test('a tab made before its section moved fails as outdated and is read again next time', async () => {
+  const result = readFixture('workspace/tab-result.json')
+  result.data.segment.is_outdated = true
+  const { repository, calls } = setup(
+    { [RESULT]: () => jsonResponse(200, result) },
+    { tasks: tasksWith(COMPLETED) },
+  )
+  await assert.rejects(repository.loadTab('31', signal()), {
+    name: 'WorkspaceRepositoryError',
+    code: 'tab-outdated',
+  })
+  await assert.rejects(repository.loadTab('31', signal()), {
+    code: 'tab-outdated',
+  })
+  assert.deepEqual(keys(calls), [RESULT, RESULT])
+})
+
 test('a result with nothing to draw is not read again either', async () => {
   const result = readFixture('workspace/tab-result.json')
   result.data.time_signature = '6/8'
