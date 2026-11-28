@@ -19,6 +19,9 @@ export interface RefreshLoop {
   // Changes the time between refreshes. null drops a wait already started; a
   // number starts one when none waits or runs. A refresh on its way goes on.
   setDelay(delayMs: number | null): void
+  // Refreshes at once by the rules focus follows: not while the tab is
+  // hidden, a refresh is on its way or the loop has stopped.
+  catchUp(): void
   // Ends the loop and cancels a refresh still running.
   stop(): void
 }
@@ -84,5 +87,5 @@ export function startRefreshLoop({
   page.document.addEventListener('visibilitychange', followVisibility)
   page.window.addEventListener('focus', catchUp)
   scheduleNext()
-  return { setDelay, stop }
+  return { setDelay, catchUp, stop }
 }

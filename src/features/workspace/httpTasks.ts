@@ -68,6 +68,7 @@ const MESSAGES = {
   'audio-unavailable': '분리한 기타 음원을 불러오지 못했어요.',
   'tab-unavailable': '타브를 불러오지 못했어요.',
   'tab-missing': '타브를 찾을 수 없어요.',
+  'tab-outdated': '구간이 바뀌어 타브를 다시 불러와요.',
 } as const
 
 type TaskFailureCode = keyof typeof MESSAGES
@@ -551,7 +552,9 @@ export function createHttpTasks({
   // resolves null, which the screen's check reports as a tab it cannot show.
   // The server does not find a tab of another workspace either, as after
   // another code's session took the cookie; that failure is not kept, so the
-  // task opened again asks once more.
+  // task opened again asks once more. A section moved after its status was
+  // read, as from another device, answers with the tab of the range before:
+  // it fails as outdated and is not kept, and the page reads the list again.
   async function loadTab(taskId: string, signal: AbortSignal) {
     signal.throwIfAborted()
     const record = tasks.get(taskId)
@@ -559,21 +562,24 @@ export function createHttpTasks({
     if (record?.task.processingStatus !== 'completed' || tabId == null)
       throw refused('tab-unavailable')
     if (tabScores.has(tabId)) return tabScores.get(tabId)
-    try {
-      const { data } = await client.request('GET', `/tabs/${tabId}/result`, {
-        signal,
-        read: readTabResult,
-      })
-      const score = scoreFromNotes(tabTranscriptionOf(data))
-      tabScores.set(tabId, score)
-      return score
-    } catch (error) {
-      if (signal.aborted) throw error
-      throw failed(
-        codeOf(error) === 'TAB_NOT_FOUND' ? 'tab-missing' : 'tab-unavailable',
-        error,
+    const data = await client
+      .request('GET', `/tabs/${tabId}/result`, { signal, read: readTabResult })
+      .then(
+        (answer) => answer.data,
+        (error: unknown) => {
+          if (signal.aborted) throw error
+          throw failed(
+            codeOf(error) === 'TAB_NOT_FOUND'
+              ? 'tab-missing'
+              : 'tab-unavailable',
+            error,
+          )
+        },
       )
-    }
+    if (data.segment.is_outdated) throw refused('tab-outdated')
+    const score = scoreFromNotes(tabTranscriptionOf(data))
+    tabScores.set(tabId, score)
+    return score
   }
 
   async function refresh(

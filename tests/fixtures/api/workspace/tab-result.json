@@ -11,7 +11,8 @@
       "segment_id": 31,
       "name": "CHORUS",
       "start_ms": 12300,
-      "end_ms": 27800
+      "end_ms": 27800,
+      "is_outdated": false
     },
     "condition": {
       "tuning_id": "e_standard",

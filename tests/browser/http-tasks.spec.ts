@@ -397,6 +397,81 @@ test('a tab opened again is drawn from the result already read', async ({
   expect(asked).toEqual(['GET'])
 })
 
+// Another device moves 코러스 while this page asks for its tab (#100). The
+// list has no task in progress, so it reads again only when asked; that read
+// is held until the tab area has been seen waiting.
+test('a tab made before its range moved elsewhere is not drawn and the list catches up', async ({
+  page,
+}) => {
+  const [chorus] = fixtureData('segments').items as Record<string, unknown>[]
+  listTrack(page, (fixtureData('tracks').items as Record<string, unknown>[])[1])
+  listSegment(page, chorus)
+  let status = load('status-completed')
+  let moved = false
+  let releaseList = () => {}
+  const listHeld = new Promise<void>((resolve) => (releaseList = resolve))
+  await page.route(`${API}/segments/31/processing-status`, (route) =>
+    answer(route, status),
+  )
+  const result = load('tab-result') as {
+    data: { segment: Record<string, unknown> }
+  }
+  await page.route(`${API}/tabs/88/result`, (route) => {
+    listSegment(page, {
+      ...chorus,
+      end_ms: 25_000,
+      duration_ms: 12_700,
+      version: 2,
+      updated_at: new Date().toISOString(),
+    })
+    status = load('status-queued')
+    moved = true
+    const segment = { ...result.data.segment, is_outdated: true }
+    return answer(route, { ...result, data: { ...result.data, segment } })
+  })
+  await page.route(`${API}/stems/54/playback`, (route) =>
+    answer(route, load('stem-not-ready'), 409),
+  )
+  const listReads: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/v1/tracks')
+      listReads.push(request.method())
+  })
+
+  await signIn(page)
+  await page.route(`${API}/tracks`, async (route) => {
+    if (moved) await listHeld
+    return route.fallback()
+  })
+  await sidebar(page)
+    .getByRole('button', { name: /^코러스/ })
+    .click()
+  await expect(page).toHaveURL(`${HARNESS}?view=task&task=31`)
+
+  await expect.poll(() => listReads).toEqual(['GET', 'GET'])
+  await expect(tabPanel(page).getByRole('status')).toHaveText(
+    '타브를 불러오는 중이에요',
+  )
+  await expect(tabPanel(page).getByRole('alert')).toHaveCount(0)
+  await expect(
+    tabPanel(page).getByRole('img', { name: /^타브 악보/ }),
+  ).toHaveCount(0)
+  releaseList()
+
+  const kept = main(page)
+    .getByRole('region', { name: '이전 결과' })
+    .getByRole('listitem')
+  await expect(kept).toHaveCount(1)
+  await expect(kept).toContainText('00:12.3–00:27.8')
+  await expect(
+    main(page).getByText('00:12.3–00:25.0', { exact: true }),
+  ).toBeVisible()
+  await expect(main(page).getByRole('img', { name: /^타브 악보/ })).toHaveCount(
+    0,
+  )
+  expect(listReads).toEqual(['GET', 'GET'])
+})
+
 test('a workspace entered again lists its sections from the server and opens one', async ({
   page,
 }) => {

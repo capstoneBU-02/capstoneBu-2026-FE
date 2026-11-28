@@ -3,6 +3,7 @@
 // converter takes it.
 
 import {
+  readBoolean,
   readObject,
   readString,
   ResponseShapeError,
@@ -93,8 +94,12 @@ function readTabNote(value: unknown, path: string): TabResultNote {
 
 export function readTabResult(data: unknown): TabResultResponse {
   const tab = readObject(data)
+  const segment = tab.object('segment')
   const condition = tab.object('condition')
   return {
+    segment: {
+      is_outdated: segment.nullable('is_outdated', readBoolean) ?? false,
+    },
     condition: { tuning_notes: condition.array('tuning_notes', readString) },
     tempo_bpm: tab.number('tempo_bpm'),
     time_signature: readTimeSignature(

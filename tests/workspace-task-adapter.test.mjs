@@ -481,6 +481,32 @@ test('a tab result keeps the tuning, tempo, meter and where each note sits', () 
   })
 })
 
+// The server gives the range the tab was made from and whether the section
+// moved since; a server from before that sends no flag.
+test('a tab result says whether its section moved since it was made', () => {
+  const result = data('tab-result')
+  assert.deepEqual(readTabResult(result).segment, { is_outdated: false })
+  const moved = { ...result, segment: { ...result.segment, is_outdated: true } }
+  assert.deepEqual(readTabResult(moved).segment, { is_outdated: true })
+  const { is_outdated: _, ...older } = result.segment
+  assert.deepEqual(readTabResult({ ...result, segment: older }).segment, {
+    is_outdated: false,
+  })
+  assert.throws(
+    () =>
+      readTabResult({
+        ...result,
+        segment: { ...result.segment, is_outdated: 'yes' },
+      }),
+    { name: 'ResponseShapeError', path: 'data.segment.is_outdated' },
+  )
+  const { segment: __, ...bare } = result
+  assert.throws(() => readTabResult(bare), {
+    name: 'ResponseShapeError',
+    path: 'data.segment',
+  })
+})
+
 test('a tab result with a broken meter or note fails at its field', () => {
   const result = data('tab-result')
   assert.throws(() => readTabResult({ ...result, time_signature: '4' }), {

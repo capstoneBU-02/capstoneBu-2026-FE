@@ -10,11 +10,13 @@ import type { UseWorkspaceResult } from './useWorkspace.ts'
 // The list follows changes made outside this screen (#28): it loads again
 // when the tab is shown or the window gets focus, and every refreshMs while
 // a listed task is queued or processing. null turns this off. The interval
-// and the stop rules are the open task's (#17).
+// and the stop rules are the open task's (#17). What it returns reads the
+// list at once by focus's rules, as when the open task's tab turns out to be
+// of a range moved elsewhere (#100); it does nothing while this is off.
 export function useListRefresh(
   workspace: UseWorkspaceResult,
   refreshMs: number | null,
-) {
+): () => void {
   const listed =
     workspace.loadState === 'success' || workspace.loadState === 'empty'
   const delayMs =
@@ -45,4 +47,6 @@ export function useListRefresh(
   useEffect(() => {
     loop.current?.setDelay(delayMs)
   }, [delayMs])
+
+  return () => loop.current?.catchUp()
 }

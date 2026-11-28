@@ -116,9 +116,14 @@ export interface TabCreatedResponse {
 
 // GET /tabs/{tab_id}/result, only while the tab is success or needs_review
 // (409 TAB_NOT_READY otherwise). The ids, version, result_type, status,
-// is_draft, segment, tempo_uncertain, review_reasons, summary, musicxml_url
-// with its expiry and model also arrive; the tab is drawn from the notes.
+// is_draft, tempo_uncertain, review_reasons, summary, musicxml_url with its
+// expiry and model also arrive; the tab is drawn from the notes.
 export interface TabResultResponse {
+  // The range of the guitar the tab was made from; segment_id, name,
+  // start_ms and end_ms also arrive. is_outdated: the section's range moved
+  // since, so the tab is of the range before. A server before BE 30a6143
+  // sends no flag, read as false.
+  readonly segment: { readonly is_outdated: boolean }
   // tuning_id, strings and capo also arrive.
   readonly condition: {
     // Lowest string first: E2 A2 D3 G3 B3 E4.
