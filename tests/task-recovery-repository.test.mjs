@@ -61,7 +61,12 @@ test('a retry queues the task again and starts from the failed stage (JOB-04)', 
   const repository = createMockWorkspaceRepository('default', {
     tasks: [failedTab],
     now: () => clock.now,
-    processingTiming: { queueMs: 100, separationMs: 400, transcriptionMs: 600 },
+    processingTiming: {
+      queueMs: 100,
+      separationMs: 400,
+      cutMs: 200,
+      transcriptionMs: 600,
+    },
   })
   assert.deepEqual((await repository.loadTask(failedTab.id, signal())).retry, {
     left: 3,
@@ -288,6 +293,7 @@ test('?demo=task-states previews every state #17 shows', async () => {
     'task-outro': ['failed', 'skipped', 'failed', { left: 0, limit: 3 }],
     'task-verse-2': ['failed', 'failed', 'waiting', { left: 1, limit: 3 }],
     'task-chorus': ['failed', 'failed', 'waiting', null],
+    'task-interlude': ['failed', 'failed', 'waiting', null],
   }
   const { tasks } = await repository.loadWorkspace(signal())
   assert.deepEqual(
@@ -311,6 +317,27 @@ test('?demo=task-states previews every state #17 shows', async () => {
     (await repository.loadTask('task-chorus', signal())).task.failureKind,
     'no-guitar',
   )
+  assert.equal(
+    (await repository.loadTask('task-interlude', signal())).task.failureKind,
+    'invalid-audio',
+  )
+  // An unreadable range moves like a section without guitar.
+  await assert.rejects(repository.retryTask('task-interlude', signal()), {
+    code: 'retry-task-failed',
+  })
+  const moved = await repository.reviseTask(
+    'task-interlude',
+    {
+      sectionName: '인터루드',
+      part: 'rhythm',
+      tuningId: 'e-standard',
+      rangeStartSeconds: 125,
+      rangeEndSeconds: 140,
+    },
+    signal(),
+  )
+  assert.equal(moved.processingStatus, 'queued')
+  assert.equal(moved.failureKind, null)
   // Fixture tasks hold their state for the preview.
   clock.now = 60_000
   assert.equal((await state('task-bridge')).status, 'queued')

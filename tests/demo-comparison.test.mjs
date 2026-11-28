@@ -102,10 +102,17 @@ test('an uploaded guitar is its own baseline and starts at the section', async (
     await finishedComparison(guitarSong)
   await repository.loadTrackAudio(comparison.id, 'stem', signal)
   assert.deepEqual(audio.calls, [['song', 'song-1']])
+  // The server sends the original too; for an uploaded guitar it is the upload.
+  await repository.loadTrackAudio(comparison.id, 'original', signal)
+  assert.deepEqual(audio.calls, [
+    ['song', 'song-1'],
+    ['song', 'song-1'],
+  ])
   const { tracks } = await repository.loadPlayback(comparison.id, signal)
   assert.deepEqual(
     tracks.map(({ kind, offsetSeconds }) => [kind, offsetSeconds]),
     [
+      ['original', 10],
       ['stem', 10],
       ['performance', 0],
     ],

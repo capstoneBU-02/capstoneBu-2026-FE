@@ -1,5 +1,3 @@
-export const RECORDING_SAMPLE_RATE = 48_000
-
 const WAV_HEADER_BYTES = 44
 const WAV_FORMAT_CHUNK_BYTES = 16
 const WAV_PCM_FORMAT = 1
@@ -22,34 +20,11 @@ export function mergeChunks(chunks: readonly Float32Array[]): Float32Array {
   return merged
 }
 
+// The WAV header holds a whole number of samples per second.
 function assertSampleRate(rate: number) {
-  if (!Number.isFinite(rate) || rate <= 0) {
-    throw new RangeError(`Sample rate must be a positive number: ${rate}`)
+  if (!Number.isInteger(rate) || rate <= 0) {
+    throw new RangeError(`Sample rate must be a positive whole number: ${rate}`)
   }
-}
-
-export function resampleLinear(
-  samples: Float32Array,
-  fromRate: number,
-  toRate: number,
-): Float32Array {
-  assertSampleRate(fromRate)
-  assertSampleRate(toRate)
-  if (fromRate === toRate) return samples.slice()
-
-  const length = Math.round((samples.length * toRate) / fromRate)
-  const resampled = new Float32Array(length)
-  const lastIndex = samples.length - 1
-  for (let index = 0; index < length; index += 1) {
-    // Computed from the index so rounding error cannot build up over a long take.
-    const position = (index * fromRate) / toRate
-    const before = Math.min(Math.floor(position), lastIndex)
-    const after = Math.min(before + 1, lastIndex)
-    const weight = position - before
-    resampled[index] =
-      samples[before] + (samples[after] - samples[before]) * weight
-  }
-  return resampled
 }
 
 function toPcm16(sample: number) {
@@ -84,6 +59,7 @@ function writeWavHeader(view: DataView, dataBytes: number, sampleRate: number) {
 }
 
 export function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+  assertSampleRate(sampleRate)
   const dataBytes = samples.length * WAV_BYTES_PER_SAMPLE
   const buffer = new ArrayBuffer(WAV_HEADER_BYTES + dataBytes)
   const view = new DataView(buffer)

@@ -332,6 +332,75 @@ test('a take outside the length the server accepts ends as it would there', asyn
   assert.equal(brokenStatus.failure.retry, null)
 })
 
+// A 16-bit PCM WAV of one channel, as the recorder saves it.
+function wav(samples, sampleRate = 8_000) {
+  const view = new DataView(new ArrayBuffer(44 + samples.length * 2))
+  const tag = (offset, text) =>
+    [...text].forEach((char, index) =>
+      view.setUint8(offset + index, char.charCodeAt(0)),
+    )
+  tag(0, 'RIFF')
+  view.setUint32(4, 36 + samples.length * 2, true)
+  tag(8, 'WAVE')
+  tag(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  tag(36, 'data')
+  view.setUint32(40, samples.length * 2, true)
+  samples.forEach((sample, index) =>
+    view.setInt16(44 + index * 2, sample, true),
+  )
+  return new Blob([view.buffer], { type: 'audio/wav' })
+}
+
+// A square wave at the given level in dBFS.
+const level = (dbfs, length = 800) => {
+  const amplitude = Math.round(32_768 * 10 ** (dbfs / 20))
+  return Array.from({ length }, (_, index) =>
+    index % 2 === 0 ? amplitude : -amplitude,
+  )
+}
+
+test('a silent take fails as the server fails it, before its length is checked', async () => {
+  for (const [name, overrides] of [
+    ['a silent take', { audio: wav(level(-51)) }],
+    ['a take of nothing but zeros', { audio: wav(new Array(800).fill(0)) }],
+    ['a WAV with no samples', { audio: wav([]) }],
+    ['a silent take too short', { audio: wav(level(-60)), durationSeconds: 2 }],
+  ]) {
+    const context = setup()
+    const { comparisonId } = await compared(context, overrides)
+    const status = await context.repository.loadStatus(comparisonId, signal())
+    assert.equal(status.state, 'failed', name)
+    assert.deepEqual(
+      status.failure,
+      { stage: 'align', code: 'PERFORMANCE_INVALID_AUDIO', retry: null },
+      name,
+    )
+  }
+})
+
+test('a take is silent only under -50 dBFS and when the mock can read it', async () => {
+  for (const [name, audio] of [
+    ['a quiet take', wav(level(-49))],
+    ['a file that is not WAV', new Blob(['take'], { type: 'audio/mpeg' })],
+    [
+      '44 bytes of zeros, as the browser harness seeds a take',
+      new Blob([new Uint8Array(44)], { type: 'audio/wav' }),
+    ],
+  ]) {
+    const context = setup()
+    const { comparisonId } = await compared(context, { audio })
+    const status = await context.repository.loadStatus(comparisonId, signal())
+    assert.equal(status.state, 'success', name)
+  }
+})
+
 test('a take counts as slow from 1.1 times the section (CMP-02)', async () => {
   for (const [durationSeconds, isSlow] of [
     [21.9, false],
@@ -766,16 +835,22 @@ test('separated input is the baseline when there is no original (CMP-01)', async
   const result = await context.repository.loadResult(comparisonId, signal())
   assert.equal(result.baseline, 'separated-input')
 
+  // The server sends the same three sounds whatever the input (CMP-04); the
+  // original is then the uploaded guitar.
   const playback = await context.repository.loadPlayback(comparisonId, signal())
   assert.equal(playback.isPartial, false)
-  assert.deepEqual(
-    playback.tracks.map((track) => track.kind),
-    ['stem', 'performance'],
+  assert.deepEqual(playback.tracks, [
+    { kind: 'original', available: true, offsetSeconds: 10 },
+    // The mock plays the whole upload where the server cuts the section.
+    { kind: 'stem', available: true, offsetSeconds: 10 },
+    { kind: 'performance', available: true, offsetSeconds: 0 },
+  ])
+  const original = await context.repository.loadTrackAudio(
+    comparisonId,
+    'original',
+    signal(),
   )
-  await assert.rejects(
-    context.repository.loadTrackAudio(comparisonId, 'original', signal()),
-    { code: 'audio-unavailable' },
-  )
+  assert.equal(await original.text(), `${TASK_ID}:original`)
 })
 
 test('what a request returns cannot change what the mock keeps', async () => {

@@ -25,7 +25,7 @@ const REFUSALS = {
   unsupported: 'TypeError',
 } as const
 
-// Away from 48 kHz so every take goes through resampling.
+// A rate no device records at, so a take that changed it would show.
 const INPUT_RATE = 8_000
 const BLOCK_SECONDS = 0.05
 const BLOCK_FRAMES = INPUT_RATE * BLOCK_SECONDS

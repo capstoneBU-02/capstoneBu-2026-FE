@@ -281,7 +281,7 @@ test('다른 파일 올리기 starts a new section with the name and tuning', as
 
 test('?demo=task-states previews every task state', async ({ page }) => {
   await page.goto('/?demo=task-states')
-  await expect(page.locator('tbody tr')).toHaveCount(7)
+  await expect(page.locator('tbody tr')).toHaveCount(8)
   const open = async (name: RegExp, sectionName: string) => {
     await sidebar(page).getByRole('button', { name }).click()
     await expect(title(page)).toHaveText(sectionName)
@@ -299,6 +299,17 @@ test('?demo=task-states previews every task state', async ({ page }) => {
     name: '기타를 분리하지 못했어요',
   })
   await expect(separation.getByText('1회 남음')).toBeVisible()
+  await open(/^인터루드/, '인터루드')
+  const unreadable = main(page).getByRole('region', {
+    name: '음원을 읽지 못했어요',
+  })
+  await expect(unreadable.getByRole('button')).toHaveText([
+    '구간 다시 정하기',
+    '다른 파일 올리기',
+  ])
+  await expect(
+    main(page).getByRole('button', { name: '다시 시도' }),
+  ).toHaveCount(0)
   await open(/^코러스 2/, '코러스 2')
   await expect(panel(page)).toBeVisible()
 })

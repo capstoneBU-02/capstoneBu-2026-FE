@@ -130,9 +130,13 @@ export function createMockWorkspaceRepository(
     runs.push({
       taskId: task.id,
       enqueuedAt: now(),
-      // A retry starts from the stage that failed (JOB-04).
-      skipsSeparation:
-        song?.inputKind === 'separated-guitar' || task.hasSeparatedAudio,
+      // A retry starts from the stage that failed (JOB-04). Separated-guitar
+      // input skips separation (JOB-02), but the server still cuts its section.
+      guitar: task.hasSeparatedAudio
+        ? 'kept'
+        : song?.inputKind === 'separated-guitar'
+          ? 'cut'
+          : 'separate',
     })
   }
 
@@ -238,7 +242,7 @@ export function createMockWorkspaceRepository(
         stages,
         queueAhead: state?.status === 'queued' ? state.ahead : null,
         retry: retryOf(task),
-        tabWaitsForPage: tabWaitsForGuitar(stages),
+        tabWaitsForPage: tabWaitsForGuitar(task),
       }
     },
     async addSong(input, signal, onProgress) {

@@ -28,7 +28,12 @@ export function clockedRepository() {
   const clock = { now: 0 }
   const repository = createMockWorkspaceRepository('default', {
     now: () => clock.now,
-    processingTiming: { queueMs: 100, separationMs: 400, transcriptionMs: 600 },
+    processingTiming: {
+      queueMs: 100,
+      separationMs: 400,
+      cutMs: 200,
+      transcriptionMs: 600,
+    },
   })
   return { clock, repository }
 }

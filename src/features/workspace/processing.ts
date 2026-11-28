@@ -1,3 +1,4 @@
+import { isTaskInProgress } from './format.ts'
 import type {
   SongInputKind,
   TaskStage,
@@ -60,13 +61,11 @@ export function taskStages(
 }
 
 // The mock and the test harness ask for the tab as the server does, once the
-// guitar is ready. Separated input has no separation to wait for here.
-export function tabWaitsForGuitar(stages: readonly TaskStage[]): boolean {
-  return stages.some(
-    (stage) =>
-      stage.id === 'separation' &&
-      (stage.status === 'waiting' || stage.status === 'running'),
-  )
+// guitar is ready: separated, or for separated-guitar input, its section cut.
+export function tabWaitsForGuitar(
+  task: Pick<WorkspaceTask, 'processingStatus' | 'hasSeparatedAudio'>,
+): boolean {
+  return isTaskInProgress(task) && !task.hasSeparatedAudio
 }
 
 const STAGE_LABELS: Record<TaskStageId, string> = {

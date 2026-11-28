@@ -7,14 +7,19 @@ export interface ProcessingTiming {
   // The shortest wait before a run can start.
   readonly queueMs: number
   readonly separationMs: number
+  // Separated-guitar input has its section cut before the tab instead.
+  readonly cutMs: number
   readonly transcriptionMs: number
 }
+
+// What a run does before the tab: separate the guitar, cut the section from
+// separated-guitar input, or nothing for a retry that keeps the guitar.
+export type GuitarWork = 'separate' | 'cut' | 'kept'
 
 export interface ProcessingRun {
   readonly taskId: string
   readonly enqueuedAt: number
-  // Separated-guitar input, or a retry that keeps the separated guitar.
-  readonly skipsSeparation: boolean
+  readonly guitar: GuitarWork
   // 멈추기 frees the worker at this time; the run then has no state.
   readonly canceledAt?: number
 }
@@ -23,7 +28,8 @@ export type RunState =
   | { readonly status: 'queued'; readonly ahead: number }
   | {
       readonly status: 'processing'
-      readonly separated: boolean
+      // The guitar is separated, cut or kept from before.
+      readonly guitarReady: boolean
       readonly percent: number
     }
   | { readonly status: 'completed' }
@@ -36,6 +42,11 @@ interface Scheduled {
   readonly freesAt: number
 }
 
+function guitarMs(run: ProcessingRun, timing: ProcessingTiming) {
+  if (run.guitar === 'separate') return timing.separationMs
+  return run.guitar === 'cut' ? timing.cutMs : 0
+}
+
 function schedule(
   runs: readonly ProcessingRun[],
   timing: ProcessingTiming,
@@ -43,8 +54,7 @@ function schedule(
   let workerFreeAt = -Infinity
   return runs.map((run) => {
     const startsAt = Math.max(run.enqueuedAt + timing.queueMs, workerFreeAt)
-    const separationMs = run.skipsSeparation ? 0 : timing.separationMs
-    const endsAt = startsAt + separationMs + timing.transcriptionMs
+    const endsAt = startsAt + guitarMs(run, timing) + timing.transcriptionMs
     const freesAt =
       run.canceledAt === undefined ? endsAt : Math.min(run.canceledAt, endsAt)
     // A run stopped while it waited never held the worker; the ones behind it
@@ -63,10 +73,9 @@ function stateAt(
   if (now < scheduled.startsAt) return { status: 'queued', ahead }
   if (now >= scheduled.endsAt) return { status: 'completed' }
   const elapsed = now - scheduled.startsAt
-  const separationMs = scheduled.run.skipsSeparation ? 0 : timing.separationMs
   return {
     status: 'processing',
-    separated: elapsed >= separationMs,
+    guitarReady: elapsed >= guitarMs(scheduled.run, timing),
     percent: Math.floor(
       (elapsed / (scheduled.endsAt - scheduled.startsAt)) * 100,
     ),
@@ -100,6 +109,7 @@ export function runStates(
 export const DEMO_PROCESSING_TIMING: ProcessingTiming = {
   queueMs: 5_000,
   separationMs: 8_000,
+  cutMs: 3_000,
   transcriptionMs: 12_000,
 }
 
@@ -122,7 +132,7 @@ export function progressedTask(
       ...task,
       processingStatus: 'processing',
       progressPercent: state.percent,
-      hasSeparatedAudio: state.separated,
+      hasSeparatedAudio: state.guitarReady,
     }
   return {
     ...task,

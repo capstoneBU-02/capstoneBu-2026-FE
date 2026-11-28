@@ -2,11 +2,16 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { runStates } from '../src/features/workspace/mockProcessing.ts'
 
-const timing = { queueMs: 100, separationMs: 400, transcriptionMs: 600 }
-const run = (taskId, enqueuedAt, skipsSeparation = false) => ({
+const timing = {
+  queueMs: 100,
+  separationMs: 400,
+  cutMs: 200,
+  transcriptionMs: 600,
+}
+const run = (taskId, enqueuedAt, guitar = 'separate') => ({
   taskId,
   enqueuedAt,
-  skipsSeparation,
+  guitar,
 })
 
 test('a run waits, separates, makes the tab and completes', () => {
@@ -17,32 +22,42 @@ test('a run waits, separates, makes the tab and completes', () => {
   assert.deepEqual(at(99), { status: 'queued', ahead: 0 })
   assert.deepEqual(at(100), {
     status: 'processing',
-    separated: false,
+    guitarReady: false,
     percent: 0,
   })
   assert.deepEqual(at(500), {
     status: 'processing',
-    separated: true,
+    guitarReady: true,
     percent: 40,
   })
   assert.deepEqual(at(1099), {
     status: 'processing',
-    separated: true,
+    guitarReady: true,
     percent: 99,
   })
   assert.deepEqual(at(1100), { status: 'completed' })
 })
 
-test('separated-guitar input goes straight to the tab (JOB-02)', () => {
-  const runs = [run('a', 0, true)]
-  assert.deepEqual(runStates(runs, 100, timing).get('a'), {
+test('separated-guitar input cuts its section, then makes the tab (JOB-02)', () => {
+  const runs = [run('a', 0, 'cut')]
+  const at = (now) => runStates(runs, now, timing).get('a')
+
+  assert.deepEqual(at(100), {
     status: 'processing',
-    separated: true,
+    guitarReady: false,
     percent: 0,
   })
-  assert.deepEqual(runStates(runs, 700, timing).get('a'), {
-    status: 'completed',
+  assert.deepEqual(at(300), {
+    status: 'processing',
+    guitarReady: true,
+    percent: 25,
   })
+  assert.deepEqual(at(899), {
+    status: 'processing',
+    guitarReady: true,
+    percent: 99,
+  })
+  assert.deepEqual(at(900), { status: 'completed' })
 })
 
 test('one worker takes runs in order and counts the runs ahead', () => {
@@ -71,7 +86,7 @@ test('a task queued again keeps the timing of the runs around it', () => {
 
   assert.deepEqual(at(1300), {
     a: { status: 'queued', ahead: 1 },
-    b: { status: 'processing', separated: false, percent: 20 },
+    b: { status: 'processing', guitarReady: false, percent: 20 },
   })
   assert.equal(at(2100).a.status, 'processing')
 })
@@ -88,7 +103,7 @@ test('a stopped run frees the worker from the moment it stopped', () => {
 
   // A stopped run has no state and counts for no one behind it.
   assert.deepEqual(at(300), {
-    b: { status: 'processing', separated: false, percent: 0 },
+    b: { status: 'processing', guitarReady: false, percent: 0 },
     d: { status: 'queued', ahead: 1 },
   })
   assert.equal(at(1300).b.status, 'completed')
@@ -96,10 +111,10 @@ test('a stopped run frees the worker from the moment it stopped', () => {
 })
 
 test('a retried run that keeps the separated guitar starts at the tab', () => {
-  const runs = [run('a', 0, true)]
+  const runs = [run('a', 0, 'kept')]
   assert.deepEqual(runStates(runs, 100, timing).get('a'), {
     status: 'processing',
-    separated: true,
+    guitarReady: true,
     percent: 0,
   })
 })

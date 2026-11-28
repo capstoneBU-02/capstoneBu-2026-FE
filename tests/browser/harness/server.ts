@@ -114,7 +114,7 @@ export function taskDetail(taskId: string): TaskDetail | null {
         ? (queueAhead.get(taskId) ?? null)
         : null,
     retry: retryOf(task),
-    tabWaitsForPage: tabWaitsForGuitar(stages),
+    tabWaitsForPage: tabWaitsForGuitar(task),
   }
 }
 

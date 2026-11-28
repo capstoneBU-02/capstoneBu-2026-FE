@@ -15,6 +15,7 @@ import {
   mockRegions,
   type MockRegion,
 } from './mockComparisonOutcome.ts'
+import { isMockSilentTake } from './mockTakeLevel.ts'
 import {
   comparisonRunState,
   DEMO_COMPARISON_TIMING,
@@ -30,6 +31,12 @@ import {
 
 // CMP: three retries after the first run.
 const RETRY_LIMIT = 3
+
+const TRACK_KINDS: readonly PlaybackTrackKind[] = [
+  'original',
+  'stem',
+  'performance',
+]
 
 // What the comparison needs to know about a task from the workspace.
 export interface MockComparisonSection {
@@ -97,6 +104,7 @@ export function createMockComparisonRepository(
   // the last entry for a take is always the run started last.
   const performances = new Map<string, KeptPerformance>()
   const audioFiles = new Map<string, Blob>()
+  const silentPerformanceIds = new Set<string>()
   const comparisons = new Map<string, KeptComparison>()
   let savedCount = 0
   let comparedCount = 0
@@ -172,19 +180,17 @@ export function createMockComparisonRepository(
     return { kept, state }
   }
 
+  // The server sends the same three sounds whatever the input (CMP-04). It
+  // cuts the stem to the section, but the mock plays an uploaded guitar whole.
   function tracksOf(kept: KeptComparison): readonly PlaybackTrack[] {
     const performance = findPerformance(kept.performanceId)
-    const kinds: readonly PlaybackTrackKind[] =
-      kept.baseline === 'separated-input'
-        ? ['stem', 'performance']
-        : ['original', 'stem', 'performance']
-    // An uploaded guitar is the whole song; a separated one covers the section.
-    const wholeSong: PlaybackTrackKind =
-      kept.baseline === 'separated-input' ? 'stem' : 'original'
-    return kinds.map((kind) => ({
+    const wholeSong = new Set<PlaybackTrackKind>(
+      kept.baseline === 'separated-input' ? ['original', 'stem'] : ['original'],
+    )
+    return TRACK_KINDS.map((kind) => ({
       kind,
       available: !unavailableTracks.has(kind),
-      offsetSeconds: kind === wholeSong ? performance.rangeStartSeconds : 0,
+      offsetSeconds: wholeSong.has(kind) ? performance.rangeStartSeconds : 0,
     }))
   }
 
@@ -198,7 +204,7 @@ export function createMockComparisonRepository(
     const played = performance.durationSeconds ?? seconds
     const outcomes =
       options.outcomesFor?.(listed(performance)) ??
-      mockOutcomesFor(played, seconds)
+      mockOutcomesFor(played, seconds, silentPerformanceIds.has(performance.id))
     const kept: KeptComparison = {
       id,
       performanceId: performance.id,
@@ -235,6 +241,7 @@ export function createMockComparisonRepository(
       if (!section) throw new ComparisonRepositoryError('task-unavailable')
       if (input.audio.size === 0)
         throw new ComparisonRepositoryError('invalid-audio')
+      const silent = await isMockSilentTake(input.audio)
 
       savedCount += 1
       const performance: KeptPerformance = {
@@ -248,6 +255,7 @@ export function createMockComparisonRepository(
       }
       performances.set(performance.id, performance)
       audioFiles.set(performance.id, input.audio)
+      if (silent) silentPerformanceIds.add(performance.id)
       return listed(performance)
     },
     // In the order the server checks a request (CMP 비교 요청).

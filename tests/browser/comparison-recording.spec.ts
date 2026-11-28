@@ -191,7 +191,10 @@ test('정지 releases the microphone and offers the take', async ({ page }) => {
   await expect(inPanel(page, '다시 녹음')).toBeVisible()
 })
 
-test('the take is a 48 kHz mono 16-bit WAV', async ({ page }) => {
+// The harness records at 8 kHz, and the take keeps that rate.
+test('the take is a mono 16-bit WAV at the rate it was recorded', async ({
+  page,
+}) => {
   await recordTake(page, '', 2)
 
   const header = await page.evaluate(async () => {
@@ -210,9 +213,9 @@ test('the take is a 48 kHz mono 16-bit WAV', async ({ page }) => {
 
   expect(header).toEqual({
     channels: 1,
-    sampleRate: 48_000,
+    sampleRate: 8_000,
     bits: 16,
-    bytes: 2 * 2 * 48_000,
+    bytes: 2 * 2 * 8_000,
   })
 })
 
@@ -306,6 +309,23 @@ test('a take that heard nothing warns before it is compared', async ({
     '소리가 녹음되지 않은 것 같아요',
   )
   await expect(inPanel(page, '비교하기')).toBeVisible()
+})
+
+test('a take that heard nothing fails its comparison as the server fails it', async ({
+  page,
+}) => {
+  await recordTake(page, '&recording=silent', SECTION_SECONDS)
+
+  await inPanel(page, '비교하기').click()
+
+  const comparison = main(page).getByRole('tabpanel', { name: /^비교/ })
+  await expect(comparison).toContainText(
+    '이 연주는 다시 시도할 수 없어요. 다시 녹음하거나 다른 파일을 올려 주세요.',
+    { timeout: 10_000 },
+  )
+  await expect(
+    comparison.getByRole('button', { name: '다시 시도', exact: true }),
+  ).toHaveCount(0)
 })
 
 test('a refused microphone offers the file upload instead', async ({
