@@ -108,8 +108,8 @@ export const mockRetriesUsed: Readonly<Record<string, number>> = {
 }
 
 // ?demo=task-states adds the states #17 shows that the default list lacks: a
-// task waiting its turn, a tab failure with no retries left and a failed
-// separation with one left.
+// task waiting its turn, a tab failure with no retries left, a failed
+// separation with one left and a range the server could not read.
 export const mockTaskStates: readonly WorkspaceTask[] = [
   ...mockTasks,
   {
@@ -160,6 +160,26 @@ export const mockTaskStates: readonly WorkspaceTask[] = [
     rangeEndSeconds: 62,
     processingStatus: 'failed',
     failureKind: 'transcription',
+    progressPercent: null,
+    hasSeparatedAudio: false,
+    comparisonCount: 0,
+    copyStatus: 'unreviewed',
+    updatedAtLabel: '어제',
+  },
+  // PREPROCESS_INVALID_AUDIO: like a section without guitar, it cannot be
+  // retried, only moved or replaced with another file.
+  {
+    id: 'task-interlude',
+    sectionName: '인터루드',
+    songId: 'song-late-train',
+    part: 'rhythm',
+    tuningId: 'e-standard',
+    partLabel: '리듬 기타',
+    tuningLabel: 'E 표준 6현',
+    rangeStartSeconds: 120,
+    rangeEndSeconds: 138,
+    processingStatus: 'failed',
+    failureKind: 'invalid-audio',
     progressPercent: null,
     hasSeparatedAudio: false,
     comparisonCount: 0,
