@@ -567,23 +567,42 @@ test('queued tasks count the tasks ahead; fixture tasks keep their state', async
   ])
 })
 
-test('separated-guitar input skips separation in the mock too (JOB-02)', async () => {
+test('separated-guitar input skips separation but has its section cut in the mock (JOB-02)', async () => {
   const { clock, repository } = clockedRepository()
   const task = await repository.createTask(
     section({ songId: 'song-paper-moon', rangeEndSeconds: 60 }),
     signal(),
   )
 
+  clock.now = 0
+  assert.equal(
+    (await repository.loadTask(task.id, signal())).tabWaitsForPage,
+    true,
+  )
+  // As on the server, the section is cut before the tab is asked for.
   clock.now = 100
-  const detail = await repository.loadTask(task.id, signal())
+  let detail = await repository.loadTask(task.id, signal())
   assert.equal(detail.task.processingStatus, 'processing')
+  assert.equal(detail.task.hasSeparatedAudio, false)
+  assert.deepEqual(stageStatuses(detail), [
+    'separation:skipped',
+    'transcription:running',
+  ])
+  assert.equal(detail.tabWaitsForPage, true)
+  clock.now = 300
+  detail = await repository.loadTask(task.id, signal())
   assert.equal(detail.task.hasSeparatedAudio, true)
   assert.deepEqual(stageStatuses(detail), [
     'separation:skipped',
     'transcription:running',
   ])
   assert.equal(detail.tabWaitsForPage, false)
-  clock.now = 700
+  clock.now = 899
+  assert.equal(
+    (await repository.loadTask(task.id, signal())).task.processingStatus,
+    'processing',
+  )
+  clock.now = 900
   assert.equal(
     (await repository.loadTask(task.id, signal())).task.processingStatus,
     'completed',

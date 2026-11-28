@@ -61,7 +61,12 @@ test('a retry queues the task again and starts from the failed stage (JOB-04)', 
   const repository = createMockWorkspaceRepository('default', {
     tasks: [failedTab],
     now: () => clock.now,
-    processingTiming: { queueMs: 100, separationMs: 400, transcriptionMs: 600 },
+    processingTiming: {
+      queueMs: 100,
+      separationMs: 400,
+      cutMs: 200,
+      transcriptionMs: 600,
+    },
   })
   assert.deepEqual((await repository.loadTask(failedTab.id, signal())).retry, {
     left: 3,

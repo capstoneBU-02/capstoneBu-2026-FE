@@ -164,6 +164,7 @@ test('separated-guitar input shows separation as skipped', async ({ page }) => {
     processingStatus: 'processing',
     failureKind: null,
     progressPercent: 30,
+    hasSeparatedAudio: false,
   })
   await sidebarTask(page, /^인트로/).click()
   await expect(stages(page)).toHaveText([
@@ -173,6 +174,15 @@ test('separated-guitar input shows separation as skipped', async ({ page }) => {
   await expect(stages(page).first().getByText('건너뜀')).toBeVisible()
   // Opening the task is not a change to announce.
   await expect(announcement(page)).toHaveText('')
+  // The server cuts the section first and the page then asks for the tab.
+  await expect(panel(page).getByText(TAB_WAITS, { exact: true })).toBeVisible()
+
+  await updateOnServer(page, 'task-intro', { hasSeparatedAudio: true })
+  await expect(panel(page).getByText(GOES_ON, { exact: true })).toBeVisible()
+  await expect(stages(page)).toHaveText([
+    '기타 분리건너뜀',
+    '타브 생성, 진행 중',
+  ])
 })
 
 test('refreshing stops when the user leaves and a late answer changes nothing', async ({
