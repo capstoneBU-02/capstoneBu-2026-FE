@@ -59,13 +59,15 @@ test('a take keeps the samples it heard', async () => {
 })
 
 test('a rate with a fraction is saved as the nearest whole rate', async () => {
-  const take = buildRecordedTake(
-    { samples: tone(1, 44_100), sampleRate: 44_100.4 },
-    10,
-  )
+  for (const [sampleRate, saved] of [
+    [44_100.4, 44_100],
+    [44_100.6, 44_101],
+  ]) {
+    const take = buildRecordedTake({ samples: tone(1, saved), sampleRate }, 10)
 
-  assert.equal((await wavHeader(take.audio)).sampleRate, 44_100)
-  assert.equal(take.durationSeconds, 1)
+    assert.equal((await wavHeader(take.audio)).sampleRate, saved, sampleRate)
+    assert.equal(take.durationSeconds, 1, sampleRate)
+  }
 })
 
 test('a take from a rate that is not a positive number is refused', () => {
