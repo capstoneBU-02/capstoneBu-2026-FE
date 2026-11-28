@@ -766,16 +766,22 @@ test('separated input is the baseline when there is no original (CMP-01)', async
   const result = await context.repository.loadResult(comparisonId, signal())
   assert.equal(result.baseline, 'separated-input')
 
+  // The server sends the same three sounds whatever the input (CMP-04); the
+  // original is then the uploaded guitar.
   const playback = await context.repository.loadPlayback(comparisonId, signal())
   assert.equal(playback.isPartial, false)
-  assert.deepEqual(
-    playback.tracks.map((track) => track.kind),
-    ['stem', 'performance'],
+  assert.deepEqual(playback.tracks, [
+    { kind: 'original', available: true, offsetSeconds: 10 },
+    // The mock plays the whole upload where the server cuts the section.
+    { kind: 'stem', available: true, offsetSeconds: 10 },
+    { kind: 'performance', available: true, offsetSeconds: 0 },
+  ])
+  const original = await context.repository.loadTrackAudio(
+    comparisonId,
+    'original',
+    signal(),
   )
-  await assert.rejects(
-    context.repository.loadTrackAudio(comparisonId, 'original', signal()),
-    { code: 'audio-unavailable' },
-  )
+  assert.equal(await original.text(), `${TASK_ID}:original`)
 })
 
 test('what a request returns cannot change what the mock keeps', async () => {
