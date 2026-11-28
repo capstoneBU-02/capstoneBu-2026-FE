@@ -18,6 +18,12 @@ const login = (workspaceId) =>
   jsonResponse(200, { success: true, data: { workspace_id: workspaceId } })
 const me = (workspaceId) =>
   jsonResponse(200, { success: true, data: { workspace_id: workspaceId } })
+const ME_URL = '/api/v1/workspaces/me'
+const invalidInput = (details) =>
+  jsonResponse(400, {
+    success: false,
+    error: { code: 'INVALID_INPUT', message: '잘못된 입력입니다.', details },
+  })
 const tracks = (items = []) =>
   jsonResponse(200, { success: true, data: { items } })
 
@@ -43,17 +49,23 @@ async function failureOf(promise) {
   )
 }
 
-test('entering posts the normalized code and starts onboarding', async () => {
-  const { repository, calls } = setup(() =>
-    fixtureResponse(200, 'access/tester-login.json'),
+test('entering posts the normalized code, checks the session and starts onboarding', async () => {
+  const { repository, calls } = setup((url) =>
+    url === ME_URL
+      ? fixtureResponse(200, 'workspace/me.json')
+      : fixtureResponse(200, 'access/tester-login.json'),
   )
   const result = await repository.enter(' tester-2026-a1b2 ', signal())
 
-  assert.equal(calls.length, 1)
+  assert.equal(calls.length, 2)
   assert.equal(calls[0].url, '/api/v1/auth/tester-login')
   assert.equal(calls[0].init.method, 'POST')
   assert.equal(calls[0].init.credentials, 'same-origin')
   assert.deepEqual(JSON.parse(calls[0].init.body), { tester_code: CODE })
+  // The cookie the login set comes back before the notice and consent.
+  assert.equal(calls[1].url, ME_URL)
+  assert.equal(calls[1].init.method, 'GET')
+  assert.equal(calls[1].init.credentials, 'same-origin')
   assert.deepEqual(result, {
     sessionId: '42',
     workspace: { id: '42', name: '내 작업', testerCode: CODE },
@@ -80,6 +92,26 @@ for (const [name, answer, code] of [
     'invalid',
   ],
   [
+    'a body the server cannot read',
+    () => invalidInput([{ field: '', message: 'JSON decode error' }]),
+    'network',
+  ],
+  [
+    'a body field other than the code',
+    () => fixtureResponse(400, 'common/invalid-input.json'),
+    'network',
+  ],
+  [
+    'an invalid input without details',
+    () => invalidInput(undefined),
+    'network',
+  ],
+  [
+    'invalid input details in another shape',
+    () => invalidInput({ field: 'tester_code' }),
+    'network',
+  ],
+  [
     'too many attempts',
     () =>
       jsonResponse(429, {
@@ -88,10 +120,21 @@ for (const [name, answer, code] of [
       }),
     'limited',
   ],
+  // Logging in reads no cookie, so a session refusal is not the session
+  // ending.
   [
     'a rejected session',
     () => fixtureResponse(401, 'common/unauthorized-session.json'),
-    'session-expired',
+    'network',
+  ],
+  [
+    'an unauthorized answer',
+    () =>
+      jsonResponse(401, {
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: '인증이 필요합니다.' },
+      }),
+    'network',
   ],
   [
     'a server error',
@@ -129,6 +172,63 @@ for (const [name, answer, code] of [
   })
 }
 
+// A browser that keeps no cookie, or keeps an older one, fails here before
+// the notice and consent.
+for (const [name, answer] of [
+  [
+    'no session',
+    () => fixtureResponse(401, 'common/unauthorized-session.json'),
+  ],
+  [
+    'a server error',
+    () => fixtureResponse(500, 'common/internal-error-no-trace.json'),
+  ],
+  ['no response', () => Promise.reject(new TypeError('Failed to fetch'))],
+]) {
+  test(`a login whose session check finds ${name} stays at entry`, async () => {
+    const { repository } = setup((url) =>
+      url === ME_URL ? answer() : login(42),
+    )
+    const error = await failureOf(repository.enter(CODE, signal()))
+
+    assert.equal(error.code, 'network')
+    assert.equal(error.message, ACCESS_ERROR_MESSAGES.network)
+    assert.ok(apiErrorOf(error) instanceof ApiError)
+    assert.throws(() => repository.workspaceFor('42'), {
+      code: 'session-expired',
+    })
+  })
+}
+
+test('a login whose session belongs to another workspace stays at entry with both ids', async () => {
+  const { repository } = setup((url) => (url === ME_URL ? me(7) : login(42)))
+  const error = await failureOf(repository.enter(CODE, signal()))
+
+  assert.equal(error.code, 'network')
+  assert.equal(error.cause.name, 'WorkspaceMismatchError')
+  assert.equal(error.cause.expectedWorkspaceId, '42')
+  assert.equal(error.cause.receivedWorkspaceId, '7')
+  assert.throws(() => repository.workspaceFor('42'), {
+    code: 'session-expired',
+  })
+})
+
+test('a login cancelled during its session check opens no session', async () => {
+  const controller = new AbortController()
+  const { repository } = setup((url, init) => {
+    if (url !== ME_URL) return login(42)
+    controller.abort()
+    return Promise.reject(init.signal.reason)
+  })
+
+  await assert.rejects(repository.enter(CODE, controller.signal), {
+    name: 'AbortError',
+  })
+  assert.throws(() => repository.workspaceFor('42'), {
+    code: 'session-expired',
+  })
+})
+
 test('a cancelled entry stays an AbortError and opens no session', async () => {
   const { fetch } = pendingFetch()
   const repository = repositoryWith(fetch)
@@ -157,8 +257,9 @@ test('notice and onboarding are kept per workspace while the page is open', asyn
   )
   assert.equal(completed.consentChoice, 'accepted')
   assert.equal(completed.onboardingCompleted, true)
-  // Onboarding has no API yet, so it sends nothing.
-  assert.equal(calls.length, 1)
+  // Onboarding has no API yet, so it sends nothing after the login and its
+  // session check.
+  assert.equal(calls.length, 2)
 
   const again = await repository.enter(CODE.toLowerCase(), signal())
   assert.deepEqual(again, completed)

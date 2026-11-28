@@ -1,9 +1,10 @@
-import { ApiError, isSessionRejected, type HttpClient } from '../../api/http.ts'
+import { ApiError, type HttpClient } from '../../api/http.ts'
 import {
   createHttpWorkspaceRepository,
   createPageSongs,
   type PageSongs,
 } from '../workspace/httpRepository.ts'
+import { confirmSession } from '../workspace/httpSession.ts'
 import type { ConsentChoice, WorkspaceInfo } from '../workspace/model.ts'
 import { createPageTasks, type PageTasks } from '../workspace/pageTasks.ts'
 import type { WorkspaceRepository } from '../workspace/repository.ts'
@@ -42,15 +43,33 @@ const NEW_ONBOARDING: Onboarding = {
 const INVALID_CODES: ReadonlySet<string> = new Set([
   'TESTER_CODE_NOT_FOUND',
   'INVALID_CODE_FORMAT',
-  'INVALID_INPUT',
 ])
 
+// A body the server could not validate lists each field it refused. Only the
+// code itself is the user's to fix; any other field is a bug of this page.
+function refusesTesterCode(error: ApiError): boolean {
+  return (
+    error.code === 'INVALID_INPUT' &&
+    Array.isArray(error.details) &&
+    error.details.some(
+      (detail: unknown) =>
+        typeof detail === 'object' &&
+        detail !== null &&
+        'field' in detail &&
+        detail.field === 'tester_code',
+    )
+  )
+}
+
 // The server answers unknown, expired and revoked codes alike, so the
-// code-expired and revoked messages do not appear in http mode.
+// code-expired and revoked messages do not appear in http mode. Logging in
+// reads no cookie, so a session refusal there is not the session ending; it
+// comes from the session check after it, as does a session of another
+// workspace, when the browser did not keep the login's cookie.
 function enterFailure(error: unknown): AccessFailure {
-  if (isSessionRejected(error)) return 'session-expired'
   if (!(error instanceof ApiError)) return 'network'
-  if (INVALID_CODES.has(error.code)) return 'invalid'
+  if (INVALID_CODES.has(error.code) || refusesTesterCode(error))
+    return 'invalid'
   if (error.code === 'RATE_LIMIT_EXCEEDED') return 'limited'
   return 'network'
 }
@@ -126,6 +145,9 @@ export function createHttpAccessRepository({
           read: readTesterLogin,
         })
         workspace = toWorkspaceInfo(data, testerCode)
+        // Before the notice and consent, so a browser that keeps no cookie
+        // stops here.
+        await confirmSession(client, workspace.id, signal)
       } catch (error) {
         if (signal.aborted) throw error
         const failure = enterFailure(error)
