@@ -191,7 +191,10 @@ test('정지 releases the microphone and offers the take', async ({ page }) => {
   await expect(inPanel(page, '다시 녹음')).toBeVisible()
 })
 
-test('the take is a 48 kHz mono 16-bit WAV', async ({ page }) => {
+// The harness records at 8 kHz, and the take keeps that rate.
+test('the take is a mono 16-bit WAV at the rate it was recorded', async ({
+  page,
+}) => {
   await recordTake(page, '', 2)
 
   const header = await page.evaluate(async () => {
@@ -210,9 +213,9 @@ test('the take is a 48 kHz mono 16-bit WAV', async ({ page }) => {
 
   expect(header).toEqual({
     channels: 1,
-    sampleRate: 48_000,
+    sampleRate: 8_000,
     bits: 16,
-    bytes: 2 * 2 * 48_000,
+    bytes: 2 * 2 * 8_000,
   })
 })
 

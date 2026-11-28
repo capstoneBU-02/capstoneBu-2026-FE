@@ -1,11 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  RECORDING_SAMPLE_RATE,
   encodeWav,
   measureLevel,
   mergeChunks,
-  resampleLinear,
 } from '../src/features/recording/wavEncoder.ts'
 
 const HEADER_BYTES = 44
@@ -46,10 +44,6 @@ async function encodedSamples(...values) {
   return wav.samples
 }
 
-test('recordings are made at 48 kHz', () => {
-  assert.equal(RECORDING_SAMPLE_RATE, 48_000)
-})
-
 test('chunks are joined in the order they arrived', () => {
   assert.deepEqual(
     mergeChunks([floats(1, 2), floats(), floats(3)]),
@@ -69,60 +63,12 @@ test('a merged recording does not share memory with its chunk', () => {
   assert.equal(merged[0], 0.5)
 })
 
-test('resampling at the same rate returns a copy', () => {
-  const samples = floats(0.25, -0.5)
-  const copy = resampleLinear(samples, 48_000, 48_000)
-
-  assert.deepEqual(copy, samples)
-  assert.notEqual(copy, samples)
-  assert.notEqual(copy.buffer, samples.buffer)
-})
-
-test('44.1 kHz input gets the length it has at 48 kHz', () => {
-  const lengths = [
-    [44_100, 48_000],
-    [441, 480],
-    [1_000, 1_088],
-    [1, 1],
-  ]
-
-  for (const [input, output] of lengths) {
-    const samples = new Float32Array(input)
-    assert.equal(resampleLinear(samples, 44_100, 48_000).length, output)
-  }
-})
-
-test('48 kHz input gets the length it has at 44.1 kHz', () => {
-  const samples = new Float32Array(480)
-  assert.equal(resampleLinear(samples, 48_000, 44_100).length, 441)
-})
-
-test('upsampling interpolates and holds the last sample at the end', () => {
-  assert.deepEqual(resampleLinear(floats(0, 1), 1, 2), floats(0, 0.5, 1, 1))
-})
-
-test('downsampling reads the samples at the new positions', () => {
-  assert.deepEqual(resampleLinear(floats(0, 1, 2, 3), 2, 1), floats(0, 2))
-})
-
-test('resampling leaves the input untouched', () => {
-  const samples = floats(0, 1)
-  resampleLinear(samples, 1, 2)
-  assert.deepEqual(samples, floats(0, 1))
-})
-
-test('resampling nothing gives nothing', () => {
-  assert.equal(resampleLinear(floats(), 44_100, 48_000).length, 0)
-})
-
-test('a rate that is not a positive number is refused', () => {
-  const invalidRates = [0, -1, Number.NaN, Number.POSITIVE_INFINITY]
+test('a rate that is not a positive whole number is refused', () => {
+  const invalidRates = [0, -1, 44_100.5, Number.NaN, Number.POSITIVE_INFINITY]
 
   for (const rate of invalidRates) {
-    assert.throws(() => resampleLinear(floats(1), rate, 48_000), RangeError)
-    assert.throws(() => resampleLinear(floats(1), 48_000, rate), RangeError)
-    assert.throws(() => resampleLinear(floats(), rate, 48_000), RangeError)
-    assert.throws(() => resampleLinear(floats(1), rate, rate), RangeError)
+    assert.throws(() => encodeWav(floats(1), rate), RangeError)
+    assert.throws(() => encodeWav(floats(), rate), RangeError)
   }
 })
 

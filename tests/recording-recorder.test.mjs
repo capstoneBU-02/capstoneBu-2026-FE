@@ -8,7 +8,7 @@ import {
   waveformBars,
   waveformSpanSeconds,
 } from '../src/features/recording/recordingMeter.ts'
-import { RECORDING_SAMPLE_RATE } from '../src/features/recording/wavEncoder.ts'
+import { encodeWav } from '../src/features/recording/wavEncoder.ts'
 
 async function wavHeader(blob) {
   const view = new DataView(await blob.arrayBuffer())
@@ -28,33 +28,53 @@ function tone(seconds, sampleRate, amplitude = 0.5) {
   )
 }
 
-test('a take at the recording rate becomes 48 kHz mono 16-bit WAV', async () => {
-  const take = buildRecordedTake(
-    { samples: tone(1, RECORDING_SAMPLE_RATE), sampleRate: 48_000 },
-    10,
-  )
+// The server converts every take to 44.1 kHz itself, so a take keeps the
+// rate the device recorded it at.
+test('a take keeps the rate of its input as mono 16-bit WAV', async () => {
+  for (const sampleRate of [48_000, 44_100, 8_000]) {
+    const take = buildRecordedTake(
+      { samples: tone(1, sampleRate), sampleRate },
+      10,
+    )
 
-  assert.equal(take.audio.type, 'audio/wav')
-  assert.deepEqual(await wavHeader(take.audio), {
-    channels: 1,
-    sampleRate: 48_000,
-    bitsPerSample: 16,
-    dataBytes: 96_000,
-  })
-  assert.equal(take.durationSeconds, 1)
-  assert.equal(take.silent, false)
+    assert.equal(take.audio.type, 'audio/wav')
+    assert.deepEqual(
+      await wavHeader(take.audio),
+      { channels: 1, sampleRate, bitsPerSample: 16, dataBytes: 2 * sampleRate },
+      String(sampleRate),
+    )
+    assert.equal(take.durationSeconds, 1)
+    assert.equal(take.silent, false)
+  }
 })
 
-test('a take from another input rate is resampled to 48 kHz', async () => {
+test('a take keeps the samples it heard', async () => {
+  const samples = tone(0.01, 44_100)
+  const take = buildRecordedTake({ samples, sampleRate: 44_100 }, 10)
+
+  assert.deepEqual(
+    new Uint8Array(await take.audio.arrayBuffer()),
+    new Uint8Array(await encodeWav(samples, 44_100).arrayBuffer()),
+  )
+})
+
+test('a rate with a fraction is saved as the nearest whole rate', async () => {
   const take = buildRecordedTake(
-    { samples: tone(2, 44_100), sampleRate: 44_100 },
+    { samples: tone(1, 44_100), sampleRate: 44_100.4 },
     10,
   )
 
-  const header = await wavHeader(take.audio)
-  assert.equal(header.sampleRate, 48_000)
-  assert.equal(header.dataBytes, 2 * 2 * 48_000)
-  assert.equal(take.durationSeconds, 2)
+  assert.equal((await wavHeader(take.audio)).sampleRate, 44_100)
+  assert.equal(take.durationSeconds, 1)
+})
+
+test('a take from a rate that is not a positive number is refused', () => {
+  for (const sampleRate of [0, -1, Number.NaN, Number.POSITIVE_INFINITY])
+    assert.throws(
+      () => buildRecordedTake({ samples: tone(0.1, 8_000), sampleRate }, 10),
+      RangeError,
+      String(sampleRate),
+    )
 })
 
 test('a take never runs past the limit the server accepts', () => {
