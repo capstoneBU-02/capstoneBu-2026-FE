@@ -469,6 +469,16 @@ for (const [name, answer, code] of [
     () => jsonResponse(201, { success: true, data: { track_id: 7 } }),
     'add-song-failed',
   ],
+  // A code is looked up in the table itself, never on its prototype.
+  [
+    'a code the table inherits',
+    () =>
+      jsonResponse(400, {
+        success: false,
+        error: { code: 'toString', message: 'An unknown refusal.' },
+      }),
+    'add-song-failed',
+  ],
 ]) {
   test(`${name} refuses the song as ${code} and lists nothing`, async () => {
     const { repository } = setup(workspaceAnswer(() => answer()))

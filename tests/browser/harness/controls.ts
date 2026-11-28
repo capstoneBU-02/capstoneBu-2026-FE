@@ -105,6 +105,8 @@ export interface TestControls {
   releaseTakeSaves(): void
   // comparison-save=held fails the take saves waiting so far.
   failTakeSaves(): void
+  // comparison-save=held reports this much of the take saves waiting so far.
+  reportTakeSaveProgress(percent: number): void
   // audio-error and separated-error serve playable audio from here on.
   healAudio(): void
   // The state of every playback output opened so far.

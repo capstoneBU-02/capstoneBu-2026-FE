@@ -1,8 +1,10 @@
+import { fileURLToPath } from 'node:url'
 import { expect, test, type Route } from '@playwright/test'
 import {
   addSongDialog as dialog,
   addSongNext as next,
   API,
+  chooseSongFile,
   chooseTone,
   fixture,
   main,
@@ -14,6 +16,13 @@ import {
 const UPLOAD = `${API}/tracks/upload`
 const alertText = (page: Parameters<typeof dialog>[0]) =>
   dialog(page).getByRole('alert')
+// Chosen by path, the file keeps its modified time on every pick, as a file
+// chosen again from disk does.
+const TONE_PATH = fileURLToPath(
+  new URL('../fixtures/media/tone-2s.mp3', import.meta.url),
+)
+const TOO_LONG =
+  '5분 이하 파일만 올릴 수 있어요. 필요한 부분만 잘라서 올려 주세요.'
 
 test('an uploaded song is listed from the server answer and opens its new-section screen', async ({
   page,
@@ -35,10 +44,10 @@ test('an uploaded song is listed from the server answer and opens its new-sectio
   await chooseTone(page)
   await next(page).click()
 
-  // A routed request is held before it reaches the network, so browsers
-  // report no upload progress for it; tests/api-upload covers the percent.
+  // Whether a browser reports progress for a routed request varies, so any
+  // sending label passes; tests/api-upload covers the percent.
   await expect.poll(() => bodies.length).toBe(1)
-  await expect(dialog(page).getByText('파일 올리는 중')).toBeVisible()
+  await expect(dialog(page).getByText(/^파일 (올리는|확인) 중/)).toBeVisible()
   expect(bodies[0]).toContain(
     'name="file"; filename="tone-2s.mp3"\r\nContent-Type: audio/mpeg',
   )
@@ -104,4 +113,39 @@ test('a refused upload names the reason and waits for another file', async ({
   )
   await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
   await expect(sidebar(page).getByText('아직 곡이 없어요')).toBeVisible()
+})
+
+test('a refused file chosen again stays refused until another file comes', async ({
+  page,
+}) => {
+  await openWorkspace(page)
+  let uploads = 0
+  await page.route(UPLOAD, (route) => {
+    uploads += 1
+    return route.fulfill({
+      status: 400,
+      path: fixture('workspace/upload-duration-exceeded.json'),
+    })
+  })
+
+  await main(page).getByRole('button', { name: '파일 선택' }).click()
+  await chooseSongFile(page, TONE_PATH)
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'false')
+  await next(page).click()
+  await expect(alertText(page)).toHaveText(TOO_LONG)
+
+  // The same file from disk is a new File object with the same name, size,
+  // format and modified time.
+  await chooseSongFile(page, TONE_PATH)
+  await expect(dialog(page).getByText(/^00:02 · /)).toBeVisible()
+  await expect(alertText(page)).toHaveText(TOO_LONG)
+  await expect(next(page)).toHaveAttribute('aria-disabled', 'true')
+  // Playwright waits for an aria-disabled button, so the press goes directly.
+  await next(page).evaluate((button: HTMLElement) => button.click())
+  await expect(next(page)).toHaveAttribute('data-busy', 'false')
+  expect(uploads).toBe(1)
+
+  // A buffer is stamped with the time it is chosen, like a file saved again.
+  await chooseTone(page)
+  await expect(alertText(page)).toHaveCount(0)
 })

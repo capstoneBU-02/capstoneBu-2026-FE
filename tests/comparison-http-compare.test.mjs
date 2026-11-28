@@ -400,6 +400,16 @@ refusals('a retry', RETRY, (repository) => repository.retry('41', signal()), [
   ['a rejected session', expiredSession, 'expired'],
   ['a server error', serverError, 'enqueue-failed'],
   ['no response', noResponse, 'enqueue-failed'],
+  // A code is looked up in the table itself, never on its prototype.
+  [
+    'a code the table inherits',
+    () =>
+      jsonResponse(409, {
+        success: false,
+        error: { code: 'constructor', message: 'An unknown refusal.' },
+      }),
+    'enqueue-failed',
+  ],
 ])
 
 // --- cancelling ------------------------------------------------------------

@@ -9,6 +9,7 @@ import {
   invalidAudioAdvice,
   isAllowedSongFile,
   isFileRefusal,
+  isSameFile,
   precheckSongFile,
   songFileAccept,
   songFileMessage,
@@ -205,6 +206,35 @@ test('a refused add names what the server found, with the same wording as the ch
     assert.equal(isFileRefusal(reason), true, reason)
   for (const reason of ['storage-full', 'add-song-failed'])
     assert.equal(isFileRefusal(reason), false, reason)
+})
+
+test('a file chosen again from disk counts as the file the server refused', () => {
+  const at = Date.UTC(2026, 10, 28)
+  const refused = new File(['abcd'], 'riff.mp3', {
+    type: 'audio/mpeg',
+    lastModified: at,
+  })
+  const again = new File(['wxyz'], 'riff.mp3', {
+    type: 'audio/mpeg',
+    lastModified: at,
+  })
+  // A drop may leave the format empty where the chooser named it; the upload
+  // names it again from the extension, so it is the same file to the server.
+  const dropped = new File(['abcd'], 'riff.mp3', { lastModified: at })
+  assert.equal(isSameFile(refused, refused), true)
+  assert.equal(isSameFile(refused, again), true)
+  assert.equal(isSameFile(refused, dropped), true)
+  for (const other of [
+    new File(['abcd'], 'riff2.mp3', { type: 'audio/mpeg', lastModified: at }),
+    new File(['abcd'], 'riff.mp4', { type: 'video/mp4', lastModified: at }),
+    new File(['abcde'], 'riff.mp3', { type: 'audio/mpeg', lastModified: at }),
+    // Saved again after an edit.
+    new File(['abcd'], 'riff.mp3', {
+      type: 'audio/mpeg',
+      lastModified: at + 1,
+    }),
+  ])
+    assert.equal(isSameFile(refused, other), false, other.name)
 })
 
 test('upload progress reads as sending, then as the server checking the file', () => {

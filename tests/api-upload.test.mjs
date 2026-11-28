@@ -202,6 +202,52 @@ test('an answer that lands after cancelling is ignored', async () => {
   await assert.rejects(pending, { name: 'AbortError' })
 })
 
+test('progress that arrives after the answer or after cancelling is ignored', async () => {
+  const answered = setup()
+  const first = upload(answered.client)
+  answered.xhrs[0].progress(10, 100)
+  answered.xhrs[0].respond(201, { success: true, data: { track_id: 7 } })
+  answered.xhrs[0].progress(60, 100)
+  answered.xhrs[0].finishUpload()
+  await first.pending
+  assert.deepEqual(first.progress, [10])
+
+  const cancelled = setup()
+  const controller = new AbortController()
+  const second = upload(cancelled.client, { signal: controller.signal })
+  cancelled.xhrs[0].progress(10, 100)
+  controller.abort()
+  cancelled.xhrs[0].progress(60, 100)
+  cancelled.xhrs[0].finishUpload()
+  await assert.rejects(second.pending, { name: 'AbortError' })
+  assert.deepEqual(second.progress, [10])
+})
+
+test('cancelling after the answer leaves the finished request alone', async () => {
+  const { client, xhrs } = setup()
+  const controller = new AbortController()
+  const { pending } = upload(client, { signal: controller.signal })
+  xhrs[0].respond(201, { success: true, data: { track_id: 7 } })
+  assert.deepEqual(await pending, { status: 201, data: 7 })
+  controller.abort()
+  assert.equal(xhrs[0].aborted, false)
+})
+
+test('an upload answer that is not the expected envelope is an invalid response', async () => {
+  for (const body of ['ok', { success: true, data: { track_id: 'seven' } }]) {
+    const { client, xhrs } = setup()
+    const { pending } = upload(client)
+    xhrs[0].respond(201, body)
+    await assert.rejects(pending, (error) => {
+      assert.ok(error instanceof ApiError)
+      assert.equal(error.status, 201)
+      assert.equal(error.code, 'INVALID_RESPONSE')
+      assert.equal(error.traceId, 'trace-1')
+      return true
+    })
+  }
+})
+
 test('an upload cancelled before it starts opens no request', async () => {
   const { client, xhrs } = setup()
   const controller = new AbortController()

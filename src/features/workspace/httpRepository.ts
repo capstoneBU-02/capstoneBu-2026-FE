@@ -91,8 +91,11 @@ const ADD_SONG_MESSAGES: Readonly<Record<AddSongFailureCode, string>> = {
 }
 
 function addSongError(error: unknown): WorkspaceRepositoryError {
-  const code =
-    UPLOAD_REFUSALS[apiErrorOf(error)?.code ?? ''] ?? 'add-song-failed'
+  const apiCode = apiErrorOf(error)?.code ?? ''
+  // Only codes in the table itself; toString and the like are not refusals.
+  const code = Object.hasOwn(UPLOAD_REFUSALS, apiCode)
+    ? UPLOAD_REFUSALS[apiCode]
+    : 'add-song-failed'
   return failureOf(code, ADD_SONG_MESSAGES[code], error)
 }
 

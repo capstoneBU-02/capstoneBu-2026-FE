@@ -65,9 +65,9 @@ async function pressOpener(page: Page) {
   await page.keyboard.press('Enter')
 }
 
-async function openDialog(page: Page) {
+async function openDialog(page: Page, query = '') {
   await page.goto(
-    '/tests/browser/harness.html?view=task&task=task-verse&comparison=1&comparison-seed=saved',
+    `/tests/browser/harness.html?view=task&task=task-verse&comparison=1&comparison-seed=saved${query}`,
   )
   await main(page).getByRole('tab', { name: /^비교/ }).click()
   await expect(takes(page)).toHaveCount(1, { timeout: 15_000 })
@@ -302,6 +302,35 @@ test('a refused save keeps the dialog and the file so it can be tried again', as
   await expect(compare(page)).toHaveAttribute('aria-disabled', 'false')
   await compare(page).click()
 
+  await expect(dialog(page)).toBeHidden()
+  await expect(takes(page)).toHaveCount(2)
+})
+
+test('the footer shows how much is sent and starts over on the next save', async ({
+  page,
+}) => {
+  await openDialog(page, '&comparison-save=held')
+  await chooseLength(page, 24.1)
+  const footer = dialog(page).getByText(/^(파일 (올리는|확인) 중|올린 연주는)/)
+  await expect(footer).toHaveText(PRIVACY)
+
+  await compare(page).click()
+  await expect(footer).toHaveText('파일 올리는 중')
+  await page.evaluate(() => window.workspaceTest.reportTakeSaveProgress(42))
+  await expect(footer).toHaveText('파일 올리는 중 42%')
+  await page.evaluate(() => window.workspaceTest.reportTakeSaveProgress(100))
+  await expect(footer).toHaveText('파일 확인 중')
+
+  await page.evaluate(() => window.workspaceTest.failTakeSaves())
+  await expect(alertText(page)).toHaveText(
+    '연주를 저장하지 못했어요. 다시 시도해 주세요.',
+  )
+  await expect(footer).toHaveText(PRIVACY)
+
+  // The next save counts from nothing sent, not from where the last ended.
+  await compare(page).click()
+  await expect(footer).toHaveText('파일 올리는 중')
+  await page.evaluate(() => window.workspaceTest.releaseTakeSaves())
   await expect(dialog(page)).toBeHidden()
   await expect(takes(page)).toHaveCount(2)
 })
