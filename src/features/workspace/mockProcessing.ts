@@ -28,8 +28,8 @@ export type RunState =
   | { readonly status: 'queued'; readonly ahead: number }
   | {
       readonly status: 'processing'
-      // The guitar is ready: separated, cut or kept from before.
-      readonly separated: boolean
+      // The guitar is separated, cut or kept from before.
+      readonly guitarReady: boolean
       readonly percent: number
     }
   | { readonly status: 'completed' }
@@ -75,7 +75,7 @@ function stateAt(
   const elapsed = now - scheduled.startsAt
   return {
     status: 'processing',
-    separated: elapsed >= guitarMs(scheduled.run, timing),
+    guitarReady: elapsed >= guitarMs(scheduled.run, timing),
     percent: Math.floor(
       (elapsed / (scheduled.endsAt - scheduled.startsAt)) * 100,
     ),
@@ -132,7 +132,7 @@ export function progressedTask(
       ...task,
       processingStatus: 'processing',
       progressPercent: state.percent,
-      hasSeparatedAudio: state.separated,
+      hasSeparatedAudio: state.guitarReady,
     }
   return {
     ...task,
