@@ -210,3 +210,35 @@ test('stopping cancels the refresh on its way and stops listening', async (t) =>
   page.show()
   assert.equal(calls.length, 1)
 })
+
+// As a tab that finds its section moved asks (#100): focus's rules, from code.
+test('catching up refreshes at once unless hidden, stopped or one is on its way', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const page = fakePage()
+  const { calls, run } = heldRuns()
+  const loop = startRefreshLoop({ delayMs: 100, run, page })
+
+  t.mock.timers.tick(60)
+  loop.catchUp()
+  assert.equal(calls.length, 1)
+  loop.catchUp()
+  assert.equal(calls.length, 1)
+  // The timer it replaced does not fire on top of it.
+  t.mock.timers.tick(100)
+  assert.equal(calls.length, 1)
+
+  calls[0].settle('continue')
+  await flush()
+  page.hide()
+  loop.catchUp()
+  assert.equal(calls.length, 1)
+  page.show()
+  assert.equal(calls.length, 2)
+
+  calls[1].settle('continue')
+  await flush()
+  loop.stop()
+  loop.catchUp()
+  t.mock.timers.tick(1000)
+  assert.equal(calls.length, 2)
+})
