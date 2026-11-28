@@ -218,12 +218,16 @@ test('a file chosen again from disk counts as the file the server refused', () =
     type: 'audio/mpeg',
     lastModified: at,
   })
+  // A drop may leave the format empty where the chooser named it; the upload
+  // names it again from the extension, so it is the same file to the server.
+  const dropped = new File(['abcd'], 'riff.mp3', { lastModified: at })
   assert.equal(isSameFile(refused, refused), true)
   assert.equal(isSameFile(refused, again), true)
+  assert.equal(isSameFile(refused, dropped), true)
   for (const other of [
     new File(['abcd'], 'riff2.mp3', { type: 'audio/mpeg', lastModified: at }),
+    new File(['abcd'], 'riff.mp4', { type: 'video/mp4', lastModified: at }),
     new File(['abcde'], 'riff.mp3', { type: 'audio/mpeg', lastModified: at }),
-    new File(['abcd'], 'riff.mp3', { type: 'video/mp4', lastModified: at }),
     // Saved again after an edit.
     new File(['abcd'], 'riff.mp3', {
       type: 'audio/mpeg',

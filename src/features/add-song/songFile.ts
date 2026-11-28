@@ -196,14 +196,13 @@ export function isFileRefusal(reason: AddSongFailureCode): boolean {
   )
 }
 
-// A file chosen again from disk is a new File object; one whose name, size,
-// format and modified time all match is taken as the same file.
+// A file chosen again from disk is a new File object; one whose name, size
+// and modified time all match is taken as the same file. The format is left
+// out: a drop may leave it empty where the chooser named it, and the upload
+// names it again from the extension in the name.
 export function isSameFile(a: File, b: File): boolean {
   return (
-    a.name === b.name &&
-    a.size === b.size &&
-    a.type === b.type &&
-    a.lastModified === b.lastModified
+    a.name === b.name && a.size === b.size && a.lastModified === b.lastModified
   )
 }
 
