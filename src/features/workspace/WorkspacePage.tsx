@@ -150,7 +150,7 @@ export function WorkspacePage({
           : null,
     },
   )
-  useListRefresh(workspace, refreshMs)
+  const catchUpList = useListRefresh(workspace, refreshMs)
   // Saves outlive the task screen, so the list and a reopened task show them.
   const copy = useCopyStatus(repository, {
     expired: workspace.loadState === 'expired',
@@ -657,6 +657,7 @@ export function WorkspacePage({
                 repository.loadSeparatedAudio(taskId, signal),
               loadTab: (taskId, signal) => repository.loadTab(taskId, signal),
               onExpired: workspace.markExpired,
+              onOutdated: catchUpList,
             }}
             recovery={{
               retry: recovery.retry,

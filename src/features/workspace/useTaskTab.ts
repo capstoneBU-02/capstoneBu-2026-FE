@@ -7,6 +7,9 @@ import { WorkspaceRepositoryError } from './repository.ts'
 export interface TaskTabSource {
   loadTab(taskId: string, signal: AbortSignal): Promise<unknown>
   onExpired(): void
+  // The tab is of a range the section has since left (#100). The tab stays
+  // loading until the list brings the moved section and it runs again.
+  onOutdated(): void
 }
 
 // What the request settled with; a failed request gets its retry when shown.
@@ -49,10 +52,11 @@ export function tabMadeFrom(task: TabTask): string {
 
 // Loads a finished task's tab while its screen is open and checks it at the
 // boundary. Leaving the task, asking again, or a change to what the tab is
-// made from cancels the request; a task that runs again drops its tab.
+// made from cancels the request; a task that runs again drops its tab. A
+// tab of a range moved elsewhere is not drawn.
 export function useTaskTab(
   task: TabTask,
-  { loadTab, onExpired }: TaskTabSource,
+  { loadTab, onExpired, onOutdated }: TaskTabSource,
 ): TabSource {
   const taskId = task.id
   const madeFrom =
@@ -65,6 +69,7 @@ export function useTaskTab(
   if (madeFrom === null && result !== null) setResult(null)
   const load = useEffectEvent(loadTab)
   const reportExpired = useEffectEvent(onExpired)
+  const reportOutdated = useEffectEvent(onOutdated)
 
   useEffect(() => {
     if (madeFrom === null) return
@@ -89,6 +94,13 @@ export function useTaskTab(
           error.code === 'expired'
         ) {
           reportExpired()
+          return
+        }
+        if (
+          error instanceof WorkspaceRepositoryError &&
+          error.code === 'tab-outdated'
+        ) {
+          reportOutdated()
           return
         }
         setResult({
