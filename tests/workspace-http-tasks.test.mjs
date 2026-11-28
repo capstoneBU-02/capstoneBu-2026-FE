@@ -431,6 +431,41 @@ test('a ready guitar asks for the tab with the task tuning', async () => {
   assert.equal(detail.tabWaitsForPage, false)
 })
 
+test('separated-guitar input asks for the tab once its section is cut (JOB-02)', async () => {
+  const { repository, calls } = setup(
+    {
+      [STATUS]: [
+        fixture(200, 'status-separating'),
+        fixture(200, 'status-stem-ready'),
+      ],
+      [TABS]: fixture(202, 'tab-created'),
+    },
+    {
+      songs: songsWith({ ...SONG, inputKind: 'separated-guitar' }),
+      tasks: tasksWith({ stemId: 54 }),
+    },
+  )
+  // While the server cuts the section, the tab is not asked for yet.
+  let detail = await repository.loadTask('31', signal())
+  assert.deepEqual(keys(calls), [STATUS])
+  assert.equal(detail.task.processingStatus, 'processing')
+  assert.equal(detail.task.hasSeparatedAudio, false)
+  assert.deepEqual(detail.stages, [
+    { id: 'separation', status: 'skipped' },
+    { id: 'transcription', status: 'running' },
+  ])
+  assert.equal(detail.tabWaitsForPage, true)
+
+  detail = await repository.loadTask('31', signal())
+  assert.deepEqual(keys(calls), [STATUS, STATUS, TABS])
+  assert.equal(detail.task.hasSeparatedAudio, true)
+  assert.deepEqual(detail.stages, [
+    { id: 'separation', status: 'skipped' },
+    { id: 'transcription', status: 'running' },
+  ])
+  assert.equal(detail.tabWaitsForPage, false)
+})
+
 test('a tab request refused for now waits for the next read', async () => {
   const { repository, calls } = setup(
     { [STATUS]: fixture(200, 'status-stem-ready'), [TABS]: serverError },
