@@ -121,7 +121,7 @@ for (const [name, session] of [
   ['no session', rejectedSession],
   ['the session of another workspace', otherWorkspace],
 ] as const) {
-  test(`a login that finds ${name} right after stays at entry`, async ({
+  test(`a login that finds ${name} right after stays at entry until a retry`, async ({
     page,
   }) => {
     const server = await serve(page)
@@ -132,6 +132,11 @@ for (const [name, session] of [
     await expect(page.getByText(ACCESS_ERROR_MESSAGES.network)).toBeVisible()
     await expect(input(page)).toHaveValue(CODE)
     await expect(notice(page)).toHaveCount(0)
+
+    // The kept code goes again once the browser keeps the cookie.
+    server.answerSession(ownWorkspace)
+    await page.getByRole('button', { name: '시작하기', exact: true }).click()
+    await expect(notice(page)).toBeVisible()
   })
 
   test(`${name} at opening sends the workspace back to code entry`, async ({

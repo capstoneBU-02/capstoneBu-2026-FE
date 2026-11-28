@@ -173,17 +173,34 @@ for (const [name, answer, code] of [
 }
 
 // A browser that keeps no cookie, or keeps an older one, fails here before
-// the notice and consent.
+// the notice and consent. The code was accepted, so no answer of the check
+// is about the code.
 for (const [name, answer] of [
   [
     'no session',
     () => fixtureResponse(401, 'common/unauthorized-session.json'),
   ],
   [
+    'too many requests',
+    () =>
+      jsonResponse(429, {
+        success: false,
+        error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many.' },
+      }),
+  ],
+  [
+    'a refused code field',
+    () => fixtureResponse(400, 'access/tester-code-too-short.json'),
+  ],
+  [
     'a server error',
     () => fixtureResponse(500, 'common/internal-error-no-trace.json'),
   ],
   ['no response', () => Promise.reject(new TypeError('Failed to fetch'))],
+  [
+    'a changed response',
+    () => jsonResponse(200, { success: true, data: { workspace_id: '42' } }),
+  ],
 ]) {
   test(`a login whose session check finds ${name} stays at entry`, async () => {
     const { repository } = setup((url) =>

@@ -63,15 +63,19 @@ function refusesTesterCode(error: ApiError): boolean {
 
 // The server answers unknown, expired and revoked codes alike, so the
 // code-expired and revoked messages do not appear in http mode. Logging in
-// reads no cookie, so a session refusal there is not the session ending; it
-// comes from the session check after it, as does a session of another
-// workspace, when the browser did not keep the login's cookie.
-function enterFailure(error: unknown): AccessFailure {
+// reads no cookie, so a session refusal there is not the session ending.
+function loginFailure(error: unknown): AccessFailure {
   if (!(error instanceof ApiError)) return 'network'
   if (INVALID_CODES.has(error.code) || refusesTesterCode(error))
     return 'invalid'
   if (error.code === 'RATE_LIMIT_EXCEEDED') return 'limited'
   return 'network'
+}
+
+function accessError(failure: AccessFailure, cause: unknown) {
+  return new AccessRepositoryError(failure, ACCESS_ERROR_MESSAGES[failure], {
+    cause,
+  })
 }
 
 function sessionExpired() {
@@ -145,17 +149,18 @@ export function createHttpAccessRepository({
           read: readTesterLogin,
         })
         workspace = toWorkspaceInfo(data, testerCode)
-        // Before the notice and consent, so a browser that keeps no cookie
-        // stops here.
+      } catch (error) {
+        if (signal.aborted) throw error
+        throw accessError(loginFailure(error), error)
+      }
+      // Before the notice and consent, so a browser that did not keep the
+      // login's cookie stops here. The code was accepted, so a failed check,
+      // no session and one of another workspace included, is the connection's.
+      try {
         await confirmSession(client, workspace.id, signal)
       } catch (error) {
         if (signal.aborted) throw error
-        const failure = enterFailure(error)
-        throw new AccessRepositoryError(
-          failure,
-          ACCESS_ERROR_MESSAGES[failure],
-          { cause: error },
-        )
+        throw accessError('network', error)
       }
       const workspaceId = workspace.id
       sessions.set(workspaceId, {
