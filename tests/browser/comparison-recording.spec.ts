@@ -308,6 +308,23 @@ test('a take that heard nothing warns before it is compared', async ({
   await expect(inPanel(page, '비교하기')).toBeVisible()
 })
 
+test('a take that heard nothing fails its comparison as the server fails it', async ({
+  page,
+}) => {
+  await recordTake(page, '&recording=silent', SECTION_SECONDS)
+
+  await inPanel(page, '비교하기').click()
+
+  const comparison = main(page).getByRole('tabpanel', { name: /^비교/ })
+  await expect(comparison).toContainText(
+    '이 연주는 다시 시도할 수 없어요. 다시 녹음하거나 다른 파일을 올려 주세요.',
+    { timeout: 10_000 },
+  )
+  await expect(
+    comparison.getByRole('button', { name: '다시 시도', exact: true }),
+  ).toHaveCount(0)
+})
+
 test('a refused microphone offers the file upload instead', async ({
   page,
 }) => {

@@ -15,6 +15,7 @@ import {
   mockRegions,
   type MockRegion,
 } from './mockComparisonOutcome.ts'
+import { isMockSilentTake } from './mockTakeLevel.ts'
 import {
   comparisonRunState,
   DEMO_COMPARISON_TIMING,
@@ -103,6 +104,7 @@ export function createMockComparisonRepository(
   // the last entry for a take is always the run started last.
   const performances = new Map<string, KeptPerformance>()
   const audioFiles = new Map<string, Blob>()
+  const silentPerformanceIds = new Set<string>()
   const comparisons = new Map<string, KeptComparison>()
   let savedCount = 0
   let comparedCount = 0
@@ -202,7 +204,7 @@ export function createMockComparisonRepository(
     const played = performance.durationSeconds ?? seconds
     const outcomes =
       options.outcomesFor?.(listed(performance)) ??
-      mockOutcomesFor(played, seconds)
+      mockOutcomesFor(played, seconds, silentPerformanceIds.has(performance.id))
     const kept: KeptComparison = {
       id,
       performanceId: performance.id,
@@ -239,6 +241,7 @@ export function createMockComparisonRepository(
       if (!section) throw new ComparisonRepositoryError('task-unavailable')
       if (input.audio.size === 0)
         throw new ComparisonRepositoryError('invalid-audio')
+      const silent = await isMockSilentTake(input.audio)
 
       savedCount += 1
       const performance: KeptPerformance = {
@@ -252,6 +255,7 @@ export function createMockComparisonRepository(
       }
       performances.set(performance.id, performance)
       audioFiles.set(performance.id, input.audio)
+      if (silent) silentPerformanceIds.add(performance.id)
       return listed(performance)
     },
     // In the order the server checks a request (CMP 비교 요청).

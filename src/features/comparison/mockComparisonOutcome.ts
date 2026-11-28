@@ -27,11 +27,21 @@ function roundToMillisecond(seconds: number) {
   return Math.round(seconds * 1_000) / 1_000
 }
 
-// The length checks the server makes before aligning (B28).
+const INVALID_AUDIO: ComparisonOutcome = {
+  kind: 'failed',
+  stage: 'align',
+  code: 'PERFORMANCE_INVALID_AUDIO',
+  retryable: false,
+}
+
+// The checks the server makes before aligning: silence first, then the
+// length (B28).
 export function mockOutcomesFor(
   durationSeconds: number,
   sectionSeconds: number,
+  silent = false,
 ): readonly ComparisonOutcome[] {
+  if (silent) return [INVALID_AUDIO]
   const length = checkPerformanceLength(durationSeconds, sectionSeconds)
   if (length === 'too-short')
     return [
@@ -41,15 +51,7 @@ export function mockOutcomesFor(
     return [
       { kind: 'not-comparable', stage: 'align', reason: 'RERECORD_TOO_LONG' },
     ]
-  if (length === 'unreadable')
-    return [
-      {
-        kind: 'failed',
-        stage: 'align',
-        code: 'PERFORMANCE_INVALID_AUDIO',
-        retryable: false,
-      },
-    ]
+  if (length === 'unreadable') return [INVALID_AUDIO]
   return [{ kind: 'success' }]
 }
 
