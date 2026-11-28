@@ -398,7 +398,8 @@ test('a tab opened again is drawn from the result already read', async ({
 })
 
 // Another device moves 코러스 while this page asks for its tab (#100). The
-// list has no task in progress, so it reads again only when asked.
+// list has no task in progress, so it reads again only when asked; that read
+// is held until the tab area has been seen waiting.
 test('a tab made before its range moved elsewhere is not drawn and the list catches up', async ({
   page,
 }) => {
@@ -406,6 +407,9 @@ test('a tab made before its range moved elsewhere is not drawn and the list catc
   listTrack(page, (fixtureData('tracks').items as Record<string, unknown>[])[1])
   listSegment(page, chorus)
   let status = load('status-completed')
+  let moved = false
+  let releaseList = () => {}
+  const listHeld = new Promise<void>((resolve) => (releaseList = resolve))
   await page.route(`${API}/segments/31/processing-status`, (route) =>
     answer(route, status),
   )
@@ -421,6 +425,7 @@ test('a tab made before its range moved elsewhere is not drawn and the list catc
       updated_at: new Date().toISOString(),
     })
     status = load('status-queued')
+    moved = true
     const segment = { ...result.data.segment, is_outdated: true }
     return answer(route, { ...result, data: { ...result.data, segment } })
   })
@@ -434,10 +439,24 @@ test('a tab made before its range moved elsewhere is not drawn and the list catc
   })
 
   await signIn(page)
+  await page.route(`${API}/tracks`, async (route) => {
+    if (moved) await listHeld
+    return route.fallback()
+  })
   await sidebar(page)
     .getByRole('button', { name: /^코러스/ })
     .click()
   await expect(page).toHaveURL(`${HARNESS}?view=task&task=31`)
+
+  await expect.poll(() => listReads).toEqual(['GET', 'GET'])
+  await expect(tabPanel(page).getByRole('status')).toHaveText(
+    '타브를 불러오는 중이에요',
+  )
+  await expect(tabPanel(page).getByRole('alert')).toHaveCount(0)
+  await expect(
+    tabPanel(page).getByRole('img', { name: /^타브 악보/ }),
+  ).toHaveCount(0)
+  releaseList()
 
   const kept = main(page)
     .getByRole('region', { name: '이전 결과' })
